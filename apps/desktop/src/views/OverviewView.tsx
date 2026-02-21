@@ -104,13 +104,13 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
         </div>
         <div className="overview-stat-card">
           <span className="overview-stat-label">Failed Runs</span>
-          <span className="overview-stat-value" style={failedRuns > 0 ? { color: 'var(--state-bad)' } : undefined}>
+          <span className="overview-stat-value" style={failedRuns > 0 ? { color: 'var(--red)' } : undefined}>
             {String(failedRuns)}
           </span>
         </div>
         <div className="overview-stat-card">
           <span className="overview-stat-label">Error Logs</span>
-          <span className="overview-stat-value" style={errorLogs > 0 ? { color: 'var(--state-bad)' } : undefined}>
+          <span className="overview-stat-value" style={errorLogs > 0 ? { color: 'var(--red)' } : undefined}>
             {String(errorLogs)}
           </span>
         </div>

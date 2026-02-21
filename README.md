@@ -1,6 +1,10 @@
 # Patze Control
 
-Real-time telemetry monitoring desktop application for [OpenClaw](https://github.com/goiltpatpat/openclaw) machines, agents, sessions and runs. Built with event sourcing architecture.
+[![CI](https://github.com/goiltpatpat/patze-control/actions/workflows/ci.yml/badge.svg)](https://github.com/goiltpatpat/patze-control/actions/workflows/ci.yml)
+[![Desktop CI](https://github.com/goiltpatpat/patze-control/actions/workflows/desktop-ci.yml/badge.svg)](https://github.com/goiltpatpat/patze-control/actions/workflows/desktop-ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Real-time telemetry monitoring desktop application for [OpenClaw](https://github.com/goiltpatpat/openclaw-patzelife) machines, agents, sessions and runs. Built with event sourcing architecture.
 
 ## Tech Stack
 
@@ -45,6 +49,14 @@ OpenClaw Machine → openclaw-bridge → HTTP POST → api-server → EventStore
 - Node.js 22+
 - pnpm 9+
 - Rust toolchain (for Tauri desktop builds)
+
+### Linux / WSL2
+
+Tauri requires native dependencies on Linux:
+
+```bash
+sudo apt install -y pkg-config libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
+```
 
 ## Getting Started
 
