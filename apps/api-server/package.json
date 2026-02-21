@@ -1,0 +1,23 @@
+{
+  "name": "@patze/api-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "pnpm --filter @patze/telemetry-core build && tsx watch src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@patze/telemetry-core": "workspace:*",
+    "fastify": "^5.2.1",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/ssh2": "^1.15.5",
+    "tsx": "^4.19.2"
+  }
+}

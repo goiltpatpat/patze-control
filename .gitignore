@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output — TypeScript
+dist/
+*.tsbuildinfo
+
+# Build output — Rust / Tauri
+**/src-tauri/target/
+**/src-tauri/gen/
+
+# Environment files (keep examples)
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage & test output
+coverage/
+
+# Logs
+*.log
+
+# Turbo
+.turbo/
+
+# IDE (project-specific settings are ok, user settings are not)
+.idea/
+*.sw[po]

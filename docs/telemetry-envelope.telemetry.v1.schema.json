@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://patze.dev/schemas/telemetry-envelope.telemetry.v1.schema.json",
+  "title": "Telemetry Envelope (telemetry.v1)",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "version",
+    "id",
+    "ts",
+    "machineId",
+    "severity",
+    "type",
+    "payload",
+    "trace"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "telemetry.v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "machineId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "debug",
+        "info",
+        "warn",
+        "error",
+        "critical"
+      ]
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "machine.registered",
+        "machine.heartbeat",
+        "agent.state.changed",
+        "session.state.changed",
+        "run.state.changed",
+        "run.log.emitted",
+        "run.tool.started",
+        "run.tool.completed",
+        "run.model.usage",
+        "run.resource.usage",
+        "trace.span.recorded"
+      ]
+    },
+    "payload": {},
+    "trace": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "traceId"
+      ],
+      "properties": {
+        "traceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "spanId": {
+          "type": "string"
+        },
+        "parentSpanId": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

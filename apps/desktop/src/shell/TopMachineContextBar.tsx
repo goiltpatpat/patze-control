@@ -1,0 +1,99 @@
+import type { ConnectionStatus } from '../types';
+
+export interface TopMachineContextBarProps {
+  readonly baseUrl: string;
+  readonly token: string;
+  readonly status: ConnectionStatus;
+  readonly errorMessage: string | null;
+  readonly onBaseUrlChange: (value: string) => void;
+  readonly onTokenChange: (value: string) => void;
+  readonly onConnect: () => void;
+  readonly onDisconnect: () => void;
+}
+
+function toStatusLabel(status: ConnectionStatus): string {
+  switch (status) {
+    case 'connected': return 'Connected';
+    case 'degraded': return 'Degraded';
+    case 'connecting': return 'Connecting…';
+    case 'error': return 'Error';
+    case 'idle': return 'Idle';
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Element {
+  const isConnecting = props.status === 'connecting';
+  const isConnected = props.status === 'connected' || props.status === 'degraded';
+
+  return (
+    <header className="context-bar">
+      <div className="context-brand">
+        <div className="brand-icon">PC</div>
+        <h1>Patze Control</h1>
+      </div>
+
+      <div className="context-divider" />
+
+      <div className="context-controls">
+        <div className="context-field">
+          <span className="context-field-label">Endpoint</span>
+          <input
+            type="url"
+            data-field="url"
+            aria-label="Control plane endpoint URL"
+            value={props.baseUrl}
+            placeholder="http://127.0.0.1:8080"
+            onChange={(event) => {
+              props.onBaseUrlChange(event.target.value);
+            }}
+            disabled={isConnecting}
+          />
+        </div>
+        <div className="context-field">
+          <span className="context-field-label">Token</span>
+          <input
+            type="password"
+            data-field="token"
+            aria-label="Authentication token"
+            value={props.token}
+            placeholder="optional"
+            onChange={(event) => {
+              props.onTokenChange(event.target.value);
+            }}
+            disabled={isConnecting}
+          />
+        </div>
+        <div className="context-actions">
+          <button
+            className="btn-primary"
+            onClick={props.onConnect}
+            disabled={isConnecting || isConnected}
+          >
+            {isConnecting ? 'Connecting…' : 'Connect'}
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={props.onDisconnect}
+            disabled={!isConnected && !isConnecting}
+          >
+            Disconnect
+          </button>
+        </div>
+      </div>
+
+      <div className="context-status-indicator">
+        <span className="status-dot" data-status={props.status} />
+        <span className="status-label">{toStatusLabel(props.status)}</span>
+        {props.errorMessage ? (
+          <span className="error-hint" title={props.errorMessage}>
+            {props.errorMessage}
+          </span>
+        ) : null}
+      </div>
+    </header>
+  );
+}
