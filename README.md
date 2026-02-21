@@ -1,6 +1,6 @@
 # Patze Control
 
-Real-time telemetry monitoring desktop application for [OpenClaw](https://github.com/patyagami/openclaw) machines, agents, sessions and runs. Built with event sourcing architecture.
+Real-time telemetry monitoring desktop application for [OpenClaw](https://github.com/goiltpatpat/openclaw) machines, agents, sessions and runs. Built with event sourcing architecture.
 
 ## Tech Stack
 
