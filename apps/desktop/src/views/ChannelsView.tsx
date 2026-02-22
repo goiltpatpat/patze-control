@@ -8,9 +8,21 @@ interface OpenClawChannel {
   readonly id: string;
   readonly name: string;
   readonly configured: boolean;
-  readonly dmPolicy: 'pairing' | 'open' | 'unknown';
+  readonly dmPolicy: 'pairing' | 'allowlist' | 'open' | 'disabled' | 'unknown';
+  readonly groupPolicy: 'open' | 'allowlist' | 'disabled' | 'unknown';
+  readonly allowFrom: readonly string[];
+  readonly allowFromCount: number;
+  readonly allowFromHasWildcard: boolean;
   readonly hasGroups: boolean;
   readonly connected: boolean;
+  readonly runtimeState: 'connected' | 'disconnected' | 'unknown';
+  readonly accountSummary: {
+    readonly total: number;
+    readonly enabled: number;
+    readonly configured: number;
+    readonly connected: number;
+    readonly runtimeKnown: number;
+  };
   readonly lastMessageAt?: string;
   readonly messageCount?: number;
 }
@@ -47,8 +59,12 @@ function dmBadgeTone(dmPolicy: OpenClawChannel['dmPolicy']): string {
   switch (dmPolicy) {
     case 'pairing':
       return 'tone-good';
+    case 'allowlist':
+      return 'tone-neutral';
     case 'open':
       return 'tone-warn';
+    case 'disabled':
+      return 'tone-muted';
     case 'unknown':
       return 'tone-muted';
     default: {
@@ -60,7 +76,9 @@ function dmBadgeTone(dmPolicy: OpenClawChannel['dmPolicy']): string {
 
 function channelPriority(channel: OpenClawChannel): ChannelPriority {
   if (!channel.configured) return 'high';
-  if (!channel.connected || channel.dmPolicy === 'open') return 'medium';
+  if (channel.dmPolicy === 'open' && channel.allowFromHasWildcard) return 'high';
+  if (channel.dmPolicy === 'disabled') return 'medium';
+  if (!channel.connected || channel.runtimeState === 'unknown') return 'medium';
   return 'low';
 }
 
@@ -81,9 +99,16 @@ function channelPriorityTone(priority: ChannelPriority): string {
 
 function channelRecommendation(channel: OpenClawChannel): string {
   if (!channel.configured) return 'Add channel config in openclaw.json to enable this provider.';
-  if (!channel.connected) return 'Check credentials/session and reconnect this provider.';
-  if (channel.dmPolicy === 'open')
-    return 'DM policy is open. Consider pairing mode for safer operation.';
+  if (!channel.connected && channel.runtimeState === 'disconnected')
+    return 'Check credentials/session and reconnect this provider.';
+  if (channel.runtimeState === 'unknown')
+    return 'Runtime connectivity is unknown in config-only mode. Verify with OpenClaw channels status.';
+  if (channel.dmPolicy === 'open' && channel.allowFromHasWildcard)
+    return 'DM policy is open with wildcard allowFrom. Consider pairing/allowlist for safer operation.';
+  if (channel.dmPolicy === 'disabled')
+    return 'DM policy is disabled. Enable only if this is intentional for this provider.';
+  if (channel.dmPolicy === 'allowlist')
+    return 'Allowlist mode active. Keep allowFrom list updated for trusted senders.';
   return 'Channel is healthy and ready.';
 }
 
@@ -158,7 +183,8 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
     const configured = channels.filter((c) => c.configured).length;
     const connected = channels.filter((c) => c.connected).length;
     const dmOpen = channels.filter((c) => c.dmPolicy === 'open').length;
-    return { total: channels.length, configured, connected, dmOpen };
+    const riskyDm = channels.filter((c) => c.dmPolicy === 'open' && c.allowFromHasWildcard).length;
+    return { total: channels.length, configured, connected, dmOpen, riskyDm };
   }, [channels]);
 
   const sortedChannels = useMemo(() => {
@@ -173,13 +199,7 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
     const q = search.trim().toLowerCase();
     return sortedChannels.filter((channel) => {
       if (showOnlyConfigured && !channel.configured) return false;
-      if (
-        showOnlyAttention &&
-        channel.configured &&
-        channel.connected &&
-        channel.dmPolicy !== 'open'
-      )
-        return false;
+      if (showOnlyAttention && channelPriority(channel) === 'low') return false;
       if (!q) return true;
       return channel.name.toLowerCase().includes(q) || channel.id.toLowerCase().includes(q);
     });
@@ -298,6 +318,10 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
         <div className="task-stat">
           <span className="task-stat-label">DM Open</span>
           <span className="status-strip-value mono">{summary.dmOpen}</span>
+        </div>
+        <div className="task-stat">
+          <span className="task-stat-label">DM Risk</span>
+          <span className="status-strip-value mono">{summary.riskyDm}</span>
         </div>
       </div>
 
@@ -430,11 +454,21 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                         <span className={`badge ${dmBadgeTone(channel.dmPolicy)}`}>
                           DM: {channel.dmPolicy}
                         </span>
+                        <span className="badge tone-neutral">allowFrom: {channel.allowFromCount}</span>
+                        {channel.allowFromHasWildcard ? (
+                          <span className="badge tone-warn">allowFrom *</span>
+                        ) : null}
+                        <span className="badge tone-neutral">group: {channel.groupPolicy}</span>
                         <span
                           className={`badge ${channel.hasGroups ? 'tone-neutral' : 'tone-muted'}`}
                         >
                           {channel.hasGroups ? 'groups enabled' : 'groups off'}
                         </span>
+                        {channel.accountSummary.total > 0 ? (
+                          <span className="badge tone-neutral">
+                            accounts {channel.accountSummary.connected}/{channel.accountSummary.total}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="channel-recommendation">{channelRecommendation(channel)}</p>
                       <div className="channel-quick-actions">
@@ -489,11 +523,18 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                       <span className={`badge ${dmBadgeTone(channel.dmPolicy)}`}>
                         DM: {channel.dmPolicy}
                       </span>
+                      <span className="badge tone-neutral">allowFrom: {channel.allowFromCount}</span>
+                      <span className="badge tone-neutral">group: {channel.groupPolicy}</span>
                       <span
                         className={`badge ${channel.hasGroups ? 'tone-neutral' : 'tone-muted'}`}
                       >
                         {channel.hasGroups ? 'groups enabled' : 'groups off'}
                       </span>
+                      {channel.accountSummary.total > 0 ? (
+                        <span className="badge tone-neutral">
+                          accounts {channel.accountSummary.connected}/{channel.accountSummary.total}
+                        </span>
+                      ) : null}
                     </div>
                     <p className="channel-recommendation">{channelRecommendation(channel)}</p>
                     <div className="channel-quick-actions">

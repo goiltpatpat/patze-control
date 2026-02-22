@@ -60,9 +60,21 @@ interface OpenClawChannelSummary {
   readonly id: string;
   readonly name: string;
   readonly configured: boolean;
-  readonly dmPolicy: 'pairing' | 'open' | 'unknown';
+  readonly dmPolicy: 'pairing' | 'allowlist' | 'open' | 'disabled' | 'unknown';
+  readonly groupPolicy: 'open' | 'allowlist' | 'disabled' | 'unknown';
+  readonly allowFrom: readonly string[];
+  readonly allowFromCount: number;
+  readonly allowFromHasWildcard: boolean;
   readonly hasGroups: boolean;
   readonly connected: boolean;
+  readonly runtimeState: 'connected' | 'disconnected' | 'unknown';
+  readonly accountSummary: {
+    readonly total: number;
+    readonly enabled: number;
+    readonly configured: number;
+    readonly connected: number;
+    readonly runtimeKnown: number;
+  };
   readonly lastMessageAt?: string;
   readonly messageCount?: number;
 }
@@ -1245,12 +1257,76 @@ function isChannelConfigured(config: Readonly<Record<string, unknown>>): boolean
   );
 }
 
-function parseDmPolicy(config: Readonly<Record<string, unknown>>): 'pairing' | 'open' | 'unknown' {
+function parseDmPolicy(
+  config: Readonly<Record<string, unknown>>
+): 'pairing' | 'allowlist' | 'open' | 'disabled' | 'unknown' {
   const dmPolicy = config.dmPolicy;
-  if (dmPolicy === 'pairing' || dmPolicy === 'open') {
+  if (
+    dmPolicy === 'pairing' ||
+    dmPolicy === 'allowlist' ||
+    dmPolicy === 'open' ||
+    dmPolicy === 'disabled'
+  ) {
     return dmPolicy;
   }
+  const dm = toReadonlyRecord(config.dm);
+  const dmPolicyAlias = dm?.policy;
+  if (
+    dmPolicyAlias === 'pairing' ||
+    dmPolicyAlias === 'allowlist' ||
+    dmPolicyAlias === 'open' ||
+    dmPolicyAlias === 'disabled'
+  ) {
+    return dmPolicyAlias;
+  }
   return 'unknown';
+}
+
+function parseGroupPolicy(
+  config: Readonly<Record<string, unknown>>
+): 'open' | 'allowlist' | 'disabled' | 'unknown' {
+  const groupPolicy = config.groupPolicy;
+  if (groupPolicy === 'open' || groupPolicy === 'allowlist' || groupPolicy === 'disabled') {
+    return groupPolicy;
+  }
+  return 'unknown';
+}
+
+function parseAllowFrom(config: Readonly<Record<string, unknown>>): string[] {
+  const allowFromRaw = config.allowFrom;
+  if (!Array.isArray(allowFromRaw)) {
+    const dm = toReadonlyRecord(config.dm);
+    const dmAllowFromRaw = dm?.allowFrom;
+    if (!Array.isArray(dmAllowFromRaw)) {
+      return [];
+    }
+    return dmAllowFromRaw
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0);
+  }
+  return allowFromRaw.map((value) => String(value).trim()).filter((value) => value.length > 0);
+}
+
+function parseRuntimeState(
+  config: Readonly<Record<string, unknown>>
+): 'connected' | 'disconnected' | 'unknown' {
+  if (config.connected === true) return 'connected';
+  if (config.connected === false) return 'disconnected';
+  if (config.status === 'connected') return 'connected';
+  if (config.status === 'disconnected') return 'disconnected';
+  if (config.running === false) return 'disconnected';
+  return 'unknown';
+}
+
+function hasGroupsConfigured(config: Readonly<Record<string, unknown>>): boolean {
+  if (toBoolean(config.hasGroups) || toBoolean(config.groupsEnabled)) {
+    return true;
+  }
+  const groups = config.groups;
+  if (isRecord(groups) && Object.keys(groups).length > 0) {
+    return true;
+  }
+  return false;
 }
 
 function resolveOpenClawConfigCandidates(openclawHome: string): readonly string[] {
@@ -1275,8 +1351,20 @@ function readOpenClawChannels(openclawHome: string): {
         name: channel.name,
         configured: false,
         dmPolicy: 'unknown',
+        groupPolicy: 'unknown',
+        allowFrom: [],
+        allowFromCount: 0,
+        allowFromHasWildcard: false,
         hasGroups: false,
         connected: false,
+        runtimeState: 'unknown',
+        accountSummary: {
+          total: 0,
+          enabled: 0,
+          configured: 0,
+          connected: 0,
+          runtimeKnown: 0,
+        },
       })),
     };
   }
@@ -1293,8 +1381,20 @@ function readOpenClawChannels(openclawHome: string): {
           name: channel.name,
           configured: false,
           dmPolicy: 'unknown',
+          groupPolicy: 'unknown',
+          allowFrom: [],
+          allowFromCount: 0,
+          allowFromHasWildcard: false,
           hasGroups: false,
           connected: false,
+          runtimeState: 'unknown',
+          accountSummary: {
+            total: 0,
+            enabled: 0,
+            configured: 0,
+            connected: 0,
+            runtimeKnown: 0,
+          },
         })),
       };
     }
@@ -1306,6 +1406,40 @@ function readOpenClawChannels(openclawHome: string): {
     const channels = OPENCLAW_CHANNEL_DEFS.map((channel): OpenClawChannelSummary => {
       const channelConfig = toReadonlyRecord(channelsRecord[channel.id]) ?? {};
       const sessionStats = toReadonlyRecord(sessionsRecord[channel.id]) ?? {};
+      const channelAllowFrom = parseAllowFrom(channelConfig);
+      const accountConfigs = toReadonlyRecord(channelConfig.accounts) ?? {};
+      const accountEntries = Object.values(accountConfigs)
+        .map((value) => toReadonlyRecord(value))
+        .filter((value): value is Readonly<Record<string, unknown>> => value !== null);
+
+      let accountEnabled = 0;
+      let accountConfigured = 0;
+      let accountConnected = 0;
+      let accountRuntimeKnown = 0;
+      const allowFromSet = new Set(channelAllowFrom);
+      for (const accountConfig of accountEntries) {
+        if (accountConfig.enabled !== false) {
+          accountEnabled += 1;
+        }
+        if (isChannelConfigured(accountConfig)) {
+          accountConfigured += 1;
+        }
+        const runtimeState = parseRuntimeState(accountConfig);
+        if (runtimeState !== 'unknown') {
+          accountRuntimeKnown += 1;
+        }
+        if (runtimeState === 'connected') {
+          accountConnected += 1;
+        }
+        for (const entry of parseAllowFrom(accountConfig)) {
+          allowFromSet.add(entry);
+        }
+      }
+
+      const resolvedAllowFrom = [...allowFromSet];
+      const channelRuntimeState = parseRuntimeState(channelConfig);
+      const connected =
+        channelRuntimeState === 'connected' || (channelRuntimeState === 'unknown' && accountConnected > 0);
       const lastMessageAt = toStringOrUndefined(sessionStats.lastMessageAt);
       const messageCount = toNumberOrUndefined(sessionStats.messageCount);
       return {
@@ -1313,8 +1447,20 @@ function readOpenClawChannels(openclawHome: string): {
         name: channel.name,
         configured: isChannelConfigured(channelConfig),
         dmPolicy: parseDmPolicy(channelConfig),
-        hasGroups: toBoolean(channelConfig.hasGroups) || toBoolean(channelConfig.groupsEnabled),
-        connected: toBoolean(channelConfig.connected) || channelConfig.status === 'connected',
+        groupPolicy: parseGroupPolicy(channelConfig),
+        allowFrom: resolvedAllowFrom,
+        allowFromCount: resolvedAllowFrom.length,
+        allowFromHasWildcard: resolvedAllowFrom.some((value) => value === '*'),
+        hasGroups: hasGroupsConfigured(channelConfig),
+        connected,
+        runtimeState: channelRuntimeState,
+        accountSummary: {
+          total: accountEntries.length,
+          enabled: accountEnabled,
+          configured: accountConfigured,
+          connected: accountConnected,
+          runtimeKnown: accountRuntimeKnown,
+        },
         ...(lastMessageAt ? { lastMessageAt } : {}),
         ...(messageCount !== undefined ? { messageCount } : {}),
       };
@@ -1331,8 +1477,20 @@ function readOpenClawChannels(openclawHome: string): {
         name: channel.name,
         configured: false,
         dmPolicy: 'unknown',
+        groupPolicy: 'unknown',
+        allowFrom: [],
+        allowFromCount: 0,
+        allowFromHasWildcard: false,
         hasGroups: false,
         connected: false,
+        runtimeState: 'unknown',
+        accountSummary: {
+          total: 0,
+          enabled: 0,
+          configured: 0,
+          connected: 0,
+          runtimeKnown: 0,
+        },
       })),
     };
   }
