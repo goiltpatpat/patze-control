@@ -43,7 +43,7 @@ function isPositionFree(
   pos: Vector3,
   obstacles: readonly Obstacle[],
   others: ReadonlyMap<string, Vector3>,
-  selfId: string,
+  selfId: string
 ): boolean {
   for (const obs of obstacles) {
     if (pos.distanceTo(obs.position) < obs.radius + MIN_DIST_OBSTACLE) {
@@ -91,9 +91,7 @@ function rand(min: number, max: number): number {
 
 export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
   const groupRef = useRef<Group>(null);
-  const currentPos = useRef(
-    new Vector3(props.deskPosition[0], 0, props.deskPosition[2] + 2.0),
-  );
+  const currentPos = useRef(new Vector3(props.deskPosition[0], 0, props.deskPosition[2] + 2.0));
   const isWalking = useRef(false);
   const frameCount = useRef(0);
 
@@ -102,9 +100,7 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
   const startX = props.deskPosition[0];
   const startZ = props.deskPosition[2] + 2.0;
 
-  const [targetPos, setTargetPos] = useState(
-    () => new Vector3(startX, 0, startZ),
-  );
+  const [targetPos, setTargetPos] = useState(() => new Vector3(startX, 0, startZ));
 
   useEffect(() => {
     function pickNewTarget(): void {
@@ -136,14 +132,16 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
     pickNewTarget();
 
     const [minMs, maxMs] = getMoveInterval(props.status);
-    const id = window.setInterval(() => {
-      pickNewTarget();
-    }, rand(minMs, maxMs));
+    const id = window.setInterval(
+      () => {
+        pickNewTarget();
+      },
+      rand(minMs, maxMs)
+    );
 
     return () => {
       window.clearInterval(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.status]);
 
   const scratchDir = useRef(new Vector3());

@@ -29,27 +29,56 @@ interface AvatarTraits {
 }
 
 const SKIN_TONES = [
-  '#f9dcc4', '#f5c7a1', '#e8b48a', '#d4956b',
-  '#c68642', '#a0622e', '#8d5524', '#6b3e1f',
-  '#ffe0bd', '#f7c5a0',
+  '#f9dcc4',
+  '#f5c7a1',
+  '#e8b48a',
+  '#d4956b',
+  '#c68642',
+  '#a0622e',
+  '#8d5524',
+  '#6b3e1f',
+  '#ffe0bd',
+  '#f7c5a0',
 ];
 const SHIRT_COLORS = [
-  '#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f59e0b',
-  '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#06b6d4',
-  '#84cc16', '#e11d48', '#0ea5e9', '#8b5cf6', '#10b981',
+  '#3b82f6',
+  '#ef4444',
+  '#22c55e',
+  '#a855f7',
+  '#f59e0b',
+  '#ec4899',
+  '#14b8a6',
+  '#f97316',
+  '#6366f1',
+  '#06b6d4',
+  '#84cc16',
+  '#e11d48',
+  '#0ea5e9',
+  '#8b5cf6',
+  '#10b981',
 ];
 const PANTS_COLORS = [
-  '#1e293b', '#334155', '#1a1a2e', '#2d2d44', '#3b3b56',
-  '#1e3a5f', '#2c1810', '#3d2914',
+  '#1e293b',
+  '#334155',
+  '#1a1a2e',
+  '#2d2d44',
+  '#3b3b56',
+  '#1e3a5f',
+  '#2c1810',
+  '#3d2914',
 ];
-const SHOE_COLORS = [
-  '#1a1a22', '#2d1b0e', '#111827', '#4a2c1a', '#1f1f2e',
-  '#3d1c00', '#0f172a',
-];
+const SHOE_COLORS = ['#1a1a22', '#2d1b0e', '#111827', '#4a2c1a', '#1f1f2e', '#3d1c00', '#0f172a'];
 const HAIR_COLORS = [
-  '#1a1a1a', '#3b2414', '#8b6914', '#c4a35a',
-  '#e63946', '#2d3436', '#6c5ce7', '#a8a8a8',
-  '#4a2c17', '#d4a574',
+  '#1a1a1a',
+  '#3b2414',
+  '#8b6914',
+  '#c4a35a',
+  '#e63946',
+  '#2d3436',
+  '#6c5ce7',
+  '#a8a8a8',
+  '#4a2c17',
+  '#d4a574',
 ];
 const EYE_COLORS = ['#1a1a2a', '#2c5f7c', '#3d6b3d', '#6b4226', '#4a3a6a'];
 const TIE_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899'];
@@ -100,7 +129,7 @@ export function VoxelAvatar(props: VoxelAvatarProps): JSX.Element {
 
   const traits = useMemo(
     () => (props.agentId ? deriveTraits(props.agentId) : null),
-    [props.agentId],
+    [props.agentId]
   );
 
   const skinColor = traits?.skin ?? '#f0d0b0';
@@ -250,20 +279,10 @@ export function VoxelAvatar(props: VoxelAvatarProps): JSX.Element {
           {hasGlasses ? (
             <>
               <Box args={[0.08, 0.06, 0.02]} position={[-0.07, 0.03, 0.155]}>
-                <meshStandardMaterial
-                  color="#333333"
-                  transparent
-                  opacity={0.4}
-                  metalness={0.5}
-                />
+                <meshStandardMaterial color="#333333" transparent opacity={0.4} metalness={0.5} />
               </Box>
               <Box args={[0.08, 0.06, 0.02]} position={[0.07, 0.03, 0.155]}>
-                <meshStandardMaterial
-                  color="#333333"
-                  transparent
-                  opacity={0.4}
-                  metalness={0.5}
-                />
+                <meshStandardMaterial color="#333333" transparent opacity={0.4} metalness={0.5} />
               </Box>
               <Box args={[0.04, 0.015, 0.015]} position={[0, 0.035, 0.155]}>
                 <meshStandardMaterial color="#555555" metalness={0.6} />
@@ -273,14 +292,16 @@ export function VoxelAvatar(props: VoxelAvatarProps): JSX.Element {
 
           {/* MOUTH */}
           <Box args={[0.1, 0.02, 0.02]} position={[0, -0.06, 0.14]}>
-            <meshStandardMaterial
-              color={props.status === 'error' ? '#ee5555' : '#cc8888'}
-            />
+            <meshStandardMaterial color={props.status === 'error' ? '#ee5555' : '#cc8888'} />
           </Box>
 
           {/* NAME + EMOJI floating above head */}
           <Text
-            position={[0, 0.28 + (hairStyle === 'tall' ? 0.15 : hairStyle === 'spiky' ? 0.1 : 0), 0]}
+            position={[
+              0,
+              0.28 + (hairStyle === 'tall' ? 0.15 : hairStyle === 'spiky' ? 0.1 : 0),
+              0,
+            ]}
             fontSize={0.18}
             anchorX="center"
             anchorY="middle"
@@ -289,7 +310,11 @@ export function VoxelAvatar(props: VoxelAvatarProps): JSX.Element {
           </Text>
           {props.label ? (
             <Text
-              position={[0, 0.48 + (hairStyle === 'tall' ? 0.15 : hairStyle === 'spiky' ? 0.1 : 0), 0]}
+              position={[
+                0,
+                0.48 + (hairStyle === 'tall' ? 0.15 : hairStyle === 'spiky' ? 0.1 : 0),
+                0,
+              ]}
               fontSize={0.08}
               color="#e0e8f0"
               anchorX="center"
@@ -374,11 +399,7 @@ export function VoxelAvatar(props: VoxelAvatarProps): JSX.Element {
             <meshStandardMaterial color={pantsColor} roughness={0.7} />
           </Box>
           <Box args={[0.13, 0.06, 0.18]} position={[0, -0.42, 0.03]}>
-            <meshStandardMaterial
-              color={shoeColor}
-              roughness={0.5}
-              metalness={0.2}
-            />
+            <meshStandardMaterial color={shoeColor} roughness={0.5} metalness={0.2} />
           </Box>
         </group>
 
@@ -388,11 +409,7 @@ export function VoxelAvatar(props: VoxelAvatarProps): JSX.Element {
             <meshStandardMaterial color={pantsColor} roughness={0.7} />
           </Box>
           <Box args={[0.13, 0.06, 0.18]} position={[0, -0.42, 0.03]}>
-            <meshStandardMaterial
-              color={shoeColor}
-              roughness={0.5}
-              metalness={0.2}
-            />
+            <meshStandardMaterial color={shoeColor} roughness={0.5} metalness={0.2} />
           </Box>
         </group>
 
