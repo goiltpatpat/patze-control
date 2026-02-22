@@ -271,7 +271,7 @@ function SceneContent(props: {
       <PlantPot position={[-10.5, 0, -8.5]} size="large" />
       <PlantPot position={[10.5, 0, -8.5]} size="medium" />
       <PlantPot position={[-10.5, 0, 7]} size="small" />
-      <PlantPot position={[10.5, 0, 7]} size="small" />
+      <PlantPot position={[10.5, 0, 0]} size="small" />
 
       {/* Dinosaur mascot */}
       <VoxelDinosaur position={[10, 0, 7]} rotation={[0, -Math.PI * 0.7, 0]} />
