@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilterTabs, type FilterTab } from '../components/FilterTabs';
 import { IconClock } from '../components/Icons';
+import { TaskTimeline, type TimelineTask } from '../components/TaskTimeline';
 import type { UseOpenClawTargetsResult } from '../hooks/useOpenClawTargets';
 import { navigate } from '../shell/routes';
 import type { ConnectionStatus } from '../types';
@@ -148,7 +149,7 @@ export interface TasksViewProps {
   readonly initialFilter?: 'openclaw';
 }
 
-type TaskFilter = 'all' | 'enabled' | 'disabled' | 'error' | 'openclaw';
+type TaskFilter = 'all' | 'enabled' | 'disabled' | 'error' | 'openclaw' | 'timeline';
 const RECENT_HISTORY_LIMIT = 20;
 const HISTORY_GROUP_PREVIEW_LIMIT = 8;
 
@@ -758,12 +759,37 @@ export function TasksView(props: TasksViewProps): JSX.Element {
       { id: 'disabled', label: 'Paused', count: counts.disabled },
       { id: 'error', label: 'Error', count: counts.error },
       { id: 'openclaw', label: 'OpenClaw', count: openclawJobCount },
+      { id: 'timeline', label: 'Timeline' },
     ],
     [counts, openclawJobCount]
   );
 
+  // Timeline tasks: merge patze tasks + openclaw jobs
+  const timelineTasks = useMemo<readonly TimelineTask[]>(() => {
+    const result: TimelineTask[] = [];
+    for (const task of tasks) {
+      result.push({
+        id: task.id,
+        name: task.name,
+        schedule: task.schedule,
+        enabled: task.status === 'enabled',
+        nextRunAtMs: task.nextRunAtMs,
+      });
+    }
+    for (const job of openclawJobs) {
+      result.push({
+        id: job.jobId,
+        name: job.name ?? job.jobId,
+        schedule: job.schedule,
+        enabled: job.enabled,
+        nextRunAtMs: job.nextRunAtMs,
+      });
+    }
+    return result;
+  }, [tasks, openclawJobs]);
+
   const filtered = useMemo(() => {
-    if (filter === 'openclaw') return [];
+    if (filter === 'openclaw' || filter === 'timeline') return [];
     return tasks.filter((t) => filter === 'all' || t.status === filter);
   }, [tasks, filter]);
 
@@ -859,7 +885,9 @@ export function TasksView(props: TasksViewProps): JSX.Element {
       {showSnapshots ? <SnapshotPanel snapshots={snapshots} onRollback={handleRollback} /> : null}
       {showCreate ? <CreateTaskForm onCreate={handleCreate} openclawJobs={openclawJobs} /> : null}
 
-      {filter === 'openclaw' ? (
+      {filter === 'timeline' ? (
+        <TaskTimeline tasks={timelineTasks} />
+      ) : filter === 'openclaw' ? (
         <>
           {showAddTarget ? (
             <AddTargetForm

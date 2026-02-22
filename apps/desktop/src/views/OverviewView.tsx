@@ -1,11 +1,24 @@
 import { useMemo } from 'react';
 import { ActivityFeed } from '../components/ActivityFeed';
+import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { GaugeBar } from '../components/GaugeBar';
-import { IconActivity, IconLayers, IconServer, IconZap } from '../components/Icons';
+import { Notepad } from '../components/Notepad';
+import {
+  IconActivity,
+  IconBot,
+  IconClock,
+  IconLayers,
+  IconMessage,
+  IconServer,
+  IconSettings,
+  IconTerminal,
+  IconZap,
+} from '../components/Icons';
 import { HealthBadge } from '../components/badges/HealthBadge';
 import { StateBadge } from '../components/badges/StateBadge';
 import type { OpenClawTargetsSummary } from '../hooks/useOpenClawTargets';
 import { navigate } from '../shell/routes';
+import type { AppRoute } from '../shell/routes';
 import type { ConnectionStatus, FrontendUnifiedSnapshot } from '../types';
 import { formatCost, formatTokenCount } from '../utils/format';
 import { formatRelativeTime } from '../utils/time';
@@ -92,6 +105,60 @@ function MetricCard(props: MetricCardProps): JSX.Element {
       </div>
       <span className={`ov-metric-value${props.danger ? ' ov-metric-danger' : ''}`}>
         {props.value}
+      </span>
+    </div>
+  );
+}
+
+const QUICK_LINKS: ReadonlyArray<{
+  route: AppRoute;
+  label: string;
+  icon: (props: { width?: number; height?: number }) => JSX.Element;
+  iconBg: string;
+  shortcut: string;
+}> = [
+  { route: 'tasks', label: 'Tasks', icon: IconClock, iconBg: 'var(--amber-soft)', shortcut: '9' },
+  { route: 'agents', label: 'Agents', icon: IconBot, iconBg: 'var(--blue-soft)', shortcut: '2' },
+  {
+    route: 'machines',
+    label: 'Machines',
+    icon: IconServer,
+    iconBg: 'var(--accent-soft)',
+    shortcut: '4',
+  },
+  { route: 'logs', label: 'Logs', icon: IconTerminal, iconBg: 'var(--muted-soft)', shortcut: '8' },
+  {
+    route: 'channels',
+    label: 'Channels',
+    icon: IconMessage,
+    iconBg: 'var(--green-soft)',
+    shortcut: '6',
+  },
+  {
+    route: 'settings',
+    label: 'Settings',
+    icon: IconSettings,
+    iconBg: 'var(--muted-soft)',
+    shortcut: '0',
+  },
+];
+
+function SuccessRateBar(props: { total: number; failed: number }): JSX.Element {
+  const succeeded = props.total - props.failed;
+  const pct = props.total > 0 ? (succeeded / props.total) * 100 : 100;
+  const color = pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
+
+  return (
+    <div className="ov-success-bar">
+      <span className="ov-success-label">Success Rate</span>
+      <div className="ov-success-track">
+        <div className="ov-success-fill" style={{ width: `${String(pct)}%`, background: color }} />
+      </div>
+      <span className="ov-success-value" style={{ color }}>
+        {pct.toFixed(0)}%
+      </span>
+      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+        {succeeded}/{props.total}
       </span>
     </div>
   );
@@ -293,12 +360,52 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
         </div>
       ) : null}
 
+      {/* Success Rate Bar */}
+      {totalRuns > 0 ? <SuccessRateBar total={totalRuns} failed={failedRuns} /> : null}
+
+      {/* Quick Links */}
+      <div>
+        <div className="ov-section-header">
+          <span className="accent-line" />
+          <span className="ov-section-header-label">Quick Links</span>
+        </div>
+        <div className="ov-quick-links">
+          {QUICK_LINKS.map((link) => {
+            const LinkIcon = link.icon;
+            return (
+              <button
+                key={link.route}
+                className="ov-quick-link"
+                onClick={() => {
+                  navigate(link.route);
+                }}
+                title={`${link.label} (${link.shortcut})`}
+              >
+                <div className="ov-quick-link-icon" style={{ background: link.iconBg }}>
+                  <LinkIcon width={16} height={16} />
+                </div>
+                <div className="ov-quick-link-body">
+                  <span className="ov-quick-link-label">{link.label}</span>
+                </div>
+                <span className="ov-quick-link-shortcut">{link.shortcut}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Notepad */}
+      <Notepad />
+
       {/* Two-column data panels */}
       <div className="ov-panels">
         {/* Machines */}
         <div className="panel ov-panel-half">
           <div className="panel-header">
-            <h3 className="panel-title">Machines</h3>
+            <div className="ov-section-header" style={{ marginBottom: 0 }}>
+              <span className="accent-line" />
+              <h3 className="panel-title">Machines</h3>
+            </div>
             {machineCount > 0 ? (
               <button
                 className="ov-panel-link"
@@ -354,7 +461,10 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
         {/* Active Runs */}
         <div className="panel ov-panel-half">
           <div className="panel-header">
-            <h3 className="panel-title">Active Runs</h3>
+            <div className="ov-section-header" style={{ marginBottom: 0 }}>
+              <span className="accent-line" />
+              <h3 className="panel-title">Active Runs</h3>
+            </div>
             {activeRuns > 0 ? (
               <button
                 className="ov-panel-link"
@@ -402,6 +512,11 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
           )}
         </div>
       </div>
+
+      {/* Activity Heatmap */}
+      {snapshot.recentEvents.length > 0 ? (
+        <ActivityHeatmap events={snapshot.recentEvents.map((e) => ({ ts: e.ts, type: e.type }))} />
+      ) : null}
 
       {/* Activity Feed */}
       <ActivityFeed snapshot={snapshot} />

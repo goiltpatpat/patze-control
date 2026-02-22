@@ -23,9 +23,18 @@ _Last updated: 2026-02-22_
 - **Production Hardening**: Event dedup, session eviction, HMAC auth, fetch timeouts, error boundaries, toast dedupe, body size limits, rate limits
 - **CI/CD Pipeline**: repo-ci (quality-gates + monorepo-build), desktop-ci (web bundle matrix + Tauri Windows artifact), workflow-lint (actionlint)
 - **Repository Governance**: Branch protection (main), CODEOWNERS, PR/issue templates, Dependabot, public visibility
+- **Command Palette (⌘K)**: Global search + navigation across views, machines, sessions, runs with fuzzy matching
+- **Notification Center**: Persistent notification history with bell dropdown, unread badge, type-colored icons, localStorage persistence
+- **Activity Heatmap**: 7-day × 24-hour visual grid of event activity with hover tooltips and intensity coloring
+- **Task Timeline**: 7-day forward-looking calendar with color-coded task events, merged patze + openclaw tasks
+- **Quick Notes (Notepad)**: Auto-saving textarea with 2s debounce, localStorage persistence
+- **Enhanced Overview Dashboard**: Quick links grid, section headers with accent line, success rate bar
+- **StatusStrip Enhancements**: CPU/RAM mini gauges, uptime counter, separator dividers
+- **Design System Polish**: Soft color variables, accent line utility, enhanced badges, global scrollbar, panel transitions
 
 ## What's Left
 
+- [ ] Merge UI/UX branch (cursor/ui-ux-tenacitos-d014) into main via PR
 - [ ] Merge open Dependabot PRs (#2-#9) for dependency hygiene
 - [ ] Production deployment (Tauri sidecar bundling + installer)
 - [ ] E2E tests for multi-target + bridge flows
@@ -35,9 +44,8 @@ _Last updated: 2026-02-22_
 
 ## Verification
 
-- CI (main): repo-ci pass, desktop-ci pass, workflow-lint pass
-- Tests: 15/15 pass
-- Lints: 0 errors
+- CI (branch): typecheck ✓, lint ✓, format ✓, test 16/16 ✓
+- ci:verify: FULL GREEN
 - Browser: UI renders, interactions work
 
 ## Evolution
@@ -55,3 +63,4 @@ _Last updated: 2026-02-22_
 11. CI/CD + governance: repo-ci, desktop-ci, workflow-lint, branch protection, CODEOWNERS, Dependabot
 12. OpenClaw rich schema: stagger, payload, wakeMode, sessionTarget, runtime state, nested state extraction
 13. Channel intelligence: groupPolicy, allowFrom, runtimeState, accountSummary, risk scoring
+14. tenacitOS UI/UX integration: command palette, notifications, heatmap, timeline, notepad, design system polish
