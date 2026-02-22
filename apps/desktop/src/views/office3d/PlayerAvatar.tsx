@@ -20,6 +20,7 @@ interface PlayerAvatarProps {
   readonly obstacles: readonly Obstacle[];
   readonly nearbyObjects: readonly NearbyObject[];
   readonly onInteract: (objectId: string, objectType: 'desk' | 'furniture') => void;
+  readonly onPositionUpdate?: (x: number, z: number) => void;
   readonly officeBounds: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 
@@ -54,6 +55,7 @@ export function PlayerAvatar(props: PlayerAvatarProps): JSX.Element {
 
   const nearestRef = useRef<NearbyObject | null>(null);
   const interactCooldown = useRef(0);
+  const frameCounter = useRef(0);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -162,6 +164,12 @@ export function PlayerAvatar(props: PlayerAvatarProps): JSX.Element {
     );
     camera.position.lerp(camTarget, CAMERA_LERP);
     camera.lookAt(position.current.x, 0.8, position.current.z);
+
+    if (frameCounter.current >= 10) {
+      frameCounter.current = 0;
+      p.onPositionUpdate?.(position.current.x, position.current.z);
+    }
+    frameCounter.current += 1;
 
     let nearest: NearbyObject | null = null;
     let nearestDist = INTERACT_RANGE;

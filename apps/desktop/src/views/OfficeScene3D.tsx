@@ -1,6 +1,7 @@
 import { Suspense, useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { Vector3 } from 'three';
 import { formatRelativeTime } from '../utils/time';
 import { navigate } from '../shell/routes';
@@ -18,6 +19,11 @@ import { Whiteboard } from './office3d/Whiteboard';
 import { AgentPanel } from './office3d/AgentPanel';
 import { FirstPersonControls } from './office3d/FirstPersonControls';
 import { PlayerAvatar } from './office3d/PlayerAvatar';
+import { HologramHUD } from './office3d/HologramHUD';
+import { FleetWallScreen } from './office3d/FleetWallScreen';
+import { SkyWindow } from './office3d/SkyWindow';
+import { AmbientParticles } from './office3d/AmbientParticles';
+import { MiniMap } from './office3d/MiniMap';
 
 type DeskStatus = 'active' | 'idle' | 'error' | 'offline';
 
@@ -89,6 +95,7 @@ function SceneContent(props: {
   readonly selectedAgent: string | null;
   readonly onDeskClick: (id: string) => void;
   readonly onInteraction: (modal: InteractionModal) => void;
+  readonly onPlayerPositionUpdate: (x: number, z: number) => void;
   readonly cameraMode: CameraMode;
 }): JSX.Element {
   const avatarPositions = useRef<Map<string, Vector3>>(new Map());
@@ -236,13 +243,37 @@ function SceneContent(props: {
         }}
       />
 
+      {/* Holographic HUDs above desks */}
+      {props.deskLayout.map((desk) => (
+        <HologramHUD
+          key={`hud-${desk.id}`}
+          position={[desk.x, 0, desk.z]}
+          status={desk.status}
+          statusColor={getStatusColor(desk.status)}
+          activeRuns={desk.activeRuns}
+          label={desk.label}
+        />
+      ))}
+
+      {/* Fleet Wall Screen */}
+      <FleetWallScreen
+        position={[-5, 2.8, -9.75]}
+        desks={props.deskLayout.map((d) => ({ status: d.status, label: d.label }))}
+      />
+
+      {/* Sky Window */}
+      <SkyWindow position={[5, 3.0, -9.8]} />
+
+      {/* Ambient Particles */}
+      <AmbientParticles count={80} area={[20, 5, 16]} />
+
       {/* Decorative Props */}
       <PlantPot position={[-10.5, 0, -8.5]} size="large" />
       <PlantPot position={[10.5, 0, -8.5]} size="medium" />
       <PlantPot position={[-10.5, 0, 7]} size="small" />
       <PlantPot position={[10.5, 0, 7]} size="small" />
 
-      <WallClock position={[5, 3.5, -9.75]} />
+      <WallClock position={[8.5, 3.5, -9.75]} />
 
       {/* Player Avatar (third-person mode) */}
       {props.cameraMode === 'player' ? (
@@ -250,6 +281,7 @@ function SceneContent(props: {
           obstacles={obstacles}
           nearbyObjects={nearbyObjects}
           onInteract={handlePlayerInteract}
+          onPositionUpdate={props.onPlayerPositionUpdate}
           officeBounds={OFFICE_BOUNDS}
         />
       ) : null}
@@ -268,6 +300,11 @@ function SceneContent(props: {
       ) : props.cameraMode === 'fps' ? (
         <FirstPersonControls moveSpeed={4} />
       ) : null}
+
+      {/* Post-processing */}
+      <EffectComposer>
+        <Bloom luminanceThreshold={0.6} luminanceSmoothing={0.4} intensity={0.5} mipmapBlur />
+      </EffectComposer>
     </>
   );
 }
@@ -333,6 +370,7 @@ function InteractionModalOverlay(props: {
 export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [interactionModal, setInteractionModal] = useState<InteractionModal>(null);
+  const [playerPos, setPlayerPos] = useState<{ x: number; z: number } | null>(null);
   const deskLayout = useMemo(() => layoutDesks(props.desks), [props.desks]);
 
   const selectedDesk = useMemo(() => {
@@ -356,6 +394,10 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
     setInteractionModal(null);
   }, []);
 
+  const handlePlayerPositionUpdate = useCallback((x: number, z: number) => {
+    setPlayerPos({ x, z });
+  }, []);
+
   const sceneSpan = Math.max(
     deskLayout.length > 0 ? Math.max(...deskLayout.map((d) => Math.abs(d.x))) * 2 + 8 : 16,
     deskLayout.length > 0 ? Math.max(...deskLayout.map((d) => Math.abs(d.z))) * 2 + 8 : 16
@@ -377,6 +419,7 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
               selectedAgent={selectedAgent}
               onDeskClick={handleDeskClick}
               onInteraction={handleInteraction}
+              onPlayerPositionUpdate={handlePlayerPositionUpdate}
               cameraMode={props.cameraMode}
             />
           </Suspense>
@@ -404,6 +447,13 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
             </>
           )}
         </div>
+
+        {/* Mini-map overlay */}
+        <MiniMap
+          desks={deskLayout.map((d) => ({ x: d.x, z: d.z, status: d.status, label: d.label }))}
+          playerPosition={props.cameraMode === 'player' ? playerPos : null}
+          roomBounds={OFFICE_BOUNDS}
+        />
       </div>
 
       {/* Agent Panel Sidebar */}

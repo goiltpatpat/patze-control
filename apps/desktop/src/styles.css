@@ -6198,6 +6198,23 @@ span.tone-muted:not(.badge) {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* ── Mini-map Overlay ───────────────────────────────────────── */
+
+.office-minimap {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 5;
+  pointer-events: none;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.office-minimap canvas {
+  display: block;
+}
+
 @media (max-width: 920px) {
   .office-3d-canvas-with-panel {
     margin-right: 0;
