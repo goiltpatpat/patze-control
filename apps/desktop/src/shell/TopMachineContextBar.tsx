@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import { NotificationCenter } from '../components/NotificationCenter';
+import type { UseNotificationsResult } from '../hooks/useNotifications';
 import type { ConnectionStatus } from '../types';
+import { IconSearch } from '../components/Icons';
 
 export interface TopMachineContextBarProps {
   readonly baseUrl: string;
@@ -10,6 +13,8 @@ export interface TopMachineContextBarProps {
   readonly onTokenChange: (value: string) => void;
   readonly onConnect: () => void;
   readonly onDisconnect: () => void;
+  readonly notifications: UseNotificationsResult;
+  readonly onOpenPalette: () => void;
 }
 
 function toStatusLabel(status: ConnectionStatus): string {
@@ -122,7 +127,18 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
         </div>
       )}
 
+      {/* Search + Notifications + Status */}
       <div className="context-status-indicator">
+        <button
+          className="notification-bell"
+          title="Search (⌘K)"
+          onClick={props.onOpenPalette}
+          style={{ marginRight: 2 }}
+        >
+          <IconSearch width={15} height={15} />
+        </button>
+        <NotificationCenter notifications={props.notifications} />
+        <span className="context-divider" style={{ height: 18, margin: '0 6px' }} />
         <span className="status-dot" data-status={props.status} />
         <span className="status-label">{toStatusLabel(props.status)}</span>
         {props.errorMessage ? (

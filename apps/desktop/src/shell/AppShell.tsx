@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CommandPalette } from '../components/CommandPalette';
 import type { MonitorState } from '../control-monitor';
 import type { BridgeConnection } from '../hooks/useBridgeConnections';
@@ -8,6 +8,7 @@ import type {
   PersistedEndpoint,
 } from '../hooks/useEndpointManager';
 import type { ManagedBridgeState, BridgeSetupInput } from '../hooks/useManagedBridges';
+import { useNotifications } from '../hooks/useNotifications';
 import { useOpenClawTargets } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus } from '../types';
 import type { TunnelEndpointRow } from '../views/TunnelsView';
@@ -65,9 +66,37 @@ function isInputFocused(): boolean {
 export function AppShell(props: AppShellProps): JSX.Element {
   const { routeState } = useAppRoute();
   const openclawTargets = useOpenClawTargets(props.baseUrl, props.token, props.status);
+  const notifications = useNotifications();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const closePalette = useCallback(() => { setPaletteOpen(false); }, []);
+  const openPalette = useCallback(() => { setPaletteOpen(true); }, []);
+
+  // Auto-generate notifications from connection state changes
+  const prevStatusRef = useRef(props.status);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const next = props.status;
+    prevStatusRef.current = next;
+    if (prev === next) return;
+
+    switch (next) {
+      case 'connected':
+        notifications.addNotification('success', 'Connected', 'Successfully connected to control plane');
+        break;
+      case 'error':
+        notifications.addNotification('error', 'Connection Error', props.errorMessage ?? 'Connection to control plane failed');
+        break;
+      case 'degraded':
+        notifications.addNotification('warning', 'Connection Degraded', 'Connection to control plane is degraded');
+        break;
+      case 'idle':
+        if (prev === 'connected' || prev === 'degraded') {
+          notifications.addNotification('info', 'Disconnected', 'Disconnected from control plane');
+        }
+        break;
+    }
+  }, [props.status, props.errorMessage, notifications.addNotification]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
@@ -117,6 +146,8 @@ export function AppShell(props: AppShellProps): JSX.Element {
         onTokenChange={props.onTokenChange}
         onConnect={props.onConnect}
         onDisconnect={props.onDisconnect}
+        notifications={notifications}
+        onOpenPalette={openPalette}
       />
       <div className="shell-body">
         <SidebarNav
