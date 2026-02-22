@@ -225,21 +225,27 @@ function normalizeJob(raw: unknown, fallbackId?: string): OpenClawCronJob | null
     wakeMode: parseWakeMode(obj.wakeMode),
     deleteAfterRun: typeof obj.deleteAfterRun === 'boolean' ? obj.deleteAfterRun : undefined,
     enabled: obj.enabled !== false,
-    createdAt:
-      toIsoDate(obj.createdAt) ?? toIsoDate(obj.createdAtMs) ?? new Date().toISOString(),
+    createdAt: toIsoDate(obj.createdAt) ?? toIsoDate(obj.createdAtMs) ?? new Date().toISOString(),
     updatedAt: toIsoDate(obj.updatedAt) ?? toIsoDate(obj.updatedAtMs),
     lastRunAt:
       toIsoDate(obj.lastRunAt) ??
       toIsoDate(obj.lastRunAtMs) ??
       toIsoDate(extractState(obj)?.lastRunAtMs),
     lastStatus: parseJobStatus(obj.lastStatus, extractState(obj)),
-    nextRunAtMs: parseNumberOrUndefined(obj.nextRunAtMs) ?? parseNumberOrUndefined(extractState(obj)?.nextRunAtMs),
-    lastError: parseStringOrUndefined(obj.lastError) ?? parseStringOrUndefined(extractState(obj)?.lastError),
+    nextRunAtMs:
+      parseNumberOrUndefined(obj.nextRunAtMs) ??
+      parseNumberOrUndefined(extractState(obj)?.nextRunAtMs),
+    lastError:
+      parseStringOrUndefined(obj.lastError) ?? parseStringOrUndefined(extractState(obj)?.lastError),
     lastDurationMs:
-      parseNumberOrUndefined(obj.lastDurationMs) ?? parseNumberOrUndefined(extractState(obj)?.lastDurationMs),
+      parseNumberOrUndefined(obj.lastDurationMs) ??
+      parseNumberOrUndefined(extractState(obj)?.lastDurationMs),
     lastDelivered:
-      parseBooleanOrUndefined(obj.lastDelivered) ?? parseBooleanOrUndefined(extractState(obj)?.lastDelivered),
-    consecutiveErrors: parseNumberOrUndefined(obj.consecutiveErrors) ?? parseNumberOrUndefined(extractState(obj)?.consecutiveErrors),
+      parseBooleanOrUndefined(obj.lastDelivered) ??
+      parseBooleanOrUndefined(extractState(obj)?.lastDelivered),
+    consecutiveErrors:
+      parseNumberOrUndefined(obj.consecutiveErrors) ??
+      parseNumberOrUndefined(extractState(obj)?.consecutiveErrors),
   };
 }
 
@@ -382,7 +388,9 @@ function parseBooleanOrUndefined(value: unknown): boolean | undefined {
 
 function extractState(job: Record<string, unknown>): Record<string, unknown> | undefined {
   const state = job.state;
-  return typeof state === 'object' && state !== null ? (state as Record<string, unknown>) : undefined;
+  return typeof state === 'object' && state !== null
+    ? (state as Record<string, unknown>)
+    : undefined;
 }
 
 function toIsoDate(value: unknown): string | undefined {

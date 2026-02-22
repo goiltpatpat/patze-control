@@ -454,7 +454,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                         <span className={`badge ${dmBadgeTone(channel.dmPolicy)}`}>
                           DM: {channel.dmPolicy}
                         </span>
-                        <span className="badge tone-neutral">allowFrom: {channel.allowFromCount}</span>
+                        <span className="badge tone-neutral">
+                          allowFrom: {channel.allowFromCount}
+                        </span>
                         {channel.allowFromHasWildcard ? (
                           <span className="badge tone-warn">allowFrom *</span>
                         ) : null}
@@ -466,7 +468,8 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                         </span>
                         {channel.accountSummary.total > 0 ? (
                           <span className="badge tone-neutral">
-                            accounts {channel.accountSummary.connected}/{channel.accountSummary.total}
+                            accounts {channel.accountSummary.connected}/
+                            {channel.accountSummary.total}
                           </span>
                         ) : null}
                       </div>
@@ -523,7 +526,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                       <span className={`badge ${dmBadgeTone(channel.dmPolicy)}`}>
                         DM: {channel.dmPolicy}
                       </span>
-                      <span className="badge tone-neutral">allowFrom: {channel.allowFromCount}</span>
+                      <span className="badge tone-neutral">
+                        allowFrom: {channel.allowFromCount}
+                      </span>
                       <span className="badge tone-neutral">group: {channel.groupPolicy}</span>
                       <span
                         className={`badge ${channel.hasGroups ? 'tone-neutral' : 'tone-muted'}`}

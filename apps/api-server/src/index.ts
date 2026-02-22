@@ -1300,9 +1300,7 @@ function parseAllowFrom(config: Readonly<Record<string, unknown>>): string[] {
     if (!Array.isArray(dmAllowFromRaw)) {
       return [];
     }
-    return dmAllowFromRaw
-      .map((value) => String(value).trim())
-      .filter((value) => value.length > 0);
+    return dmAllowFromRaw.map((value) => String(value).trim()).filter((value) => value.length > 0);
   }
   return allowFromRaw.map((value) => String(value).trim()).filter((value) => value.length > 0);
 }
@@ -1439,7 +1437,8 @@ function readOpenClawChannels(openclawHome: string): {
       const resolvedAllowFrom = [...allowFromSet];
       const channelRuntimeState = parseRuntimeState(channelConfig);
       const connected =
-        channelRuntimeState === 'connected' || (channelRuntimeState === 'unknown' && accountConnected > 0);
+        channelRuntimeState === 'connected' ||
+        (channelRuntimeState === 'unknown' && accountConnected > 0);
       const lastMessageAt = toStringOrUndefined(sessionStats.lastMessageAt);
       const messageCount = toNumberOrUndefined(sessionStats.messageCount);
       return {

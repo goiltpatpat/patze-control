@@ -1792,41 +1792,48 @@ function OpenClawJobsPanel(props: OpenClawJobsPanelProps): JSX.Element {
                   </td>
                   <td className="mono" style={{ fontSize: 12 }}>
                     {formatSchedule(job.schedule)}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                    {job.schedule.kind === 'cron' && job.schedule.staggerMs !== undefined ? (
-                      <span className={`badge ${job.schedule.staggerMs > 0 ? 'tone-neutral' : 'tone-good'}`}>
-                        {job.schedule.staggerMs > 0
-                          ? `stagger ${formatCompactMs(job.schedule.staggerMs)}`
-                          : 'exact'}
-                      </span>
-                    ) : null}
-                    {job.schedule.kind === 'every' && job.schedule.anchorMs !== undefined ? (
-                      <span className="badge tone-neutral" title={`Anchor: ${job.schedule.anchorMs}`}>
-                        anchor {new Date(job.schedule.anchorMs).toLocaleTimeString()}
-                      </span>
-                    ) : null}
-                    {job.nextRunAtMs ? (
-                      <span className="badge tone-neutral">next {formatNextRun(job.nextRunAtMs)}</span>
-                    ) : null}
-                  </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      {job.schedule.kind === 'cron' && job.schedule.staggerMs !== undefined ? (
+                        <span
+                          className={`badge ${job.schedule.staggerMs > 0 ? 'tone-neutral' : 'tone-good'}`}
+                        >
+                          {job.schedule.staggerMs > 0
+                            ? `stagger ${formatCompactMs(job.schedule.staggerMs)}`
+                            : 'exact'}
+                        </span>
+                      ) : null}
+                      {job.schedule.kind === 'every' && job.schedule.anchorMs !== undefined ? (
+                        <span
+                          className="badge tone-neutral"
+                          title={`Anchor: ${job.schedule.anchorMs}`}
+                        >
+                          anchor {new Date(job.schedule.anchorMs).toLocaleTimeString()}
+                        </span>
+                      ) : null}
+                      {job.nextRunAtMs ? (
+                        <span className="badge tone-neutral">
+                          next {formatNextRun(job.nextRunAtMs)}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td>
                     <span className="badge tone-neutral">{job.execution.style}</span>
-                  {job.payload?.kind ? (
-                    <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
-                      {job.payload.kind}
-                    </span>
-                  ) : null}
-                  {job.sessionTarget ? (
-                    <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
-                      {job.sessionTarget}
-                    </span>
-                  ) : null}
-                  {job.wakeMode ? (
-                    <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
-                      wake {job.wakeMode === 'next-heartbeat' ? 'next-hb' : 'now'}
-                    </span>
-                  ) : null}
+                    {job.payload?.kind ? (
+                      <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
+                        {job.payload.kind}
+                      </span>
+                    ) : null}
+                    {job.sessionTarget ? (
+                      <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
+                        {job.sessionTarget}
+                      </span>
+                    ) : null}
+                    {job.wakeMode ? (
+                      <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
+                        wake {job.wakeMode === 'next-heartbeat' ? 'next-hb' : 'now'}
+                      </span>
+                    ) : null}
                     {job.execution.sessionTag ? (
                       <span
                         className="badge tone-neutral"
@@ -1867,7 +1874,10 @@ function OpenClawJobsPanel(props: OpenClawJobsPanelProps): JSX.Element {
                       </span>
                     ) : null}
                     {job.delivery.channel ? (
-                      <span className="tone-muted" style={{ display: 'block', fontSize: 10, marginTop: 2 }}>
+                      <span
+                        className="tone-muted"
+                        style={{ display: 'block', fontSize: 10, marginTop: 2 }}
+                      >
                         via {job.delivery.channel}
                       </span>
                     ) : null}
