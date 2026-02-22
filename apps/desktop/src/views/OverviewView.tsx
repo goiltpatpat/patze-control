@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ActivityFeed } from '../components/ActivityFeed';
 import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { GaugeBar } from '../components/GaugeBar';
+import { Notepad } from '../components/Notepad';
 import {
   IconActivity,
   IconBot,
@@ -372,6 +373,9 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
           })}
         </div>
       </div>
+
+      {/* Notepad */}
+      <Notepad />
 
       {/* Two-column data panels */}
       <div className="ov-panels">
