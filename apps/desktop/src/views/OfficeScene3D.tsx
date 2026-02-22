@@ -176,6 +176,11 @@ function SceneContent(props: {
       { position: new Vector3(-9, 0, -5), radius: 0.8 },
       { position: new Vector3(0, 0, -8.5), radius: 1.5 },
       { position: new Vector3(9, 0, -5), radius: 0.6 },
+      { position: new Vector3(-10.5, 0, -8.5), radius: 0.5 },
+      { position: new Vector3(10.5, 0, -8.5), radius: 0.5 },
+      { position: new Vector3(-10.5, 0, 7), radius: 0.5 },
+      { position: new Vector3(10.5, 0, 0), radius: 0.5 },
+      { position: new Vector3(10, 0, 7), radius: 0.7 },
     ],
     [props.deskLayout]
   );
@@ -211,6 +216,7 @@ function SceneContent(props: {
         <MovingAvatar
           key={`avatar-${desk.id}`}
           id={desk.id}
+          label={desk.label}
           emoji={desk.emoji}
           color={getStatusColor(desk.status)}
           status={desk.status}

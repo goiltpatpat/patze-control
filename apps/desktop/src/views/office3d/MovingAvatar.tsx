@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, type MutableRefObject } from 'react';
+import { useRef, useState, useEffect, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Vector3 } from 'three';
 import type { Group } from 'three';
@@ -19,155 +19,202 @@ interface Obstacle {
 
 interface MovingAvatarProps {
   readonly id: string;
+  readonly label: string;
   readonly emoji: string;
   readonly color: string;
   readonly status: DeskStatus;
   readonly deskPosition: [number, number, number];
-  readonly officeBounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  readonly officeBounds: {
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+  };
   readonly obstacles: readonly Obstacle[];
   readonly otherAvatarPositions: ReadonlyMap<string, Vector3>;
   readonly onPositionUpdate: (id: string, pos: Vector3) => void;
 }
 
-function getMovementInterval(status: DeskStatus): [number, number] {
+const MIN_DIST_OBSTACLE = 0.3;
+const MIN_DIST_AVATAR = 1.0;
+const REPORT_EVERY = 10;
+
+function isPositionFree(
+  pos: Vector3,
+  obstacles: readonly Obstacle[],
+  others: ReadonlyMap<string, Vector3>,
+  selfId: string,
+): boolean {
+  for (const obs of obstacles) {
+    if (pos.distanceTo(obs.position) < obs.radius + MIN_DIST_OBSTACLE) {
+      return false;
+    }
+  }
+  for (const [id, otherPos] of others) {
+    if (id === selfId) continue;
+    if (pos.distanceTo(otherPos) < MIN_DIST_AVATAR) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function getSpeed(status: DeskStatus): number {
+  switch (status) {
+    case 'idle':
+      return 0.9;
+    case 'active':
+      return 0.5;
+    case 'error':
+      return 0.35;
+    case 'offline':
+      return 0.75;
+  }
+}
+
+function getMoveInterval(status: DeskStatus): [number, number] {
   switch (status) {
     case 'active':
       return [8000, 15000];
     case 'idle':
       return [3000, 6000];
     case 'error':
-      return [25000, 40000];
+      return [15000, 30000];
     case 'offline':
-      return [60000, 120000];
+      return [4000, 8000];
   }
 }
 
-function randomInRange(min: number, max: number): number {
+function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-function isCollisionFree(
-  pos: Vector3,
-  obstacles: readonly Obstacle[],
-  otherPositions: ReadonlyMap<string, Vector3>,
-  selfId: string,
-  avatarRadius: number
-): boolean {
-  for (const obs of obstacles) {
-    if (pos.distanceTo(obs.position) < obs.radius + avatarRadius) return false;
-  }
-  for (const [id, otherPos] of otherPositions) {
-    if (id === selfId) continue;
-    if (pos.distanceTo(otherPos) < avatarRadius * 2.5) return false;
-  }
-  return true;
-}
-
-const POSITION_REPORT_INTERVAL = 10;
-
 export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
   const groupRef = useRef<Group>(null);
-  const avatarGroupRef = useRef<Group>(null);
-  const currentPos = useRef(new Vector3(props.deskPosition[0], 0, props.deskPosition[2] + 1.2));
-  const targetPos = useRef(new Vector3(props.deskPosition[0], 0, props.deskPosition[2] + 1.2));
-  const frameCounter = useRef(0);
-
-  const pickNewTarget = useCallback(() => {
-    const bounds = props.officeBounds;
-    const avatarRadius = 0.4;
-
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const candidate = new Vector3(
-        randomInRange(bounds.minX + 1, bounds.maxX - 1),
-        0,
-        randomInRange(bounds.minZ + 1, bounds.maxZ - 1)
-      );
-
-      if (props.status === 'active') {
-        const dx = props.deskPosition[0];
-        const dz = props.deskPosition[2] + 1.2;
-        candidate.x = dx + randomInRange(-1.5, 1.5);
-        candidate.z = dz + randomInRange(-0.8, 0.8);
-      }
-
-      if (
-        isCollisionFree(
-          candidate,
-          props.obstacles,
-          props.otherAvatarPositions,
-          props.id,
-          avatarRadius
-        )
-      ) {
-        targetPos.current.copy(candidate);
-        return;
-      }
-    }
-  }, [
-    props.id,
-    props.status,
-    props.deskPosition,
-    props.officeBounds,
-    props.obstacles,
-    props.otherAvatarPositions,
-  ]);
-
-  useEffect(() => {
-    const [minMs, maxMs] = getMovementInterval(props.status);
-    const scheduleNext = () => {
-      const delay = randomInRange(minMs, maxMs);
-      return window.setTimeout(() => {
-        pickNewTarget();
-        timerId = scheduleNext();
-      }, delay);
-    };
-    let timerId = scheduleNext();
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [props.status, pickNewTarget]);
+  const currentPos = useRef(
+    new Vector3(props.deskPosition[0], 0, props.deskPosition[2] + 2.0),
+  );
+  const isWalking = useRef(false);
+  const frameCount = useRef(0);
 
   const propsRef = useLatest(props);
-  const scratchDir = useRef(new Vector3());
 
-  useFrame(() => {
-    const p = propsRef.current;
-    const cur = currentPos.current;
-    const tgt = targetPos.current;
-    const speed = p.status === 'idle' ? 0.02 : 0.012;
+  const startX = props.deskPosition[0];
+  const startZ = props.deskPosition[2] + 2.0;
 
-    cur.lerp(tgt, speed);
+  const [targetPos, setTargetPos] = useState(
+    () => new Vector3(startX, 0, startZ),
+  );
 
-    frameCounter.current += 1;
-    if (frameCounter.current >= POSITION_REPORT_INTERVAL) {
-      frameCounter.current = 0;
-      p.onPositionUpdate(p.id, cur.clone());
-    }
+  useEffect(() => {
+    function pickNewTarget(): void {
+      const pr = propsRef.current;
+      const bounds = pr.officeBounds;
+      const dx = pr.deskPosition[0];
+      const dz = pr.deskPosition[2];
 
-    if (avatarGroupRef.current) {
-      avatarGroupRef.current.position.set(cur.x, 0, cur.z);
-    }
+      for (let attempt = 0; attempt < 30; attempt++) {
+        let cx: number;
+        let cz: number;
 
-    if (groupRef.current) {
-      scratchDir.current.copy(tgt).sub(cur);
-      if (scratchDir.current.length() > 0.05) {
-        const angle = Math.atan2(scratchDir.current.x, scratchDir.current.z);
-        const currentY = groupRef.current.rotation.y;
-        groupRef.current.rotation.y = currentY + (angle - currentY) * 0.05;
+        if (pr.status === 'active') {
+          cx = dx + rand(-1.5, 1.5);
+          cz = dz + 2.0 + rand(-0.8, 0.8);
+        } else {
+          cx = rand(bounds.minX + 1.5, bounds.maxX - 1.5);
+          cz = rand(bounds.minZ + 1.5, bounds.maxZ - 1.5);
+        }
+
+        const candidate = new Vector3(cx, 0, cz);
+        if (isPositionFree(candidate, pr.obstacles, pr.otherAvatarPositions, pr.id)) {
+          setTargetPos(candidate);
+          return;
+        }
       }
+    }
+
+    pickNewTarget();
+
+    const [minMs, maxMs] = getMoveInterval(props.status);
+    const id = window.setInterval(() => {
+      pickNewTarget();
+    }, rand(minMs, maxMs));
+
+    return () => {
+      window.clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.status]);
+
+  const scratchDir = useRef(new Vector3());
+  const scratchNext = useRef(new Vector3());
+
+  useFrame((_state, rawDelta) => {
+    if (!groupRef.current) return;
+
+    const pr = propsRef.current;
+    const dt = Math.min(rawDelta, 0.05);
+    const speed = getSpeed(pr.status);
+
+    scratchDir.current.subVectors(targetPos, currentPos.current);
+    scratchDir.current.y = 0;
+    const dist = scratchDir.current.length();
+
+    isWalking.current = dist > 0.12;
+
+    if (dist > 0.08) {
+      const step = Math.min(speed * dt, dist);
+      scratchDir.current.normalize().multiplyScalar(step);
+      scratchNext.current.copy(currentPos.current).add(scratchDir.current);
+      scratchNext.current.y = 0;
+
+      if (isPositionFree(scratchNext.current, pr.obstacles, pr.otherAvatarPositions, pr.id)) {
+        currentPos.current.copy(scratchNext.current);
+        groupRef.current.position.copy(currentPos.current);
+
+        if (dist > 0.1) {
+          const desired = Math.atan2(scratchDir.current.x, scratchDir.current.z);
+          const cur = groupRef.current.rotation.y;
+          let diff = desired - cur;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          groupRef.current.rotation.y = cur + diff * Math.min(1, 6.0 * dt);
+        }
+      } else {
+        isWalking.current = false;
+        const bounds = pr.officeBounds;
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const cx = rand(bounds.minX + 1.5, bounds.maxX - 1.5);
+          const cz = rand(bounds.minZ + 1.5, bounds.maxZ - 1.5);
+          scratchNext.current.set(cx, 0, cz);
+          if (isPositionFree(scratchNext.current, pr.obstacles, pr.otherAvatarPositions, pr.id)) {
+            setTargetPos(new Vector3(cx, 0, cz));
+            break;
+          }
+        }
+      }
+    } else {
+      isWalking.current = false;
+    }
+
+    frameCount.current += 1;
+    if (frameCount.current >= REPORT_EVERY) {
+      frameCount.current = 0;
+      pr.onPositionUpdate(pr.id, currentPos.current.clone());
     }
   });
 
   return (
-    <group ref={groupRef}>
-      <group ref={avatarGroupRef} position={[currentPos.current.x, 0, currentPos.current.z]}>
-        <VoxelAvatar
-          emoji={props.emoji}
-          color={props.color}
-          status={props.status}
-          position={[0, 0, 0]}
-        />
-      </group>
+    <group ref={groupRef} position={[startX, 0, startZ]}>
+      <VoxelAvatar
+        agentId={props.id}
+        label={props.label}
+        emoji={props.emoji}
+        color={props.color}
+        status={props.status}
+        position={[0, 0, 0]}
+        walkingRef={isWalking}
+      />
     </group>
   );
 }
