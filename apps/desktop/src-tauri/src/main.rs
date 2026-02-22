@@ -4,6 +4,7 @@ use std::net::TcpListener;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use tauri::Manager;
 
 struct SidecarState {
     child: Option<Child>,
@@ -35,14 +36,23 @@ fn resolve_sidecar_path() -> Option<std::path::PathBuf> {
     let dir = exe.parent()?;
 
     let triple = current_target_triple();
-    let name = format!("patze-api-{triple}");
+    let name = if cfg!(target_os = "windows") {
+        format!("patze-api-{triple}.exe")
+    } else {
+        format!("patze-api-{triple}")
+    };
 
     let candidate = dir.join(&name);
     if candidate.exists() {
         return Some(candidate);
     }
 
-    let candidate = dir.join("patze-api");
+    let fallback_name = if cfg!(target_os = "windows") {
+        "patze-api.exe"
+    } else {
+        "patze-api"
+    };
+    let candidate = dir.join(fallback_name);
     if candidate.exists() {
         return Some(candidate);
     }
