@@ -78,6 +78,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - uses: oven-sh/setup-bun@v2
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
@@ -85,6 +87,7 @@ jobs:
           workspaces: apps/desktop/src-tauri -> target
 
       - run: pnpm install --frozen-lockfile
+      - run: bash scripts/build-sidecar.sh
 
       - run: pnpm --filter @patze/desktop tauri build
 
