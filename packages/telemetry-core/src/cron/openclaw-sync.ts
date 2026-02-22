@@ -105,8 +105,8 @@ export class OpenClawCronSync {
       updatedAt: job.updatedAt ?? job.createdAt,
       lastRunAt: job.lastRunAt,
       lastRunStatus: job.lastStatus === 'ok' ? 'ok' : job.lastStatus ? 'error' : undefined,
-      lastRunError: undefined,
-      nextRunAtMs: undefined,
+      lastRunError: job.lastError,
+      nextRunAtMs: job.nextRunAtMs,
       consecutiveErrors: job.consecutiveErrors ?? 0,
       totalRuns: 0,
       timeoutMs: 600_000,
@@ -211,7 +211,11 @@ function toTaskSchedule(s: OpenClawCronJob['schedule']): TaskSchedule {
     case 'at':
       return { kind: 'at', at: s.at ?? new Date().toISOString() };
     case 'every':
-      return { kind: 'every', everyMs: s.everyMs ?? 60_000 };
+      return {
+        kind: 'every',
+        everyMs: s.everyMs ?? 60_000,
+        ...(s.anchorMs !== undefined ? { anchorMs: s.anchorMs } : {}),
+      };
     case 'cron':
       return { kind: 'cron', expr: s.expr ?? '* * * * *', ...(s.tz ? { tz: s.tz } : {}) };
   }
@@ -240,6 +244,11 @@ function toTaskAction(job: OpenClawCronJob): TaskActionConfig {
 
 function buildDescription(job: OpenClawCronJob): string {
   const parts = [`OpenClaw ${job.execution.style} session`];
+  if (job.payload?.kind) parts.push(`payload: ${job.payload.kind}`);
+  if (job.wakeMode) parts.push(`wake: ${job.wakeMode}`);
+  if (job.schedule.kind === 'cron' && job.schedule.staggerMs !== undefined) {
+    parts.push(job.schedule.staggerMs > 0 ? `stagger: ${job.schedule.staggerMs}ms` : 'exact');
+  }
   if (job.execution.agentId) parts.push(`agent: ${job.execution.agentId}`);
   if (job.delivery.mode !== 'none') parts.push(`delivery: ${job.delivery.mode}`);
   return parts.join(' · ');

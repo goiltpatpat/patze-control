@@ -58,6 +58,7 @@ test('openclaw reader parses wrapped jobs format', () => {
   assert.equal(jobs[0]?.jobId, 'job_health');
   assert.equal(jobs[0]?.schedule.kind, 'cron');
   assert.equal(jobs[0]?.schedule.tz, 'UTC');
+  assert.equal(jobs[0]?.schedule.staggerMs, undefined);
 });
 
 test('openclaw reader parses object jobs format with fallback id', () => {
@@ -82,6 +83,70 @@ test('openclaw reader parses object jobs format with fallback id', () => {
   assert.equal(jobs[0]?.execution.style, 'isolated');
   assert.equal(jobs[0]?.schedule.everyMs, 60000);
   assert.equal(jobs[0]?.delivery.mode, 'announce');
+});
+
+test('openclaw reader parses upstream cron job state and ms timestamps', () => {
+  const baseDir = '/mock-openclaw';
+  const fs = mockFs({
+    [`${baseDir}/cron/jobs.json`]: JSON.stringify({
+      version: 1,
+      jobs: [
+        {
+          id: 'job_upstream',
+          name: 'Upstream Job',
+          enabled: true,
+          createdAtMs: 1_707_000_000_000,
+          updatedAtMs: 1_707_000_100_000,
+          schedule: {
+            kind: 'cron',
+            expr: '0 * * * *',
+            tz: 'Asia/Bangkok',
+            staggerMs: 30000,
+          },
+          sessionTarget: 'isolated',
+          wakeMode: 'next-heartbeat',
+          payload: {
+            kind: 'agentTurn',
+            message: 'Run checks',
+            model: 'gpt-5.2',
+          },
+          delivery: {
+            mode: 'webhook',
+            to: 'https://example.com/hook',
+            channel: 'telegram',
+            bestEffort: true,
+          },
+          state: {
+            nextRunAtMs: 1_707_000_200_000,
+            lastRunAtMs: 1_707_000_150_000,
+            lastStatus: 'skipped',
+            lastError: 'temporary_skip',
+            lastDurationMs: 1200,
+            consecutiveErrors: 1,
+            lastDelivered: false,
+          },
+        },
+      ],
+    }),
+  });
+
+  const reader = new OpenClawCronReader(baseDir, fs);
+  const jobs = reader.readJobs();
+  assert.equal(jobs.length, 1);
+
+  const job = jobs[0]!;
+  assert.equal(job.jobId, 'job_upstream');
+  assert.equal(job.schedule.staggerMs, 30000);
+  assert.equal(job.payload?.kind, 'agentTurn');
+  assert.equal(job.delivery.mode, 'webhook');
+  assert.equal(job.delivery.webhookUrl, 'https://example.com/hook');
+  assert.equal(job.delivery.channel, 'telegram');
+  assert.equal(job.sessionTarget, 'isolated');
+  assert.equal(job.wakeMode, 'next-heartbeat');
+  assert.equal(job.lastStatus, 'skipped');
+  assert.equal(job.nextRunAtMs, 1_707_000_200_000);
+  assert.equal(job.lastError, 'temporary_skip');
+  assert.equal(job.lastDurationMs, 1200);
 });
 
 test('openclaw reader reads runs newest-first with limit', () => {
