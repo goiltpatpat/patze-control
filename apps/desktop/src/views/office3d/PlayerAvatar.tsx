@@ -133,7 +133,7 @@ export function PlayerAvatar(props: PlayerAvatarProps): JSX.Element {
 
     if (groupRef.current) {
       groupRef.current.position.set(position.current.x, 0, position.current.z);
-      const targetAngle = facing.current + Math.PI;
+      const targetAngle = facing.current;
       const currentAngle = groupRef.current.rotation.y;
       let diff = targetAngle - currentAngle;
       while (diff > Math.PI) diff -= Math.PI * 2;
