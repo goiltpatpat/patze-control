@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ActivityFeed } from '../components/ActivityFeed';
+import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { GaugeBar } from '../components/GaugeBar';
 import {
   IconActivity,
@@ -487,6 +488,13 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
           )}
         </div>
       </div>
+
+      {/* Activity Heatmap */}
+      {snapshot.recentEvents.length > 0 ? (
+        <ActivityHeatmap
+          events={snapshot.recentEvents.map((e) => ({ ts: e.ts, type: e.type }))}
+        />
+      ) : null}
 
       {/* Activity Feed */}
       <ActivityFeed snapshot={snapshot} />
