@@ -132,7 +132,7 @@ export class ControlMonitorService {
     }
 
     if (error.message.includes('401') || error.message.includes('403')) {
-      return 'Authentication failed. Check your token and permissions.';
+      return 'Authentication failed. Enter the correct token from ~/.patze-control/auth.json';
     }
 
     return error.message;

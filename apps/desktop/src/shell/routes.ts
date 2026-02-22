@@ -8,6 +8,12 @@ export type AppRoute =
   | 'logs'
   | 'tasks'
   | 'channels'
+  | 'monitor'
+  | 'workspace'
+  | 'memory'
+  | 'terminal'
+  | 'costs'
+  | 'office'
   | 'settings';
 
 const VALID_ROUTES: readonly AppRoute[] = [
@@ -20,6 +26,12 @@ const VALID_ROUTES: readonly AppRoute[] = [
   'logs',
   'tasks',
   'channels',
+  'monitor',
+  'workspace',
+  'memory',
+  'terminal',
+  'costs',
+  'office',
   'settings',
 ];
 
@@ -32,6 +44,8 @@ export interface RouteFilter {
   readonly sessionId?: string;
   readonly agentId?: string;
   readonly taskView?: 'openclaw';
+  readonly openFile?: string;
+  readonly line?: string;
 }
 
 export interface RouteState {
@@ -56,8 +70,10 @@ export function parseRouteState(hash: string): RouteState {
   const sessionId = params.get('sessionId') ?? undefined;
   const agentId = params.get('agentId') ?? undefined;
   const taskView = params.get('taskView') === 'openclaw' ? 'openclaw' : undefined;
+  const openFile = params.get('openFile') ?? undefined;
+  const line = params.get('line') ?? undefined;
 
-  if (!machineId && !sessionId && !agentId && !taskView) {
+  if (!machineId && !sessionId && !agentId && !taskView && !openFile && !line) {
     return { route, filter: EMPTY_FILTER };
   }
 
@@ -66,6 +82,8 @@ export function parseRouteState(hash: string): RouteState {
     ...(sessionId ? { sessionId } : undefined),
     ...(agentId ? { agentId } : undefined),
     ...(taskView ? { taskView } : undefined),
+    ...(openFile ? { openFile } : undefined),
+    ...(line ? { line } : undefined),
   };
   return { route, filter: Object.freeze(filter) };
 }
@@ -78,6 +96,8 @@ export function navigate(route: AppRoute, filter?: RouteFilter): void {
     if (filter.sessionId) params.set('sessionId', filter.sessionId);
     if (filter.agentId) params.set('agentId', filter.agentId);
     if (filter.taskView) params.set('taskView', filter.taskView);
+    if (filter.openFile) params.set('openFile', filter.openFile);
+    if (filter.line) params.set('line', filter.line);
     const qs = params.toString();
     if (qs) hash += `?${qs}`;
   }
@@ -85,5 +105,7 @@ export function navigate(route: AppRoute, filter?: RouteFilter): void {
 }
 
 export function hasActiveFilter(filter: RouteFilter): boolean {
-  return Boolean(filter.machineId ?? filter.sessionId ?? filter.agentId ?? filter.taskView);
+  return Boolean(
+    filter.machineId ?? filter.sessionId ?? filter.agentId ?? filter.taskView ?? filter.openFile
+  );
 }

@@ -15,6 +15,8 @@ export interface MachineResourceSnapshot {
   cpuPct: number;
   memoryBytes: number;
   memoryPct: number;
+  netRxBytes?: number;
+  netTxBytes?: number;
   diskUsageBytes?: number;
   diskTotalBytes?: number;
   diskPct?: number;
@@ -133,6 +135,12 @@ function reduceMachineEvent(state: ProjectionState, event: Readonly<AnyTelemetry
         cpuPct: payload.resource.cpuPct,
         memoryBytes: payload.resource.memoryBytes,
         memoryPct: payload.resource.memoryPct,
+        ...(payload.resource.netRxBytes !== undefined
+          ? { netRxBytes: payload.resource.netRxBytes }
+          : {}),
+        ...(payload.resource.netTxBytes !== undefined
+          ? { netTxBytes: payload.resource.netTxBytes }
+          : {}),
         ...(payload.resource.diskUsageBytes !== undefined
           ? { diskUsageBytes: payload.resource.diskUsageBytes }
           : {}),

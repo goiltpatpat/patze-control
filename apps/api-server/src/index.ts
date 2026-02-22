@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
@@ -234,8 +234,8 @@ function loadPersistedAuth(): PersistedAuthSettings | null {
 }
 
 function savePersistedAuth(settings: PersistedAuthSettings): void {
-  fs.mkdirSync(AUTH_SETTINGS_DIR, { recursive: true });
-  fs.writeFileSync(AUTH_SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n');
+  fs.mkdirSync(AUTH_SETTINGS_DIR, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(AUTH_SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n', { mode: 0o600 });
 }
 
 function loadAuthConfig(): AuthConfig {
@@ -294,7 +294,7 @@ function parseBearerToken(request: FastifyRequest): string | null {
   return token;
 }
 
-const HMAC_KEY = Buffer.from('patze-constant-time-compare');
+const HMAC_KEY = randomBytes(32);
 
 function constantTimeEquals(a: string, b: string): boolean {
   const digestA = createHmac('sha256', HMAC_KEY).update(a).digest();
@@ -335,6 +335,26 @@ function isJsonContentType(request: FastifyRequest): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+const BLOCKED_DIR_PREFIXES = ['/etc', '/var', '/proc', '/sys', '/dev', '/boot', '/sbin', '/bin', '/usr/sbin', '/usr/bin', '/lib', '/tmp'];
+
+function isOpenClawDirSafe(resolvedDir: string): boolean {
+  if (resolvedDir === '/' || resolvedDir === os.homedir()) return false;
+  for (const prefix of BLOCKED_DIR_PREFIXES) {
+    if (resolvedDir === prefix || resolvedDir.startsWith(prefix + path.sep)) return false;
+  }
+  const homeDir = os.homedir();
+  const safePrefixes = [
+    path.join(homeDir, '.openclaw'),
+    path.join(homeDir, '.patze-control'),
+    path.join(homeDir, 'openclaw'),
+  ];
+  const isUnderHome = resolvedDir.startsWith(homeDir + path.sep);
+  if (!isUnderHome) return false;
+  const isUnderSshDir = resolvedDir.startsWith(path.join(homeDir, '.ssh') + path.sep) || resolvedDir === path.join(homeDir, '.ssh');
+  if (isUnderSshDir) return false;
+  return safePrefixes.some((p) => resolvedDir === p || resolvedDir.startsWith(p + path.sep)) || isUnderHome;
 }
 
 function parseBatchBody(body: unknown): readonly unknown[] | null {
@@ -576,7 +596,11 @@ app.post('/ingest/batch', async (request: BatchIngestRequest, reply: FastifyRepl
 });
 
 app.get('/health', async (_request: FastifyRequest, reply: FastifyReply) => {
-  return reply.code(200).send({ ok: true });
+  return reply.code(200).send({
+    ok: true,
+    authMode: authConfig.mode,
+    authRequired: authConfig.mode === 'token',
+  });
 });
 
 app.get('/snapshot', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -2075,13 +2099,13 @@ app.post('/openclaw/targets', async (request: FastifyRequest, reply: FastifyRepl
   }
   const resolvedDir = path.resolve(
     body.openclawDir.startsWith('~')
-      ? body.openclawDir.replace('~', os.homedir())
+      ? body.openclawDir.replace(/^~/, os.homedir())
       : body.openclawDir
   );
-  if (resolvedDir === '/' || resolvedDir === '/etc' || resolvedDir === '/root') {
+  if (!isOpenClawDirSafe(resolvedDir)) {
     return reply
       .code(400)
-      .send({ error: 'invalid_openclaw_dir', message: 'Cannot use system root directories.' });
+      .send({ error: 'invalid_openclaw_dir', message: 'Directory is not allowed for security reasons.' });
   }
   const input: OpenClawTargetInput = {
     label: body.label,
@@ -2108,6 +2132,16 @@ app.patch(
       return reply.code(400).send({ error: 'invalid_body' });
     }
     const patch = request.body as unknown as OpenClawTargetPatch;
+    if (typeof patch.openclawDir === 'string') {
+      const resolvedDir = path.resolve(
+        patch.openclawDir.startsWith('~')
+          ? patch.openclawDir.replace(/^~/, os.homedir())
+          : patch.openclawDir
+      );
+      if (!isOpenClawDirSafe(resolvedDir)) {
+        return reply.code(400).send({ error: 'invalid_openclaw_dir', message: 'Directory is not allowed for security reasons.' });
+      }
+    }
     const updated = openclawTargetStore.update(request.params.targetId, patch);
     if (!updated) {
       return reply.code(404).send({ error: 'target_not_found' });
@@ -2287,6 +2321,707 @@ app.get('/openclaw/cron/merged', async (request: FastifyRequest, reply: FastifyR
   return reply.code(200).send({
     ...(view ?? { patzeTasks: cronService.list(), openclawJobs: [], timestamp: Date.now() }),
     syncStatus,
+  });
+});
+
+// ── Workspace Browser ───────────────────────────────────────────────
+
+const WORKSPACE_ROOTS: readonly string[] = [openclawDir, path.join(os.homedir(), '.patze-control')];
+
+const WORKSPACE_MAX_FILE_SIZE_BYTES = 512 * 1024;
+const WORKSPACE_MAX_DEPTH = 10;
+const WORKSPACE_HIDDEN_PATTERNS = ['.git', 'node_modules', '__pycache__', '.DS_Store'];
+const WORKSPACE_SEARCH_TIMEOUT_MS = 5_000;
+const WORKSPACE_SEARCH_DEFAULT_LIMIT = 20;
+const WORKSPACE_SEARCH_MAX_LIMIT = 100;
+const WORKSPACE_SEARCH_CONTEXT_MAX_CHARS = 200;
+const WORKSPACE_SEARCH_CACHE_MAX_ENTRIES = 200;
+const MEMORY_FILE_ALLOWLIST: ReadonlySet<string> = new Set([
+  'MEMORY.md',
+  'SOUL.md',
+  'TASKS.md',
+  'CHANGELOG.md',
+  'CONTEXT.md',
+  'README.md',
+]);
+const WORKSPACE_SEARCH_BINARY_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.svg',
+  '.ico',
+  '.pdf',
+  '.zip',
+  '.gz',
+  '.tar',
+  '.7z',
+  '.wasm',
+  '.mp3',
+  '.mp4',
+  '.mov',
+  '.avi',
+  '.db',
+  '.sqlite',
+  '.sqlite3',
+  '.bin',
+  '.exe',
+  '.dll',
+  '.so',
+]);
+
+const workspaceSearchCache = new Map<string, { mtimeMs: number; content: string }>();
+
+function isPathWithinRoots(targetPath: string, roots: readonly string[]): boolean {
+  const resolved = path.resolve(targetPath);
+  return roots.some((root) => {
+    const resolvedRoot = path.resolve(root);
+    return resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep);
+  });
+}
+
+function getWorkspaceRoots(): readonly string[] {
+  const roots = new Set<string>();
+  for (const root of WORKSPACE_ROOTS) {
+    if (exists(root)) {
+      roots.add(path.resolve(root));
+    }
+  }
+  for (const target of openclawTargetStore.list()) {
+    if (exists(target.openclawDir)) {
+      roots.add(path.resolve(target.openclawDir));
+    }
+  }
+  return Array.from(roots);
+}
+
+function truncateContext(text: string): string {
+  if (text.length <= WORKSPACE_SEARCH_CONTEXT_MAX_CHARS) {
+    return text;
+  }
+  return `${text.slice(0, WORKSPACE_SEARCH_CONTEXT_MAX_CHARS)}…`;
+}
+
+function readSearchContent(filePath: string, mtimeMs: number): string | null {
+  const cached = workspaceSearchCache.get(filePath);
+  if (cached && cached.mtimeMs === mtimeMs) {
+    workspaceSearchCache.delete(filePath);
+    workspaceSearchCache.set(filePath, cached);
+    return cached.content;
+  }
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    workspaceSearchCache.set(filePath, { mtimeMs, content });
+    if (workspaceSearchCache.size > WORKSPACE_SEARCH_CACHE_MAX_ENTRIES) {
+      const oldest = workspaceSearchCache.keys().next().value;
+      if (oldest) {
+        workspaceSearchCache.delete(oldest);
+      }
+    }
+    return content;
+  } catch {
+    return null;
+  }
+}
+
+interface WorkspaceEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  modifiedAt?: string;
+}
+
+function listDirectory(dirPath: string, depth: number): readonly WorkspaceEntry[] {
+  if (depth > WORKSPACE_MAX_DEPTH) return [];
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    return entries
+      .filter((e) => !WORKSPACE_HIDDEN_PATTERNS.includes(e.name))
+      .map((entry): WorkspaceEntry | null => {
+        const fullPath = path.join(dirPath, entry.name);
+        try {
+          if (entry.isDirectory()) {
+            return { name: entry.name, path: fullPath, type: 'directory' };
+          }
+          if (entry.isFile()) {
+            const stat = fs.statSync(fullPath);
+            return {
+              name: entry.name,
+              path: fullPath,
+              type: 'file',
+              size: stat.size,
+              modifiedAt: stat.mtime.toISOString(),
+            };
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((e): e is WorkspaceEntry => e !== null)
+      .sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  } catch {
+    return [];
+  }
+}
+
+app.get('/workspace/roots', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
+
+  const roots: Array<{
+    path: string;
+    label: string;
+    type: 'openclaw' | 'config';
+    targetId?: string;
+    targetType?: string;
+  }> = [];
+
+  const targets = openclawTargetStore.list();
+  for (const target of targets) {
+    if (target.type === 'local' && exists(target.openclawDir)) {
+      roots.push({
+        path: target.openclawDir,
+        label: `OpenClaw \u2014 ${target.label}`,
+        type: 'openclaw',
+        targetId: target.id,
+        targetType: target.type,
+      });
+    } else if (target.type === 'remote') {
+      roots.push({
+        path: target.openclawDir,
+        label: `OpenClaw \u2014 ${target.label} (remote)`,
+        type: 'openclaw',
+        targetId: target.id,
+        targetType: target.type,
+      });
+    }
+  }
+
+  const patzeDir = path.join(os.homedir(), '.patze-control');
+  if (exists(patzeDir)) {
+    roots.push({ path: patzeDir, label: 'Patze Control', type: 'config' });
+  }
+
+  const seenPaths = new Set(roots.map((r) => path.resolve(r.path)));
+  for (const wp of WORKSPACE_ROOTS) {
+    if (!seenPaths.has(path.resolve(wp)) && exists(wp)) {
+      roots.push({ path: wp, label: path.basename(wp), type: 'config' });
+    }
+  }
+
+  return reply.code(200).send({ roots });
+});
+
+app.get(
+  '/workspace/tree',
+  async (request: FastifyRequest<{ Querystring: { path?: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+    const dirPath = (request.query as Record<string, string | undefined>).path;
+    if (!dirPath) {
+      return reply.code(400).send({ error: 'path query parameter is required' });
+    }
+    const resolved = path.resolve(dirPath);
+    const workspaceRoots = getWorkspaceRoots();
+    if (!isPathWithinRoots(resolved, workspaceRoots)) {
+      return reply.code(403).send({ error: 'path_outside_workspace' });
+    }
+    const entries = listDirectory(resolved, 0);
+    return reply.code(200).send({ path: resolved, entries });
+  }
+);
+
+app.get(
+  '/workspace/file',
+  async (request: FastifyRequest<{ Querystring: { path?: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+    const filePath = (request.query as Record<string, string | undefined>).path;
+    if (!filePath) {
+      return reply.code(400).send({ error: 'path query parameter is required' });
+    }
+    const resolved = path.resolve(filePath);
+    const workspaceRoots = getWorkspaceRoots();
+    if (!isPathWithinRoots(resolved, workspaceRoots)) {
+      return reply.code(403).send({ error: 'path_outside_workspace' });
+    }
+    try {
+      const stat = fs.statSync(resolved);
+      if (!stat.isFile()) {
+        return reply.code(400).send({ error: 'not_a_file' });
+      }
+      if (stat.size > WORKSPACE_MAX_FILE_SIZE_BYTES) {
+        return reply.code(413).send({
+          error: 'file_too_large',
+          message: `File exceeds ${WORKSPACE_MAX_FILE_SIZE_BYTES} bytes limit.`,
+        });
+      }
+      const content = fs.readFileSync(resolved, 'utf-8');
+      const ext = path.extname(resolved).slice(1).toLowerCase();
+      return reply.code(200).send({
+        path: resolved,
+        name: path.basename(resolved),
+        extension: ext,
+        size: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+        content,
+      });
+    } catch {
+      return reply.code(404).send({ error: 'file_not_found' });
+    }
+  }
+);
+
+app.put('/workspace/file', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
+  if (!isRecord(request.body)) {
+    return reply.code(400).send({ error: 'invalid_body' });
+  }
+  const body = request.body;
+  if (typeof body.path !== 'string' || typeof body.content !== 'string') {
+    return reply.code(400).send({ error: 'path and content are required' });
+  }
+  const resolved = path.resolve(body.path);
+  const workspaceRoots = getWorkspaceRoots();
+  if (!isPathWithinRoots(resolved, workspaceRoots)) {
+    return reply.code(403).send({ error: 'path_outside_workspace' });
+  }
+  try {
+    const dir = path.dirname(resolved);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(resolved, body.content, 'utf-8');
+    const stat = fs.statSync(resolved);
+    return reply.code(200).send({
+      ok: true,
+      path: resolved,
+      size: stat.size,
+      modifiedAt: stat.mtime.toISOString(),
+    });
+  } catch (err) {
+    return reply.code(500).send({
+      error: 'write_failed',
+      message: err instanceof Error ? err.message : 'Unknown error',
+    });
+  }
+});
+
+app.get('/workspace/memory-files', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
+
+  const agents: Array<{
+    agentId: string;
+    targetId: string;
+    targetType: 'local' | 'remote';
+    targetLabel: string;
+    workspacePath: string;
+    files: Array<{ name: string; path: string; size: number; modifiedAt: string }>;
+  }> = [];
+
+  for (const target of openclawTargetStore.list()) {
+    if (!exists(target.openclawDir) || !readableDir(target.openclawDir)) {
+      continue;
+    }
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(target.openclawDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !entry.name.startsWith('workspace')) {
+        continue;
+      }
+      const workspacePath = path.join(target.openclawDir, entry.name);
+      const files: Array<{ name: string; path: string; size: number; modifiedAt: string }> = [];
+      for (const fileName of MEMORY_FILE_ALLOWLIST) {
+        const filePath = path.join(workspacePath, fileName);
+        try {
+          const stat = fs.statSync(filePath);
+          if (!stat.isFile()) {
+            continue;
+          }
+          files.push({
+            name: fileName,
+            path: filePath,
+            size: stat.size,
+            modifiedAt: stat.mtime.toISOString(),
+          });
+        } catch {
+          // Skip missing files.
+        }
+      }
+      if (files.length === 0) {
+        continue;
+      }
+      files.sort((a, b) => a.name.localeCompare(b.name));
+      agents.push({
+        agentId: entry.name,
+        targetId: target.id,
+        targetType: target.type,
+        targetLabel: target.label,
+        workspacePath,
+        files,
+      });
+    }
+  }
+
+  agents.sort((a, b) => a.agentId.localeCompare(b.agentId));
+  return reply.code(200).send({ agents });
+});
+
+app.put('/workspace/memory-file', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
+  if (!isRecord(request.body)) {
+    return reply.code(400).send({ error: 'invalid_body' });
+  }
+  const body = request.body;
+  if (typeof body.path !== 'string' || typeof body.content !== 'string') {
+    return reply.code(400).send({ error: 'path and content are required' });
+  }
+  const resolved = path.resolve(body.path);
+  const workspaceRoots = getWorkspaceRoots();
+  if (!isPathWithinRoots(resolved, workspaceRoots)) {
+    return reply.code(403).send({ error: 'path_outside_workspace' });
+  }
+  const fileName = path.basename(resolved);
+  if (!MEMORY_FILE_ALLOWLIST.has(fileName)) {
+    return reply.code(403).send({ error: 'memory_file_not_allowed' });
+  }
+  try {
+    fs.writeFileSync(resolved, body.content, 'utf-8');
+    const stat = fs.statSync(resolved);
+    return reply.code(200).send({
+      ok: true,
+      path: resolved,
+      size: stat.size,
+      modifiedAt: stat.mtime.toISOString(),
+    });
+  } catch (err) {
+    return reply.code(500).send({
+      error: 'write_failed',
+      message: err instanceof Error ? err.message : 'Unknown error',
+    });
+  }
+});
+
+app.get(
+  '/workspace/search',
+  async (
+    request: FastifyRequest<{ Querystring: { q?: string; maxResults?: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+    const q = (request.query.q ?? '').trim();
+    if (q.length < 3) {
+      return reply
+        .code(400)
+        .send({ error: 'query_too_short', message: 'Minimum query length is 3.' });
+    }
+    const maxResults = parsePositiveInt(
+      request.query.maxResults,
+      WORKSPACE_SEARCH_DEFAULT_LIMIT,
+      WORKSPACE_SEARCH_MAX_LIMIT
+    );
+    const queryLower = q.toLowerCase();
+    const roots = getWorkspaceRoots().filter(readableDir);
+    const deadlineMs = Date.now() + WORKSPACE_SEARCH_TIMEOUT_MS;
+    const results: Array<{
+      path: string;
+      name: string;
+      lineNumber: number;
+      line: string;
+      contextBefore: string;
+      contextAfter: string;
+    }> = [];
+    let timedOut = false;
+
+    const pushFileMatches = (filePath: string): void => {
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(filePath);
+      } catch {
+        return;
+      }
+      if (!stat.isFile() || stat.size > WORKSPACE_MAX_FILE_SIZE_BYTES) {
+        return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      if (WORKSPACE_SEARCH_BINARY_EXTENSIONS.has(ext)) {
+        return;
+      }
+      const content = readSearchContent(filePath, stat.mtimeMs);
+      if (!content) {
+        return;
+      }
+      if (!content.toLowerCase().includes(queryLower)) {
+        return;
+      }
+      const lines = content.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i += 1) {
+        if (!lines[i]!.toLowerCase().includes(queryLower)) {
+          continue;
+        }
+        results.push({
+          path: filePath,
+          name: path.basename(filePath),
+          lineNumber: i + 1,
+          line: truncateContext(lines[i]!),
+          contextBefore: i > 0 ? truncateContext(lines[i - 1]!) : '',
+          contextAfter: i + 1 < lines.length ? truncateContext(lines[i + 1]!) : '',
+        });
+        if (results.length >= maxResults) {
+          return;
+        }
+      }
+    };
+
+    for (const root of roots) {
+      const queue: string[] = [root];
+      while (queue.length > 0 && results.length < maxResults) {
+        if (Date.now() > deadlineMs) {
+          timedOut = true;
+          break;
+        }
+        const current = queue.shift();
+        if (!current) {
+          continue;
+        }
+        let entries: fs.Dirent[];
+        try {
+          entries = fs.readdirSync(current, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const entry of entries) {
+          if (WORKSPACE_HIDDEN_PATTERNS.includes(entry.name)) {
+            continue;
+          }
+          const fullPath = path.join(current, entry.name);
+          if (entry.isDirectory()) {
+            queue.push(fullPath);
+            continue;
+          }
+          if (entry.isFile()) {
+            pushFileMatches(fullPath);
+          }
+          if (results.length >= maxResults) {
+            break;
+          }
+        }
+      }
+      if (timedOut || results.length >= maxResults) {
+        break;
+      }
+    }
+
+    return reply.code(200).send({
+      query: q,
+      maxResults,
+      timedOut,
+      results,
+    });
+  }
+);
+
+// ── Safe Terminal ───────────────────────────────────────────────────
+
+const TERMINAL_ALLOWED_COMMANDS: ReadonlySet<string> = new Set([
+  'uptime',
+  'whoami',
+  'hostname',
+  'date',
+  'df',
+  'free',
+  'uname',
+  'ps',
+  'top',
+  'cat',
+  'ls',
+  'head',
+  'tail',
+  'wc',
+  'du',
+  'openclaw',
+  'pm2',
+  'systemctl',
+  'journalctl',
+  'ping',
+  'dig',
+  'nslookup',
+  'ss',
+  'ip',
+  'git',
+]);
+
+const TERMINAL_BLOCKED_COMMANDS: ReadonlySet<string> = new Set([
+  'rm',
+  'rmdir',
+  'mv',
+  'cp',
+  'chmod',
+  'chown',
+  'chgrp',
+  'kill',
+  'killall',
+  'pkill',
+  'shutdown',
+  'reboot',
+  'halt',
+  'env',
+  'export',
+  'set',
+  'unset',
+  'source',
+  'curl',
+  'wget',
+  'nc',
+  'ncat',
+  'socat',
+  'node',
+  'python',
+  'python3',
+  'ruby',
+  'perl',
+  'php',
+  'bash',
+  'sh',
+  'zsh',
+  'fish',
+  'csh',
+  'su',
+  'sudo',
+  'passwd',
+  'useradd',
+  'userdel',
+  'apt',
+  'yum',
+  'dnf',
+  'pacman',
+  'snap',
+  'dd',
+  'mkfs',
+  'mount',
+  'umount',
+  'fdisk',
+]);
+
+const TERMINAL_MAX_OUTPUT_BYTES = 64 * 1024;
+const TERMINAL_TIMEOUT_MS = 15_000;
+
+function parseCommandBase(command: string): string | null {
+  const trimmed = command.trim();
+  if (trimmed.length === 0) return null;
+  const parts = trimmed.split(/\s+/);
+  const base = parts[0];
+  if (!base) return null;
+  return path.basename(base);
+}
+
+function isCommandAllowed(command: string): { ok: true } | { ok: false; reason: string } {
+  const base = parseCommandBase(command);
+  if (!base) return { ok: false, reason: 'Empty command' };
+  if (TERMINAL_BLOCKED_COMMANDS.has(base)) {
+    return { ok: false, reason: `Command "${base}" is blocked for security` };
+  }
+  if (!TERMINAL_ALLOWED_COMMANDS.has(base)) {
+    return { ok: false, reason: `Command "${base}" is not in the allowlist` };
+  }
+  if (
+    command.includes('|') ||
+    command.includes(';') ||
+    command.includes('&&') ||
+    command.includes('`') ||
+    command.includes('$(')
+  ) {
+    return { ok: false, reason: 'Pipes, chaining, and subshells are not allowed' };
+  }
+  return { ok: true };
+}
+
+app.post('/terminal/exec', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
+  if (!isRecord(request.body)) {
+    return reply.code(400).send({ error: 'invalid_body' });
+  }
+  const command = typeof request.body.command === 'string' ? request.body.command.trim() : '';
+  if (command.length === 0) {
+    return reply.code(400).send({ error: 'command is required' });
+  }
+
+  const check = isCommandAllowed(command);
+  if (!check.ok) {
+    return reply.code(403).send({ error: 'command_blocked', message: check.reason });
+  }
+
+  const { execFile } = await import('node:child_process');
+  const parts = command.split(/\s+/);
+  const bin = parts[0]!;
+  const args = parts.slice(1);
+
+  return new Promise<void>((resolve) => {
+    const child = execFile(
+      bin,
+      args,
+      {
+        timeout: TERMINAL_TIMEOUT_MS,
+        maxBuffer: TERMINAL_MAX_OUTPUT_BYTES,
+        env: { ...process.env, TERM: 'dumb', LANG: 'en_US.UTF-8' },
+      },
+      (error, stdout, stderr) => {
+        const exitCode = error && 'code' in error ? ((error as { code?: number }).code ?? 1) : 0;
+        void reply.code(200).send({
+          command,
+          exitCode,
+          stdout: typeof stdout === 'string' ? stdout.slice(0, TERMINAL_MAX_OUTPUT_BYTES) : '',
+          stderr: typeof stderr === 'string' ? stderr.slice(0, TERMINAL_MAX_OUTPUT_BYTES) : '',
+          truncated:
+            (typeof stdout === 'string' && stdout.length > TERMINAL_MAX_OUTPUT_BYTES) ||
+            (typeof stderr === 'string' && stderr.length > TERMINAL_MAX_OUTPUT_BYTES),
+        });
+        resolve();
+      }
+    );
+    child.on('error', (err) => {
+      void reply.code(200).send({
+        command,
+        exitCode: 127,
+        stdout: '',
+        stderr: err.message,
+        truncated: false,
+      });
+      resolve();
+    });
+  });
+});
+
+app.get('/terminal/allowlist', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
+  return reply.code(200).send({
+    allowed: [...TERMINAL_ALLOWED_COMMANDS].sort(),
+    blocked: [...TERMINAL_BLOCKED_COMMANDS].sort(),
   });
 });
 

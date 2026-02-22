@@ -49,7 +49,10 @@ export interface MachineRegisteredPayload {
 export interface MachineHeartbeatPayload {
   machineId: MachineId;
   status: 'online' | 'offline' | 'degraded';
-  resource: Pick<ResourceUsage, 'cpuPct' | 'memoryBytes' | 'memoryPct'> & {
+  resource: Pick<
+    ResourceUsage,
+    'cpuPct' | 'memoryBytes' | 'memoryPct' | 'netRxBytes' | 'netTxBytes'
+  > & {
     diskUsageBytes?: number;
     diskTotalBytes?: number;
     diskPct?: number;

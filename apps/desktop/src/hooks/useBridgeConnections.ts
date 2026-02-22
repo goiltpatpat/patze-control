@@ -10,8 +10,14 @@ export interface BridgeConnection {
   readonly lastSeenAt?: string;
 }
 
+function buildAuthHeaders(token: string): Record<string, string> {
+  if (token.length > 0) return { Authorization: `Bearer ${token}` };
+  return {};
+}
+
 export function useBridgeConnections(
   baseUrl: string,
+  token: string,
   connected: boolean
 ): readonly BridgeConnection[] {
   const [bridges, setBridges] = useState<BridgeConnection[]>([]);
@@ -20,6 +26,7 @@ export function useBridgeConnections(
   const fetcher = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch(`${baseUrl}/bridge/connections`, {
+        headers: buildAuthHeaders(token),
         signal: AbortSignal.timeout(8_000),
       });
       if (!res.ok || !activeRef.current) return false;
@@ -30,7 +37,7 @@ export function useBridgeConnections(
     } catch {
       return false;
     }
-  }, [baseUrl]);
+  }, [baseUrl, token]);
 
   useSmartPoll(fetcher, {
     enabled: connected,

@@ -7,6 +7,22 @@ import type { RemoteNodeAttachmentOrchestrator } from './remote-node-attachment-
 
 const execFileAsync = promisify(execFile);
 
+function isBlockedWebhookHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const blocked = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '0000:0000:0000:0000:0000:0000:0000:0001'];
+  if (blocked.includes(h)) return true;
+  const parts = h.split('.').map(Number);
+  if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+    if (parts[0] === 10) return true;
+    if (parts[0] === 172 && parts[1]! >= 16 && parts[1]! <= 31) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    if (parts[0] === 127) return true;
+    if (parts[0] === 0) return true;
+  }
+  return false;
+}
+
 interface ExecutorDeps {
   orchestrator: RemoteNodeAttachmentOrchestrator;
   telemetryAggregator: TelemetryAggregator;
@@ -198,8 +214,8 @@ async function executeCustomWebhook(task: ScheduledTask): Promise<{ ok: boolean;
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
     return { ok: false, error: 'Webhook URL must use http/https' };
   }
-  if (parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1') {
-    return { ok: false, error: 'Webhook localhost URLs are not allowed' };
+  if (isBlockedWebhookHost(parsedUrl.hostname)) {
+    return { ok: false, error: 'Webhook URL targets a blocked host (localhost/private/metadata)' };
   }
 
   try {

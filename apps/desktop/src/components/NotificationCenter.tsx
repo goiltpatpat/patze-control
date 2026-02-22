@@ -11,6 +11,8 @@ import {
   IconX,
   IconXCircle,
 } from './Icons';
+import { navigate } from '../shell/routes';
+import type { AppRoute } from '../shell/routes';
 
 export interface NotificationCenterProps {
   readonly notifications: UseNotificationsResult;
@@ -120,9 +122,27 @@ export function NotificationCenter(props: NotificationCenterProps): JSX.Element 
               notifications.map((notif) => {
                 const config = TYPE_CONFIG[notif.type];
                 const TypeIcon = config.icon;
+                const hasAction = notif.action?.kind === 'navigate';
+
+                const handleClick = (): void => {
+                  if (hasAction && notif.action) {
+                    markRead(notif.id);
+                    navigate(
+                      notif.action.route as AppRoute,
+                      notif.action.params as Record<string, string> | undefined
+                    );
+                    setIsOpen(false);
+                  }
+                };
 
                 return (
-                  <div key={notif.id} className={`notification-item${notif.read ? '' : ' unread'}`}>
+                  <div
+                    key={notif.id}
+                    className={`notification-item${notif.read ? '' : ' unread'}${hasAction ? ' notification-item-clickable' : ''}`}
+                    onClick={hasAction ? handleClick : undefined}
+                    role={hasAction ? 'button' : undefined}
+                    tabIndex={hasAction ? 0 : undefined}
+                  >
                     <div
                       className="notification-item-icon"
                       style={{ background: config.bg, color: config.color }}
@@ -144,7 +164,8 @@ export function NotificationCenter(props: NotificationCenterProps): JSX.Element 
                             <button
                               className="notification-item-action action-read"
                               title="Mark as read"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 markRead(notif.id);
                               }}
                             >
@@ -154,7 +175,8 @@ export function NotificationCenter(props: NotificationCenterProps): JSX.Element 
                           <button
                             className="notification-item-action action-delete"
                             title="Delete"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               deleteNotification(notif.id);
                             }}
                           >

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CommandPalette } from '../components/CommandPalette';
 import type { MonitorState } from '../control-monitor';
 import type { BridgeConnection } from '../hooks/useBridgeConnections';
@@ -89,27 +89,32 @@ export function AppShell(props: AppShellProps): JSX.Element {
         notifications.addNotification(
           'success',
           'Connected',
-          'Successfully connected to control plane'
+          'Successfully connected to control plane',
+          { kind: 'navigate', route: 'overview' }
         );
         break;
       case 'error':
         notifications.addNotification(
           'error',
           'Connection Error',
-          props.errorMessage ?? 'Connection to control plane failed'
+          props.errorMessage ?? 'Connection to control plane failed',
+          { kind: 'navigate', route: 'settings' }
         );
         break;
       case 'degraded':
         notifications.addNotification(
           'warning',
           'Connection Degraded',
-          'Connection to control plane is degraded'
+          'Connection to control plane is degraded',
+          { kind: 'navigate', route: 'monitor' }
         );
         break;
       case 'idle':
         if (prev === 'connected' || prev === 'degraded') {
           notifications.addNotification('info', 'Disconnected', 'Disconnected from control plane');
         }
+        break;
+      case 'connecting':
         break;
     }
   }, [props.status, props.errorMessage, notifications.addNotification]);
@@ -146,12 +151,27 @@ export function AppShell(props: AppShellProps): JSX.Element {
     };
   }, [paletteOpen]);
 
+  const alertBadges = useMemo<Partial<Record<AppRoute, number>>>(() => {
+    const snap = props.monitorState.snapshot;
+    if (!snap) return {};
+    const badges: Partial<Record<AppRoute, number>> = {};
+    const failedRuns = snap.runs.filter((r) => r.state === 'failed').length;
+    if (failedRuns > 0) badges.runs = failedRuns;
+    const errorLogs = snap.logs.filter(
+      (l) => l.level === 'error' || l.level === 'critical'
+    ).length;
+    if (errorLogs > 0) badges.logs = errorLogs;
+    return badges;
+  }, [props.monitorState.snapshot]);
+
   return (
     <main className="app-shell">
       <CommandPalette
         open={paletteOpen}
         onClose={closePalette}
         snapshot={props.monitorState.snapshot}
+        baseUrl={props.baseUrl}
+        token={props.token}
       />
       <TopMachineContextBar
         baseUrl={props.baseUrl}
@@ -171,6 +191,7 @@ export function AppShell(props: AppShellProps): JSX.Element {
           onNavigate={(r) => {
             navigate(r);
           }}
+          alertBadges={alertBadges}
         />
         <section className="shell-main">
           <MainView

@@ -205,6 +205,12 @@ function upsertFromEvent(
         cpuPct: payload.resource.cpuPct,
         memoryBytes: payload.resource.memoryBytes,
         memoryPct: payload.resource.memoryPct,
+        ...(payload.resource.netRxBytes !== undefined
+          ? { netRxBytes: payload.resource.netRxBytes }
+          : {}),
+        ...(payload.resource.netTxBytes !== undefined
+          ? { netTxBytes: payload.resource.netTxBytes }
+          : {}),
         ...(payload.resource.diskUsageBytes !== undefined
           ? { diskUsageBytes: payload.resource.diskUsageBytes }
           : {}),

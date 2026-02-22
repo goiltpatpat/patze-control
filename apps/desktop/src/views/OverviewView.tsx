@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityFeed } from '../components/ActivityFeed';
 import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { GaugeBar } from '../components/GaugeBar';
@@ -61,21 +61,69 @@ function computeCostSummary(snapshot: FrontendUnifiedSnapshot): CostSummary {
 
 function computeFleetResource(
   snapshot: FrontendUnifiedSnapshot
-): { avgCpu: number; avgMem: number } | null {
+): { avgCpu: number; avgMem: number; avgDisk: number | null } | null {
   const withResource = snapshot.machines.filter((m) => m.lastResource !== undefined);
   if (withResource.length === 0) {
     return null;
   }
   let totalCpu = 0;
   let totalMem = 0;
+  let totalDisk = 0;
+  let withDisk = 0;
   for (const m of withResource) {
     totalCpu += m.lastResource!.cpuPct;
     totalMem += m.lastResource!.memoryPct;
+    if (m.lastResource!.diskPct !== undefined) {
+      totalDisk += m.lastResource!.diskPct;
+      withDisk += 1;
+    }
   }
   return {
     avgCpu: totalCpu / withResource.length,
     avgMem: totalMem / withResource.length,
+    avgDisk: withDisk > 0 ? totalDisk / withDisk : null,
   };
+}
+
+function LiveClock(): JSX.Element {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => { setNow(Date.now()); }, 1000);
+    return () => { clearInterval(id); };
+  }, []);
+
+  const d = new Date(now);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  const dateStr = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+  return (
+    <span className="ov-live-clock">
+      <span className="ov-clock-time">{hh}:{mm}<span className="ov-clock-seconds">:{ss}</span></span>
+      <span className="ov-clock-date">{dateStr}</span>
+    </span>
+  );
+}
+
+function computeUptime(snapshot: FrontendUnifiedSnapshot): string | null {
+  let earliest = Infinity;
+  for (const m of snapshot.machines) {
+    if (m.lastResource && m.lastSeenAt) {
+      const ts = new Date(m.lastSeenAt).getTime();
+      if (ts > 0 && ts < earliest) earliest = ts;
+    }
+  }
+  if (!Number.isFinite(earliest)) return null;
+  const diff = Date.now() - earliest;
+  const minutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${String(days)}d ${String(hours % 24)}h`;
+  if (hours > 0) return `${String(hours)}h ${String(minutes % 60)}m`;
+  if (minutes > 0) return `${String(minutes)}m`;
+  return '<1m';
 }
 
 interface MetricCardProps {
@@ -85,6 +133,7 @@ interface MetricCardProps {
   readonly icon: JSX.Element;
   readonly pulse?: boolean;
   readonly danger?: boolean;
+  readonly trend?: number | null;
 }
 
 function MetricCard(props: MetricCardProps): JSX.Element {
@@ -93,6 +142,9 @@ function MetricCard(props: MetricCardProps): JSX.Element {
     : props.accent
       ? `var(--${props.accent})`
       : 'var(--text-muted)';
+
+  const trend = props.trend;
+  const hasTrend = trend != null && trend !== 0;
 
   return (
     <div
@@ -103,9 +155,16 @@ function MetricCard(props: MetricCardProps): JSX.Element {
         <span className="ov-metric-label">{props.label}</span>
         <span className="ov-metric-icon">{props.icon}</span>
       </div>
-      <span className={`ov-metric-value${props.danger ? ' ov-metric-danger' : ''}`}>
-        {props.value}
-      </span>
+      <div className="ov-metric-row">
+        <span className={`ov-metric-value${props.danger ? ' ov-metric-danger' : ''}`}>
+          {props.value}
+        </span>
+        {hasTrend ? (
+          <span className={`ov-metric-trend ${trend > 0 ? 'ov-trend-up' : 'ov-trend-down'}`}>
+            {trend > 0 ? '↑' : '↓'} {Math.abs(trend).toFixed(0)}%
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -171,23 +230,79 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
   );
   const oc = props.openclawSummary;
 
+  const prevSnapshotRef = useRef<{
+    machines: number;
+    sessions: number;
+    runs: number;
+    active: number;
+  } | null>(null);
+  const [trends, setTrends] = useState<{
+    machines: number | null;
+    sessions: number | null;
+    runs: number | null;
+    active: number | null;
+  }>({ machines: null, sessions: null, runs: null, active: null });
+
+  useEffect(() => {
+    if (!props.snapshot) return;
+    const cur = {
+      machines: props.snapshot.machines.length,
+      sessions: props.snapshot.sessions.length,
+      runs: props.snapshot.runs.length,
+      active: props.snapshot.activeRuns.length,
+    };
+    const prev = prevSnapshotRef.current;
+    if (prev) {
+      const pct = (c: number, p: number): number | null =>
+        p > 0 ? ((c - p) / p) * 100 : c > 0 ? 100 : null;
+      setTrends({
+        machines: pct(cur.machines, prev.machines),
+        sessions: pct(cur.sessions, prev.sessions),
+        runs: pct(cur.runs, prev.runs),
+        active: pct(cur.active, prev.active),
+      });
+    }
+    prevSnapshotRef.current = cur;
+  }, [props.snapshot]);
+
   if (!props.snapshot) {
+    const isConnecting = props.status === 'connecting';
     return (
       <section className="view-panel">
         <div className="view-header">
           <h2 className="view-title">Overview</h2>
-        </div>
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <IconZap width={28} height={28} />
+          <div className="ov-header-right">
+            <LiveClock />
           </div>
-          <p>Connect to a control plane to see live telemetry data.</p>
-          {props.onConnect ? (
-            <button className="btn-primary" style={{ marginTop: 8 }} onClick={props.onConnect}>
-              Connect Now
-            </button>
-          ) : null}
         </div>
+        {isConnecting ? (
+          <div className="ov-skeleton-dashboard">
+            <div className="ov-skeleton-metrics">
+              <div className="skeleton-card ov-skeleton-metric" />
+              <div className="skeleton-card ov-skeleton-metric" />
+              <div className="skeleton-card ov-skeleton-metric" />
+              <div className="skeleton-card ov-skeleton-metric" />
+            </div>
+            <div className="skeleton-card ov-skeleton-panel" />
+            <div className="ov-skeleton-row">
+              <div className="skeleton-line" />
+              <div className="skeleton-line" />
+              <div className="skeleton-line" />
+            </div>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <div className="empty-state-icon">
+              <IconZap width={28} height={28} />
+            </div>
+            <p>Connect to a control plane to see live telemetry data.</p>
+            {props.onConnect ? (
+              <button className="btn-primary" style={{ marginTop: 8 }} onClick={props.onConnect}>
+                Connect Now
+              </button>
+            ) : null}
+          </div>
+        )}
       </section>
     );
   }
@@ -206,14 +321,22 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
     snapshot.health.overall === 'unknown' && machineCount === 0
       ? 'healthy'
       : snapshot.health.overall;
+  const uptime = computeUptime(snapshot);
 
   return (
     <section className="view-panel">
-      {/* Header with inline health + last updated */}
+      {/* Header with inline health + clock + last updated */}
       <div className="view-header">
         <h2 className="view-title">Overview</h2>
         <div className="ov-header-right">
           <HealthBadge health={overallHealth} />
+          {uptime ? (
+            <span className="ov-uptime-badge">
+              <IconClock width={11} height={11} />
+              {uptime}
+            </span>
+          ) : null}
+          <LiveClock />
           <span className="ov-last-updated">{formatRelativeTime(snapshot.lastUpdated)}</span>
         </div>
       </div>
@@ -227,17 +350,20 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
             value={machineCount}
             accent="accent"
             icon={<IconServer width={16} height={16} />}
+            trend={trends.machines}
           />
           <MetricCard
             label="Sessions"
             value={sessionCount}
             accent="blue"
             icon={<IconLayers width={16} height={16} />}
+            trend={trends.sessions}
           />
           <MetricCard
             label="Total Runs"
             value={totalRuns}
             icon={<IconActivity width={16} height={16} />}
+            trend={trends.runs}
           />
           <MetricCard
             label="Active"
@@ -245,6 +371,7 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
             accent="green"
             pulse={activeRuns > 0}
             icon={<IconZap width={16} height={16} />}
+            trend={trends.active}
           />
         </div>
 
@@ -257,6 +384,9 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
               <div className="ov-gauges">
                 <GaugeBar label="CPU" value={fleetResource.avgCpu} />
                 <GaugeBar label="Memory" value={fleetResource.avgMem} />
+                {fleetResource.avgDisk !== null ? (
+                  <GaugeBar label="Disk Used" value={fleetResource.avgDisk} />
+                ) : null}
               </div>
             ) : (
               <span className="ov-status-nominal">
