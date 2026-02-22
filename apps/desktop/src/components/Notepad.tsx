@@ -102,11 +102,7 @@ export function Notepad(): JSX.Element {
               ? formatSaveTime(lastSavedAt)
               : null}
         </span>
-        <button
-          className="notepad-clear-btn"
-          onClick={handleClear}
-          title="Clear notes"
-        >
+        <button className="notepad-clear-btn" onClick={handleClear} title="Clear notes">
           <IconTrash width={12} height={12} />
         </button>
       </div>

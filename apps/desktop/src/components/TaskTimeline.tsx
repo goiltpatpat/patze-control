@@ -57,7 +57,20 @@ function formatDayLabel(date: Date, isToday: boolean): string {
 }
 
 function formatSubLabel(date: Date): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   return months[date.getMonth()]!;
 }
 
@@ -116,10 +129,7 @@ function computeNextRunsFromTask(
 }
 
 export function TaskTimeline(props: TaskTimelineProps): JSX.Element {
-  const enabledTasks = useMemo(
-    () => props.tasks.filter((t) => t.enabled),
-    [props.tasks]
-  );
+  const enabledTasks = useMemo(() => props.tasks.filter((t) => t.enabled), [props.tasks]);
 
   const { days, totalEvents } = useMemo(() => {
     const now = new Date();
@@ -171,7 +181,12 @@ export function TaskTimeline(props: TaskTimelineProps): JSX.Element {
   const intervalTasks = useMemo(() => {
     return enabledTasks
       .map((task, idx) => ({ task, color: getTaskColor(idx) }))
-      .filter(({ task }) => task.schedule.kind === 'every' && task.schedule.everyMs !== undefined && task.schedule.everyMs < 3600000);
+      .filter(
+        ({ task }) =>
+          task.schedule.kind === 'every' &&
+          task.schedule.everyMs !== undefined &&
+          task.schedule.everyMs < 3600000
+      );
   }, [enabledTasks]);
 
   if (enabledTasks.length === 0) {
@@ -200,9 +215,7 @@ export function TaskTimeline(props: TaskTimelineProps): JSX.Element {
             </span>
           );
         })}
-        <span className="task-timeline-stat">
-          {totalEvents} scheduled events in next 7 days
-        </span>
+        <span className="task-timeline-stat">{totalEvents} scheduled events in next 7 days</span>
       </div>
 
       {/* Calendar Grid */}
@@ -235,7 +248,9 @@ export function TaskTimeline(props: TaskTimelineProps): JSX.Element {
                   <span className="task-timeline-event-time" style={{ color: event.color }}>
                     <IconClock width={10} height={10} />
                     {formatHHMM(event.time)}
-                    {event.isInterval ? <IconRepeat width={10} height={10} style={{ opacity: 0.7 }} /> : null}
+                    {event.isInterval ? (
+                      <IconRepeat width={10} height={10} style={{ opacity: 0.7 }} />
+                    ) : null}
                   </span>
                   <span className="task-timeline-event-name">{event.task.name}</span>
                 </div>

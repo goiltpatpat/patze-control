@@ -56,34 +56,26 @@ export function useNotifications(): UseNotificationsResult {
     saveNotifications(notifications);
   }, [notifications]);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
-  const addNotification = useCallback(
-    (type: NotificationType, title: string, message: string) => {
-      const id = `notif_${Date.now()}_${String(++idCounter)}`;
-      const item: AppNotification = {
-        id,
-        timestamp: Date.now(),
-        type,
-        title,
-        message,
-        read: false,
-      };
-      setNotifications((prev) => {
-        const next = [item, ...prev];
-        return next.length > MAX_NOTIFICATIONS ? next.slice(0, MAX_NOTIFICATIONS) : next;
-      });
-    },
-    []
-  );
+  const addNotification = useCallback((type: NotificationType, title: string, message: string) => {
+    const id = `notif_${Date.now()}_${String(++idCounter)}`;
+    const item: AppNotification = {
+      id,
+      timestamp: Date.now(),
+      type,
+      title,
+      message,
+      read: false,
+    };
+    setNotifications((prev) => {
+      const next = [item, ...prev];
+      return next.length > MAX_NOTIFICATIONS ? next.slice(0, MAX_NOTIFICATIONS) : next;
+    });
+  }, []);
 
   const markRead = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   }, []);
 
   const markAllRead = useCallback(() => {

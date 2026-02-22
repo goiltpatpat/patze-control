@@ -69,8 +69,12 @@ export function AppShell(props: AppShellProps): JSX.Element {
   const notifications = useNotifications();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const closePalette = useCallback(() => { setPaletteOpen(false); }, []);
-  const openPalette = useCallback(() => { setPaletteOpen(true); }, []);
+  const closePalette = useCallback(() => {
+    setPaletteOpen(false);
+  }, []);
+  const openPalette = useCallback(() => {
+    setPaletteOpen(true);
+  }, []);
 
   // Auto-generate notifications from connection state changes
   const prevStatusRef = useRef(props.status);
@@ -82,13 +86,25 @@ export function AppShell(props: AppShellProps): JSX.Element {
 
     switch (next) {
       case 'connected':
-        notifications.addNotification('success', 'Connected', 'Successfully connected to control plane');
+        notifications.addNotification(
+          'success',
+          'Connected',
+          'Successfully connected to control plane'
+        );
         break;
       case 'error':
-        notifications.addNotification('error', 'Connection Error', props.errorMessage ?? 'Connection to control plane failed');
+        notifications.addNotification(
+          'error',
+          'Connection Error',
+          props.errorMessage ?? 'Connection to control plane failed'
+        );
         break;
       case 'degraded':
-        notifications.addNotification('warning', 'Connection Degraded', 'Connection to control plane is degraded');
+        notifications.addNotification(
+          'warning',
+          'Connection Degraded',
+          'Connection to control plane is degraded'
+        );
         break;
       case 'idle':
         if (prev === 'connected' || prev === 'degraded') {

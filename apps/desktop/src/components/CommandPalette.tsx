@@ -41,16 +41,86 @@ const NAV_ITEMS: ReadonlyArray<{
   shortcut: string;
   keywords: string[];
 }> = [
-  { route: 'overview', label: 'Overview', icon: IconGrid, iconBg: 'var(--accent-soft)', shortcut: '1', keywords: ['home', 'dashboard', 'overview'] },
-  { route: 'agents', label: 'Agents', icon: IconBot, iconBg: 'var(--blue-soft)', shortcut: '2', keywords: ['agents', 'bot', 'ai'] },
-  { route: 'tunnels', label: 'Connections', icon: IconTunnel, iconBg: 'var(--green-soft)', shortcut: '3', keywords: ['tunnels', 'connections', 'bridge', 'vps', 'ssh'] },
-  { route: 'machines', label: 'Machines', icon: IconServer, iconBg: 'var(--accent-soft)', shortcut: '4', keywords: ['machines', 'servers', 'nodes', 'fleet'] },
-  { route: 'sessions', label: 'Sessions', icon: IconLayers, iconBg: 'var(--blue-soft)', shortcut: '5', keywords: ['sessions', 'conversations'] },
-  { route: 'channels', label: 'Channels', icon: IconMessage, iconBg: 'var(--amber-soft)', shortcut: '6', keywords: ['channels', 'messaging', 'providers'] },
-  { route: 'runs', label: 'Runs', icon: IconActivity, iconBg: 'var(--green-soft)', shortcut: '7', keywords: ['runs', 'executions', 'active'] },
-  { route: 'logs', label: 'Logs', icon: IconTerminal, iconBg: 'var(--muted-soft)', shortcut: '8', keywords: ['logs', 'debug', 'console'] },
-  { route: 'tasks', label: 'Tasks', icon: IconClock, iconBg: 'var(--amber-soft)', shortcut: '9', keywords: ['tasks', 'cron', 'scheduler', 'openclaw'] },
-  { route: 'settings', label: 'Settings', icon: IconSettings, iconBg: 'var(--muted-soft)', shortcut: '0', keywords: ['settings', 'config', 'auth', 'preferences'] },
+  {
+    route: 'overview',
+    label: 'Overview',
+    icon: IconGrid,
+    iconBg: 'var(--accent-soft)',
+    shortcut: '1',
+    keywords: ['home', 'dashboard', 'overview'],
+  },
+  {
+    route: 'agents',
+    label: 'Agents',
+    icon: IconBot,
+    iconBg: 'var(--blue-soft)',
+    shortcut: '2',
+    keywords: ['agents', 'bot', 'ai'],
+  },
+  {
+    route: 'tunnels',
+    label: 'Connections',
+    icon: IconTunnel,
+    iconBg: 'var(--green-soft)',
+    shortcut: '3',
+    keywords: ['tunnels', 'connections', 'bridge', 'vps', 'ssh'],
+  },
+  {
+    route: 'machines',
+    label: 'Machines',
+    icon: IconServer,
+    iconBg: 'var(--accent-soft)',
+    shortcut: '4',
+    keywords: ['machines', 'servers', 'nodes', 'fleet'],
+  },
+  {
+    route: 'sessions',
+    label: 'Sessions',
+    icon: IconLayers,
+    iconBg: 'var(--blue-soft)',
+    shortcut: '5',
+    keywords: ['sessions', 'conversations'],
+  },
+  {
+    route: 'channels',
+    label: 'Channels',
+    icon: IconMessage,
+    iconBg: 'var(--amber-soft)',
+    shortcut: '6',
+    keywords: ['channels', 'messaging', 'providers'],
+  },
+  {
+    route: 'runs',
+    label: 'Runs',
+    icon: IconActivity,
+    iconBg: 'var(--green-soft)',
+    shortcut: '7',
+    keywords: ['runs', 'executions', 'active'],
+  },
+  {
+    route: 'logs',
+    label: 'Logs',
+    icon: IconTerminal,
+    iconBg: 'var(--muted-soft)',
+    shortcut: '8',
+    keywords: ['logs', 'debug', 'console'],
+  },
+  {
+    route: 'tasks',
+    label: 'Tasks',
+    icon: IconClock,
+    iconBg: 'var(--amber-soft)',
+    shortcut: '9',
+    keywords: ['tasks', 'cron', 'scheduler', 'openclaw'],
+  },
+  {
+    route: 'settings',
+    label: 'Settings',
+    icon: IconSettings,
+    iconBg: 'var(--muted-soft)',
+    shortcut: '0',
+    keywords: ['settings', 'config', 'auth', 'preferences'],
+  },
 ];
 
 function fuzzyMatch(query: string, text: string): boolean {
@@ -89,11 +159,12 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element | null {
     const q = query.trim();
 
     // Navigation items
-    const navMatches = q.length === 0
-      ? NAV_ITEMS
-      : NAV_ITEMS.filter((item) =>
-          fuzzyMatch(q, item.label) || item.keywords.some((kw) => fuzzyMatch(q, kw))
-        );
+    const navMatches =
+      q.length === 0
+        ? NAV_ITEMS
+        : NAV_ITEMS.filter(
+            (item) => fuzzyMatch(q, item.label) || item.keywords.some((kw) => fuzzyMatch(q, kw))
+          );
 
     for (const nav of navMatches) {
       result.push({
@@ -235,7 +306,13 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element | null {
 
   return (
     <div className="command-palette-backdrop" onClick={props.onClose}>
-      <div className="command-palette" onClick={(e) => { e.stopPropagation(); }} onKeyDown={handleKeyDown}>
+      <div
+        className="command-palette"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        onKeyDown={handleKeyDown}
+      >
         <div className="command-palette-input-wrap">
           <IconSearch width={18} height={18} />
           <input
@@ -243,7 +320,10 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element | null {
             className="command-palette-input"
             type="text"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+            }}
             placeholder="Search views, machines, sessions..."
             autoComplete="off"
             spellCheck={false}
@@ -267,8 +347,12 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element | null {
                     <div
                       key={item.id}
                       className={`command-palette-item${idx === activeIndex ? ' active' : ''}`}
-                      onClick={() => { item.action(); }}
-                      onMouseEnter={() => { setActiveIndex(idx); }}
+                      onClick={() => {
+                        item.action();
+                      }}
+                      onMouseEnter={() => {
+                        setActiveIndex(idx);
+                      }}
                     >
                       <div
                         className="command-palette-item-icon"
@@ -294,9 +378,15 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element | null {
         </div>
 
         <div className="command-palette-footer">
-          <span><kbd>↑↓</kbd> navigate</span>
-          <span><kbd>↵</kbd> select</span>
-          <span><kbd>esc</kbd> close</span>
+          <span>
+            <kbd>↑↓</kbd> navigate
+          </span>
+          <span>
+            <kbd>↵</kbd> select
+          </span>
+          <span>
+            <kbd>esc</kbd> close
+          </span>
         </div>
       </div>
     </div>

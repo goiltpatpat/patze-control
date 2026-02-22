@@ -65,14 +65,14 @@ export function NotificationCenter(props: NotificationCenterProps): JSX.Element 
       {/* Bell Button */}
       <button
         className={`notification-bell${unreadCount > 0 ? ' has-unread' : ''}`}
-        onClick={() => { setIsOpen((prev) => !prev); }}
+        onClick={() => {
+          setIsOpen((prev) => !prev);
+        }}
         title={unreadCount > 0 ? `${String(unreadCount)} unread notifications` : 'Notifications'}
       >
         <IconBell width={16} height={16} />
         {unreadCount > 0 ? (
-          <span className="notification-badge">
-            {unreadCount > 9 ? '9+' : String(unreadCount)}
-          </span>
+          <span className="notification-badge">{unreadCount > 9 ? '9+' : String(unreadCount)}</span>
         ) : null}
       </button>
 
@@ -84,9 +84,7 @@ export function NotificationCenter(props: NotificationCenterProps): JSX.Element 
             <div>
               <h3 className="notification-header-title">Notifications</h3>
               <p className="notification-header-meta">
-                {unreadCount > 0
-                  ? `${String(unreadCount)} unread`
-                  : 'All caught up!'}
+                {unreadCount > 0 ? `${String(unreadCount)} unread` : 'All caught up!'}
               </p>
             </div>
             <div className="notification-header-actions">
@@ -124,10 +122,7 @@ export function NotificationCenter(props: NotificationCenterProps): JSX.Element 
                 const TypeIcon = config.icon;
 
                 return (
-                  <div
-                    key={notif.id}
-                    className={`notification-item${notif.read ? '' : ' unread'}`}
-                  >
+                  <div key={notif.id} className={`notification-item${notif.read ? '' : ' unread'}`}>
                     <div
                       className="notification-item-icon"
                       style={{ background: config.bg, color: config.color }}
@@ -149,7 +144,9 @@ export function NotificationCenter(props: NotificationCenterProps): JSX.Element 
                             <button
                               className="notification-item-action action-read"
                               title="Mark as read"
-                              onClick={() => { markRead(notif.id); }}
+                              onClick={() => {
+                                markRead(notif.id);
+                              }}
                             >
                               <IconCheck width={12} height={12} />
                             </button>
@@ -157,7 +154,9 @@ export function NotificationCenter(props: NotificationCenterProps): JSX.Element 
                           <button
                             className="notification-item-action action-delete"
                             title="Delete"
-                            onClick={() => { deleteNotification(notif.id); }}
+                            onClick={() => {
+                              deleteNotification(notif.id);
+                            }}
                           >
                             <IconX width={12} height={12} />
                           </button>

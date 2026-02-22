@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { MonitorState } from '../control-monitor';
 import { HealthBadge } from '../components/badges/HealthBadge';
 import { IconClock } from '../components/Icons';
@@ -129,8 +129,12 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
   // Update uptime display every minute
   useEffect(() => {
     if (!connectedAtRef.current) return;
-    const timer = setInterval(() => { setTick((t) => t + 1); }, 60_000);
-    return () => { clearInterval(timer); };
+    const timer = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 60_000);
+    return () => {
+      clearInterval(timer);
+    };
   }, [connectedAtRef]);
 
   const isConnected = props.state.status === 'connected' || props.state.status === 'degraded';

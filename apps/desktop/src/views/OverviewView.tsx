@@ -119,10 +119,28 @@ const QUICK_LINKS: ReadonlyArray<{
 }> = [
   { route: 'tasks', label: 'Tasks', icon: IconClock, iconBg: 'var(--amber-soft)', shortcut: '9' },
   { route: 'agents', label: 'Agents', icon: IconBot, iconBg: 'var(--blue-soft)', shortcut: '2' },
-  { route: 'machines', label: 'Machines', icon: IconServer, iconBg: 'var(--accent-soft)', shortcut: '4' },
+  {
+    route: 'machines',
+    label: 'Machines',
+    icon: IconServer,
+    iconBg: 'var(--accent-soft)',
+    shortcut: '4',
+  },
   { route: 'logs', label: 'Logs', icon: IconTerminal, iconBg: 'var(--muted-soft)', shortcut: '8' },
-  { route: 'channels', label: 'Channels', icon: IconMessage, iconBg: 'var(--green-soft)', shortcut: '6' },
-  { route: 'settings', label: 'Settings', icon: IconSettings, iconBg: 'var(--muted-soft)', shortcut: '0' },
+  {
+    route: 'channels',
+    label: 'Channels',
+    icon: IconMessage,
+    iconBg: 'var(--green-soft)',
+    shortcut: '6',
+  },
+  {
+    route: 'settings',
+    label: 'Settings',
+    icon: IconSettings,
+    iconBg: 'var(--muted-soft)',
+    shortcut: '0',
+  },
 ];
 
 function SuccessRateBar(props: { total: number; failed: number }): JSX.Element {
@@ -358,7 +376,9 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
               <button
                 key={link.route}
                 className="ov-quick-link"
-                onClick={() => { navigate(link.route); }}
+                onClick={() => {
+                  navigate(link.route);
+                }}
                 title={`${link.label} (${link.shortcut})`}
               >
                 <div className="ov-quick-link-icon" style={{ background: link.iconBg }}>
@@ -495,9 +515,7 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
 
       {/* Activity Heatmap */}
       {snapshot.recentEvents.length > 0 ? (
-        <ActivityHeatmap
-          events={snapshot.recentEvents.map((e) => ({ ts: e.ts, type: e.type }))}
-        />
+        <ActivityHeatmap events={snapshot.recentEvents.map((e) => ({ ts: e.ts, type: e.type }))} />
       ) : null}
 
       {/* Activity Feed */}

@@ -74,9 +74,7 @@ export function ActivityHeatmap(props: ActivityHeatmapProps): JSX.Element {
       <div className="heatmap-header">
         <div>
           <h3 className="heatmap-title">Activity Heatmap</h3>
-          <p className="heatmap-subtitle">
-            {totalCount} events · by day and hour
-          </p>
+          <p className="heatmap-subtitle">{totalCount} events · by day and hour</p>
         </div>
       </div>
 
@@ -94,7 +92,9 @@ export function ActivityHeatmap(props: ActivityHeatmapProps): JSX.Element {
           {/* Day rows */}
           {DAYS.map((day, dayIndex) => (
             <>
-              <div key={`d${day}`} className="heatmap-day-label">{day}</div>
+              <div key={`d${day}`} className="heatmap-day-label">
+                {day}
+              </div>
               {HOURS.map((hour) => {
                 const count = grid[dayIndex]?.[hour] ?? 0;
                 return (
@@ -112,7 +112,9 @@ export function ActivityHeatmap(props: ActivityHeatmapProps): JSX.Element {
                         y: rect.top - 8,
                       });
                     }}
-                    onMouseLeave={() => { setTooltip(null); }}
+                    onMouseLeave={() => {
+                      setTooltip(null);
+                    }}
                   />
                 );
               })}
@@ -136,11 +138,9 @@ export function ActivityHeatmap(props: ActivityHeatmapProps): JSX.Element {
 
       {/* Tooltip */}
       {tooltip ? (
-        <div
-          className="heatmap-tooltip"
-          style={{ left: tooltip.x, top: tooltip.y }}
-        >
-          <strong>{tooltip.count}</strong> events · {tooltip.day} {String(tooltip.hour).padStart(2, '0')}:00
+        <div className="heatmap-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
+          <strong>{tooltip.count}</strong> events · {tooltip.day}{' '}
+          {String(tooltip.hour).padStart(2, '0')}:00
         </div>
       ) : null}
     </div>
