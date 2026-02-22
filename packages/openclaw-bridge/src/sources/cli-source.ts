@@ -22,10 +22,14 @@ export class OpenClawCliSource implements RunDetector {
 
   public async collect(): Promise<SourceSnapshot> {
     try {
-      const { stdout } = await execFileAsync(this.config.openclawBin, [...this.config.openclawArgs], {
-        timeout: 4000,
-        maxBuffer: 1024 * 1024,
-      });
+      const { stdout } = await execFileAsync(
+        this.config.openclawBin,
+        [...this.config.openclawArgs],
+        {
+          timeout: 4000,
+          maxBuffer: 1024 * 1024,
+        }
+      );
 
       try {
         const payload: unknown = JSON.parse(stdout);

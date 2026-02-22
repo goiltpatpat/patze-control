@@ -47,7 +47,7 @@ pnpm dev:api-server
 ### 1) Valid mixed batch (expect partial success, HTTP 200)
 
 ```bash
-curl -sS -X POST "http://127.0.0.1:8080/ingest/batch" \
+curl -sS -X POST "http://127.0.0.1:9700/ingest/batch" \
   -H "Content-Type: application/json" \
   -d '{
     "events": [
@@ -86,7 +86,7 @@ Expected:
 ### 2) Invalid request shape (expect HTTP 400)
 
 ```bash
-curl -sS -X POST "http://127.0.0.1:8080/ingest/batch" \
+curl -sS -X POST "http://127.0.0.1:9700/ingest/batch" \
   -H "Content-Type: application/json" \
   -d '{"foo":"bar"}'
 ```

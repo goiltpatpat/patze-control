@@ -6,6 +6,7 @@ import { RunDetail } from '../components/RunDetail';
 import { StateBadge } from '../components/badges/StateBadge';
 import type { RouteFilter } from '../shell/routes';
 import type { FrontendUnifiedSnapshot } from '../types';
+import { ACTIVE_STATES, TERMINAL_BAD, TERMINAL_OK } from '../utils/lifecycle';
 import { formatDuration, formatRelativeTime } from '../utils/time';
 
 export interface RunsViewProps {
@@ -14,10 +15,6 @@ export interface RunsViewProps {
 }
 
 type RunFilter = 'all' | 'active' | 'completed' | 'failed';
-
-const ACTIVE_STATES = new Set(['created', 'queued', 'running', 'waiting_tool', 'streaming']);
-const TERMINAL_OK = new Set(['completed']);
-const TERMINAL_BAD = new Set(['failed', 'cancelled']);
 
 export function RunsView(props: RunsViewProps): JSX.Element {
   const [filter, setFilter] = useState<RunFilter>('all');
@@ -48,11 +45,16 @@ export function RunsView(props: RunsViewProps): JSX.Element {
 
   const filtered = routeFiltered.filter((r) => {
     switch (filter) {
-      case 'active': return ACTIVE_STATES.has(r.state);
-      case 'completed': return TERMINAL_OK.has(r.state);
-      case 'failed': return TERMINAL_BAD.has(r.state);
-      case 'all': return true;
-      default: return true;
+      case 'active':
+        return ACTIVE_STATES.has(r.state);
+      case 'completed':
+        return TERMINAL_OK.has(r.state);
+      case 'failed':
+        return TERMINAL_BAD.has(r.state);
+      case 'all':
+        return true;
+      default:
+        return true;
     }
   });
 
@@ -69,16 +71,26 @@ export function RunsView(props: RunsViewProps): JSX.Element {
 
       {filtered.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconActivity width={28} height={28} /></div>
-          {routeFiltered.length === 0 && allRuns.length === 0
-            ? 'No runs recorded yet.'
-            : props.filter.sessionId
-              ? `No runs found for session ${props.filter.sessionId}.`
-              : props.filter.agentId
-                ? `No runs found for agent ${props.filter.agentId}.`
-                : props.filter.machineId
-                  ? `No runs found for machine ${props.filter.machineId}.`
-                  : 'No runs match the current filter.'}
+          <div className="empty-state-icon">
+            <IconActivity width={28} height={28} />
+          </div>
+          {routeFiltered.length === 0 && allRuns.length === 0 ? (
+            <>
+              <p style={{ margin: '4px 0 0' }}>No runs recorded yet.</p>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                Runs represent individual agent executions. They will appear here as agents complete
+                work.
+              </p>
+            </>
+          ) : props.filter.sessionId ? (
+            `No runs found for session ${props.filter.sessionId}.`
+          ) : props.filter.agentId ? (
+            `No runs found for agent ${props.filter.agentId}.`
+          ) : props.filter.machineId ? (
+            `No runs found for machine ${props.filter.machineId}.`
+          ) : (
+            'No runs match the current filter.'
+          )}
         </div>
       ) : (
         <div className="panel">
@@ -105,7 +117,9 @@ export function RunsView(props: RunsViewProps): JSX.Element {
                       <tr
                         data-active={isActive ? 'true' : undefined}
                         style={{ cursor: 'pointer' }}
-                        onClick={() => { toggleExpand(run.runId); }}
+                        onClick={() => {
+                          toggleExpand(run.runId);
+                        }}
                       >
                         <td className="mono">{run.runId}</td>
                         <td className="mono">{run.agentId}</td>
@@ -133,7 +147,9 @@ export function RunsView(props: RunsViewProps): JSX.Element {
                                 ? `${run.failureReason.slice(0, 40)}…`
                                 : run.failureReason}
                             </span>
-                          ) : '—'}
+                          ) : (
+                            '—'
+                          )}
                         </td>
                       </tr>
                       {isExpanded && detail ? (

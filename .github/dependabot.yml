@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 8
+    labels:
+      - 'dependencies'
+      - 'automerge-candidate'
+    commit-message:
+      prefix: 'deps'
+    groups:
+      workspace-dev-deps:
+        patterns:
+          - '*eslint*'
+          - 'prettier'
+          - 'typescript*'
+          - '@types/*'
+      tauri-stack:
+        patterns:
+          - '@tauri-apps/*'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    labels:
+      - 'dependencies'
+      - 'github-actions'

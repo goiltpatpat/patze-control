@@ -74,8 +74,12 @@ export class ControlMonitorService {
         return;
       }
 
+      const healthStatus = snapshot.health.overall;
+      const connectionStatus =
+        healthStatus === 'critical' || healthStatus === 'degraded' ? 'degraded' : 'connected';
+
       this.setState({
-        status: snapshot.health.overall === 'healthy' ? 'connected' : 'degraded',
+        status: connectionStatus,
         errorMessage: null,
         snapshot,
       });

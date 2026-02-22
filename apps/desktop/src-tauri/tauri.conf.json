@@ -23,6 +23,11 @@
       "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
   },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
@@ -32,6 +37,7 @@
       "icons/128x128@2x.png",
       "icons/icon.ico",
       "icons/icon.png"
-    ]
+    ],
+    "externalBin": ["binaries/patze-api"]
   }
 }

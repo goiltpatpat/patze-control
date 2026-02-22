@@ -167,7 +167,10 @@ function createCollections(snapshot: FrontendReducerState): SnapshotCollections 
   };
 }
 
-function upsertFromEvent(collections: SnapshotCollections, event: Readonly<AnyTelemetryEvent>): boolean {
+function upsertFromEvent(
+  collections: SnapshotCollections,
+  event: Readonly<AnyTelemetryEvent>
+): boolean {
   if (event.type === 'machine.registered') {
     const payload = event.payload;
     const machineId = String(payload.machineId);
@@ -202,6 +205,13 @@ function upsertFromEvent(collections: SnapshotCollections, event: Readonly<AnyTe
         cpuPct: payload.resource.cpuPct,
         memoryBytes: payload.resource.memoryBytes,
         memoryPct: payload.resource.memoryPct,
+        ...(payload.resource.diskUsageBytes !== undefined
+          ? { diskUsageBytes: payload.resource.diskUsageBytes }
+          : {}),
+        ...(payload.resource.diskTotalBytes !== undefined
+          ? { diskTotalBytes: payload.resource.diskTotalBytes }
+          : {}),
+        ...(payload.resource.diskPct !== undefined ? { diskPct: payload.resource.diskPct } : {}),
       },
     });
 
@@ -275,7 +285,12 @@ function upsertFromEvent(collections: SnapshotCollections, event: Readonly<AnyTe
     const runId = String(payload.runId);
     const detail = getOrCreateRunDetail(collections, runId);
     const existing = detail.toolCalls.get(String(payload.toolCallId));
-    const toolStatus = payload.status === 'completed' ? 'completed' as const : payload.status === 'failed' ? 'failed' as const : 'cancelled' as const;
+    const toolStatus =
+      payload.status === 'completed'
+        ? ('completed' as const)
+        : payload.status === 'failed'
+          ? ('failed' as const)
+          : ('cancelled' as const);
     const tc: FrontendToolCallSnapshot = {
       toolCallId: String(payload.toolCallId),
       toolName: payload.toolName,
@@ -354,21 +369,35 @@ function trimToolCalls(detail: MutableRunDetail): void {
 
 function summarizeEvent(event: Readonly<AnyTelemetryEvent>): string {
   switch (event.type) {
-    case 'machine.registered': return `Machine ${String(event.payload.machineId)} registered`;
-    case 'machine.heartbeat': return `Heartbeat from ${String(event.payload.machineId)}`;
-    case 'run.state.changed': return `Run ${String(event.payload.runId)}: ${String(event.payload.from)} → ${String(event.payload.to)}`;
-    case 'session.state.changed': return `Session ${String(event.payload.sessionId)}: ${String(event.payload.from)} → ${String(event.payload.to)}`;
-    case 'run.tool.started': return `Tool ${String(event.payload.toolName)} started`;
-    case 'run.tool.completed': return `Tool ${String(event.payload.toolName)} ${String(event.payload.status)}`;
-    case 'run.model.usage': return `${String(event.payload.model)}: ${String(event.payload.totalTokens)} tokens`;
-    case 'run.log.emitted': return String(event.payload.message).slice(0, 80);
-    case 'agent.state.changed': return `Agent ${String(event.payload.agentId)}: ${String(event.payload.from)} → ${String(event.payload.to)}`;
-    case 'run.resource.usage': return `Resource usage: CPU ${String(event.payload.cpuPct)}%`;
-    case 'trace.span.recorded': return `Trace span: ${String(event.payload.name)}`;
+    case 'machine.registered':
+      return `Machine ${String(event.payload.machineId)} registered`;
+    case 'machine.heartbeat':
+      return `Heartbeat from ${String(event.payload.machineId)}`;
+    case 'run.state.changed':
+      return `Run ${String(event.payload.runId)}: ${String(event.payload.from)} → ${String(event.payload.to)}`;
+    case 'session.state.changed':
+      return `Session ${String(event.payload.sessionId)}: ${String(event.payload.from)} → ${String(event.payload.to)}`;
+    case 'run.tool.started':
+      return `Tool ${String(event.payload.toolName)} started`;
+    case 'run.tool.completed':
+      return `Tool ${String(event.payload.toolName)} ${String(event.payload.status)}`;
+    case 'run.model.usage':
+      return `${String(event.payload.model)}: ${String(event.payload.totalTokens)} tokens`;
+    case 'run.log.emitted':
+      return String(event.payload.message).slice(0, 80);
+    case 'agent.state.changed':
+      return `Agent ${String(event.payload.agentId)}: ${String(event.payload.from)} → ${String(event.payload.to)}`;
+    case 'run.resource.usage':
+      return `Resource usage: CPU ${String(event.payload.cpuPct)}%`;
+    case 'trace.span.recorded':
+      return `Trace span: ${String(event.payload.name)}`;
   }
 }
 
-function appendRecentEvent(collections: SnapshotCollections, event: Readonly<AnyTelemetryEvent>): void {
+function appendRecentEvent(
+  collections: SnapshotCollections,
+  event: Readonly<AnyTelemetryEvent>
+): void {
   if (event.type === 'machine.heartbeat') {
     return;
   }
@@ -463,20 +492,22 @@ function buildSnapshot(
       .filter((run): run is FrontendRunSnapshot & { state: ActiveRunState } =>
         isActiveRunState(run.state)
       )
-      .map((run) =>
-        freezeObject({
-          ...run,
-          isActive: true as const,
-          state: run.state,
-        }) as FrontendActiveRunSnapshot
+      .map(
+        (run) =>
+          freezeObject({
+            ...run,
+            isActive: true as const,
+            state: run.state,
+          }) as FrontendActiveRunSnapshot
       )
       .sort(compareRuns)
   );
 
   const runDetailsRecord: Record<string, Readonly<FrontendRunDetailSnapshot>> = {};
   for (const [runId, detail] of collections.runDetails) {
-    const toolCalls = Array.from(detail.toolCalls.values())
-      .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    const toolCalls = Array.from(detail.toolCalls.values()).sort((a, b) =>
+      a.startedAt.localeCompare(b.startedAt)
+    );
     runDetailsRecord[runId] = freezeObject({
       runId,
       toolCalls: freezeArray(toolCalls.map((tc) => freezeObject({ ...tc }))),
@@ -513,8 +544,9 @@ export const initializeFrontendSnapshot: InitializeFrontendSnapshot = (
 export const reduceFrontendSnapshot: ReduceFrontendSnapshot = (
   current,
   event,
-  _context
+  context
 ): FrontendUnifiedSnapshot => {
+  void context;
   const collections = createCollections(current);
   const changed = upsertFromEvent(collections, event);
   appendRecentEvent(collections, event);
@@ -531,8 +563,9 @@ export const reduceFrontendSnapshot: ReduceFrontendSnapshot = (
 export const reduceFrontendSnapshotMany: ReduceFrontendSnapshotMany = (
   current,
   events,
-  _context
+  context
 ): FrontendUnifiedSnapshot => {
+  void context;
   const collections = createCollections(current);
   let lastUpdated = current.lastUpdated;
   let changed = false;

@@ -35,14 +35,19 @@ export function ToastProvider(props: { readonly children: React.ReactNode }): JS
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const addToast = useCallback((severity: ToastSeverity, message: string) => {
-    const id = `toast_${String(++counterRef.current)}`;
-    setToasts((prev) => {
-      const next = [...prev, { id, severity, message }];
-      return next.length > MAX_TOASTS ? next.slice(next.length - MAX_TOASTS) : next;
-    });
-    setTimeout(() => { removeToast(id); }, TOAST_DURATION_MS);
-  }, [removeToast]);
+  const addToast = useCallback(
+    (severity: ToastSeverity, message: string) => {
+      const id = `toast_${String(++counterRef.current)}`;
+      setToasts((prev) => {
+        const next = [...prev, { id, severity, message }];
+        return next.length > MAX_TOASTS ? next.slice(next.length - MAX_TOASTS) : next;
+      });
+      setTimeout(() => {
+        removeToast(id);
+      }, TOAST_DURATION_MS);
+    },
+    [removeToast]
+  );
 
   const value = useMemo(() => ({ toasts, addToast, removeToast }), [toasts, addToast, removeToast]);
 
@@ -56,10 +61,14 @@ export function ToastProvider(props: { readonly children: React.ReactNode }): JS
 
 function severityClass(severity: ToastSeverity): string {
   switch (severity) {
-    case 'info': return 'toast-info';
-    case 'success': return 'toast-success';
-    case 'warn': return 'toast-warn';
-    case 'error': return 'toast-error';
+    case 'info':
+      return 'toast-info';
+    case 'success':
+      return 'toast-success';
+    case 'warn':
+      return 'toast-warn';
+    case 'error':
+      return 'toast-error';
   }
 }
 
@@ -78,7 +87,9 @@ function ToastContainer(props: {
           <span className="toast-message">{toast.message}</span>
           <button
             className="toast-dismiss"
-            onClick={() => { props.onDismiss(toast.id); }}
+            onClick={() => {
+              props.onDismiss(toast.id);
+            }}
             aria-label="Dismiss"
           >
             &times;

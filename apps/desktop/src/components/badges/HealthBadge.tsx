@@ -4,12 +4,17 @@ export interface HealthBadgeProps {
 
 function toTone(health: string): string {
   switch (health) {
-    case 'healthy': return 'good';
-    case 'degraded': return 'warn';
-    case 'critical': return 'bad';
+    case 'healthy':
+      return 'good';
+    case 'degraded':
+      return 'warn';
+    case 'critical':
+      return 'bad';
     case 'unknown':
-    case 'not connected': return 'muted';
-    default: return 'neutral';
+    case 'not connected':
+      return 'muted';
+    default:
+      return 'neutral';
   }
 }
 

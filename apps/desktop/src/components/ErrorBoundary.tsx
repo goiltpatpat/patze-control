@@ -40,7 +40,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               this.setState({ hasError: false, error: null });
             }}
           >
-            Try again
+            Retry
           </button>
         </div>
       );

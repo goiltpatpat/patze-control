@@ -133,8 +133,12 @@ function reduceMachineEvent(state: ProjectionState, event: Readonly<AnyTelemetry
         cpuPct: payload.resource.cpuPct,
         memoryBytes: payload.resource.memoryBytes,
         memoryPct: payload.resource.memoryPct,
-        ...(payload.resource.diskUsageBytes !== undefined ? { diskUsageBytes: payload.resource.diskUsageBytes } : {}),
-        ...(payload.resource.diskTotalBytes !== undefined ? { diskTotalBytes: payload.resource.diskTotalBytes } : {}),
+        ...(payload.resource.diskUsageBytes !== undefined
+          ? { diskUsageBytes: payload.resource.diskUsageBytes }
+          : {}),
+        ...(payload.resource.diskTotalBytes !== undefined
+          ? { diskTotalBytes: payload.resource.diskTotalBytes }
+          : {}),
         ...(payload.resource.diskPct !== undefined ? { diskPct: payload.resource.diskPct } : {}),
       },
     };

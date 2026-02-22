@@ -12,7 +12,7 @@ export function RunDetail(props: RunDetailProps): JSX.Element {
     <div className="run-detail">
       <div className="run-detail-grid">
         <div>
-          <h4 className="run-detail-section-title">Tool Calls ({String(toolCalls.length)})</h4>
+          <h4 className="run-detail-section-title">Tool Calls ({toolCalls.length})</h4>
           {toolCalls.length === 0 ? (
             <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>No tool calls recorded.</span>
           ) : (
@@ -22,7 +22,7 @@ export function RunDetail(props: RunDetailProps): JSX.Element {
                   <StateBadge value={tc.status} />
                   <span className="tool-call-name">{tc.toolName}</span>
                   {tc.durationMs !== undefined ? (
-                    <span className="tool-call-duration">{String(tc.durationMs)}ms</span>
+                    <span className="tool-call-duration">{tc.durationMs}ms</span>
                   ) : null}
                   {tc.errorMessage ? (
                     <span className="tool-call-error">{tc.errorMessage}</span>
@@ -47,20 +47,28 @@ export function RunDetail(props: RunDetailProps): JSX.Element {
               </div>
               <div className="settings-row">
                 <span className="settings-row-label">Input Tokens</span>
-                <span className="settings-row-value">{modelUsage.inputTokens.toLocaleString()}</span>
+                <span className="settings-row-value">
+                  {modelUsage.inputTokens.toLocaleString()}
+                </span>
               </div>
               <div className="settings-row">
                 <span className="settings-row-label">Output Tokens</span>
-                <span className="settings-row-value">{modelUsage.outputTokens.toLocaleString()}</span>
+                <span className="settings-row-value">
+                  {modelUsage.outputTokens.toLocaleString()}
+                </span>
               </div>
               <div className="settings-row">
                 <span className="settings-row-label">Total Tokens</span>
-                <span className="settings-row-value">{modelUsage.totalTokens.toLocaleString()}</span>
+                <span className="settings-row-value">
+                  {modelUsage.totalTokens.toLocaleString()}
+                </span>
               </div>
               {modelUsage.estimatedCostUsd !== undefined ? (
                 <div className="settings-row">
                   <span className="settings-row-label">Est. Cost</span>
-                  <span className="settings-row-value">${modelUsage.estimatedCostUsd.toFixed(4)}</span>
+                  <span className="settings-row-value">
+                    ${modelUsage.estimatedCostUsd.toFixed(4)}
+                  </span>
                 </div>
               ) : null}
             </div>

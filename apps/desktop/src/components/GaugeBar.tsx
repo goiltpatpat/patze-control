@@ -32,10 +32,7 @@ export function GaugeBar(props: GaugeBarProps): JSX.Element {
         </span>
       </div>
       <div className="gauge-bar-track">
-        <div
-          className={`gauge-bar-fill gauge-tone-${tone}`}
-          style={{ width: `${String(pct)}%` }}
-        />
+        <div className={`gauge-bar-fill gauge-tone-${tone}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

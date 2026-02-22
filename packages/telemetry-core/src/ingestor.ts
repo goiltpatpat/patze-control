@@ -1,8 +1,4 @@
-import type {
-  AnyTelemetryEvent,
-  TelemetryEvent,
-  TelemetryEventType,
-} from './events.js';
+import type { AnyTelemetryEvent, TelemetryEvent, TelemetryEventType } from './events.js';
 import type { EventStore } from './event-store.js';
 import type { IsoUtcTimestamp, TelemetrySeverity } from './types.js';
 import { isRecord } from './utils.js';
@@ -119,7 +115,9 @@ function normalizeTimestamp(value: unknown): IsoUtcTimestamp | null {
   return date.toISOString();
 }
 
-function normalizeTrace(trace: unknown): { traceId: string; spanId?: string; parentSpanId?: string } | null {
+function normalizeTrace(
+  trace: unknown
+): { traceId: string; spanId?: string; parentSpanId?: string } | null {
   if (!isRecord(trace)) {
     return null;
   }
@@ -191,7 +189,8 @@ function validatePayloadShape(type: TelemetryEventType, payload: unknown): strin
   }
 
   if (type === 'machine.registered') {
-    if (typeof payload.machineId !== 'string') return 'machine.registered.payload.machineId is required.';
+    if (typeof payload.machineId !== 'string')
+      return 'machine.registered.payload.machineId is required.';
     if (typeof payload.name !== 'string') return 'machine.registered.payload.name is required.';
     if (typeof payload.kind !== 'string') return 'machine.registered.payload.kind is required.';
     if (typeof payload.status !== 'string') return 'machine.registered.payload.status is required.';
@@ -202,18 +201,24 @@ function validatePayloadShape(type: TelemetryEventType, payload: unknown): strin
   }
 
   if (type === 'machine.heartbeat') {
-    if (typeof payload.machineId !== 'string') return 'machine.heartbeat.payload.machineId is required.';
+    if (typeof payload.machineId !== 'string')
+      return 'machine.heartbeat.payload.machineId is required.';
     if (typeof payload.status !== 'string') return 'machine.heartbeat.payload.status is required.';
     if (!isRecord(payload.resource)) return 'machine.heartbeat.payload.resource is required.';
-    if (typeof payload.resource.cpuPct !== 'number') return 'machine.heartbeat.payload.resource.cpuPct is required.';
-    if (typeof payload.resource.memoryBytes !== 'number') return 'machine.heartbeat.payload.resource.memoryBytes is required.';
-    if (typeof payload.resource.memoryPct !== 'number') return 'machine.heartbeat.payload.resource.memoryPct is required.';
+    if (typeof payload.resource.cpuPct !== 'number')
+      return 'machine.heartbeat.payload.resource.cpuPct is required.';
+    if (typeof payload.resource.memoryBytes !== 'number')
+      return 'machine.heartbeat.payload.resource.memoryBytes is required.';
+    if (typeof payload.resource.memoryPct !== 'number')
+      return 'machine.heartbeat.payload.resource.memoryPct is required.';
     return null;
   }
 
   if (type === 'agent.state.changed') {
-    if (typeof payload.agentId !== 'string') return 'agent.state.changed.payload.agentId is required.';
-    if (typeof payload.machineId !== 'string') return 'agent.state.changed.payload.machineId is required.';
+    if (typeof payload.agentId !== 'string')
+      return 'agent.state.changed.payload.agentId is required.';
+    if (typeof payload.machineId !== 'string')
+      return 'agent.state.changed.payload.machineId is required.';
     if (typeof payload.from !== 'string' || typeof payload.to !== 'string') {
       return 'agent.state.changed.payload.from/to are required.';
     }
@@ -221,9 +226,12 @@ function validatePayloadShape(type: TelemetryEventType, payload: unknown): strin
   }
 
   if (type === 'session.state.changed') {
-    if (typeof payload.sessionId !== 'string') return 'session.state.changed.payload.sessionId is required.';
-    if (typeof payload.agentId !== 'string') return 'session.state.changed.payload.agentId is required.';
-    if (typeof payload.machineId !== 'string') return 'session.state.changed.payload.machineId is required.';
+    if (typeof payload.sessionId !== 'string')
+      return 'session.state.changed.payload.sessionId is required.';
+    if (typeof payload.agentId !== 'string')
+      return 'session.state.changed.payload.agentId is required.';
+    if (typeof payload.machineId !== 'string')
+      return 'session.state.changed.payload.machineId is required.';
     if (typeof payload.from !== 'string' || typeof payload.to !== 'string') {
       return 'session.state.changed.payload.from/to are required.';
     }
@@ -232,8 +240,10 @@ function validatePayloadShape(type: TelemetryEventType, payload: unknown): strin
 
   if (type === 'run.state.changed') {
     if (typeof payload.runId !== 'string') return 'run.state.changed.payload.runId is required.';
-    if (typeof payload.sessionId !== 'string') return 'run.state.changed.payload.sessionId is required.';
-    if (typeof payload.agentId !== 'string') return 'run.state.changed.payload.agentId is required.';
+    if (typeof payload.sessionId !== 'string')
+      return 'run.state.changed.payload.sessionId is required.';
+    if (typeof payload.agentId !== 'string')
+      return 'run.state.changed.payload.agentId is required.';
     if (typeof payload.from !== 'string' || typeof payload.to !== 'string') {
       return 'run.state.changed.payload.from/to are required.';
     }
@@ -241,9 +251,11 @@ function validatePayloadShape(type: TelemetryEventType, payload: unknown): strin
   }
 
   if (type === 'run.log.emitted') {
-    if (typeof payload.logEntryId !== 'string') return 'run.log.emitted.payload.logEntryId is required.';
+    if (typeof payload.logEntryId !== 'string')
+      return 'run.log.emitted.payload.logEntryId is required.';
     if (typeof payload.runId !== 'string') return 'run.log.emitted.payload.runId is required.';
-    if (typeof payload.sessionId !== 'string') return 'run.log.emitted.payload.sessionId is required.';
+    if (typeof payload.sessionId !== 'string')
+      return 'run.log.emitted.payload.sessionId is required.';
     if (typeof payload.level !== 'string') return 'run.log.emitted.payload.level is required.';
     if (typeof payload.message !== 'string') return 'run.log.emitted.payload.message is required.';
     if (typeof payload.ts !== 'string' && !(payload.ts instanceof Date)) {
@@ -254,8 +266,10 @@ function validatePayloadShape(type: TelemetryEventType, payload: unknown): strin
 
   if (type === 'run.tool.started') {
     if (typeof payload.runId !== 'string') return 'run.tool.started.payload.runId is required.';
-    if (typeof payload.toolCallId !== 'string') return 'run.tool.started.payload.toolCallId is required.';
-    if (typeof payload.toolName !== 'string') return 'run.tool.started.payload.toolName is required.';
+    if (typeof payload.toolCallId !== 'string')
+      return 'run.tool.started.payload.toolCallId is required.';
+    if (typeof payload.toolName !== 'string')
+      return 'run.tool.started.payload.toolName is required.';
     if (typeof payload.startedAt !== 'string' && !(payload.startedAt instanceof Date)) {
       return 'run.tool.started.payload.startedAt must be a timestamp.';
     }
@@ -264,34 +278,45 @@ function validatePayloadShape(type: TelemetryEventType, payload: unknown): strin
 
   if (type === 'run.tool.completed') {
     if (typeof payload.runId !== 'string') return 'run.tool.completed.payload.runId is required.';
-    if (typeof payload.toolCallId !== 'string') return 'run.tool.completed.payload.toolCallId is required.';
-    if (typeof payload.toolName !== 'string') return 'run.tool.completed.payload.toolName is required.';
+    if (typeof payload.toolCallId !== 'string')
+      return 'run.tool.completed.payload.toolCallId is required.';
+    if (typeof payload.toolName !== 'string')
+      return 'run.tool.completed.payload.toolName is required.';
     if (typeof payload.status !== 'string') return 'run.tool.completed.payload.status is required.';
-    if (typeof payload.durationMs !== 'number') return 'run.tool.completed.payload.durationMs is required.';
-    if (typeof payload.success !== 'boolean') return 'run.tool.completed.payload.success is required.';
+    if (typeof payload.durationMs !== 'number')
+      return 'run.tool.completed.payload.durationMs is required.';
+    if (typeof payload.success !== 'boolean')
+      return 'run.tool.completed.payload.success is required.';
     return null;
   }
 
   if (type === 'run.model.usage') {
     if (typeof payload.runId !== 'string') return 'run.model.usage.payload.runId is required.';
-    if (typeof payload.machineId !== 'string') return 'run.model.usage.payload.machineId is required.';
-    if (typeof payload.provider !== 'string') return 'run.model.usage.payload.provider is required.';
+    if (typeof payload.machineId !== 'string')
+      return 'run.model.usage.payload.machineId is required.';
+    if (typeof payload.provider !== 'string')
+      return 'run.model.usage.payload.provider is required.';
     if (typeof payload.model !== 'string') return 'run.model.usage.payload.model is required.';
     return null;
   }
 
   if (type === 'run.resource.usage') {
-    if (typeof payload.machineId !== 'string') return 'run.resource.usage.payload.machineId is required.';
+    if (typeof payload.machineId !== 'string')
+      return 'run.resource.usage.payload.machineId is required.';
     if (typeof payload.cpuPct !== 'number') return 'run.resource.usage.payload.cpuPct is required.';
-    if (typeof payload.memoryBytes !== 'number') return 'run.resource.usage.payload.memoryBytes is required.';
-    if (typeof payload.memoryPct !== 'number') return 'run.resource.usage.payload.memoryPct is required.';
+    if (typeof payload.memoryBytes !== 'number')
+      return 'run.resource.usage.payload.memoryBytes is required.';
+    if (typeof payload.memoryPct !== 'number')
+      return 'run.resource.usage.payload.memoryPct is required.';
     return null;
   }
 
   if (type === 'trace.span.recorded') {
     if (typeof payload.id !== 'string') return 'trace.span.recorded.payload.id is required.';
-    if (typeof payload.traceId !== 'string') return 'trace.span.recorded.payload.traceId is required.';
-    if (typeof payload.machineId !== 'string') return 'trace.span.recorded.payload.machineId is required.';
+    if (typeof payload.traceId !== 'string')
+      return 'trace.span.recorded.payload.traceId is required.';
+    if (typeof payload.machineId !== 'string')
+      return 'trace.span.recorded.payload.machineId is required.';
     if (typeof payload.name !== 'string') return 'trace.span.recorded.payload.name is required.';
     return null;
   }
@@ -330,7 +355,10 @@ export class DefaultTelemetryIngestor implements TelemetryIngestor {
     }
 
     if (input.id.length > MAX_EVENT_ID_LENGTH) {
-      return toFailure('invalid_envelope', `Event id exceeds maximum length of ${String(MAX_EVENT_ID_LENGTH)}.`);
+      return toFailure(
+        'invalid_envelope',
+        `Event id exceeds maximum length of ${MAX_EVENT_ID_LENGTH}.`
+      );
     }
 
     if (input.machineId.trim().length === 0) {
@@ -338,7 +366,10 @@ export class DefaultTelemetryIngestor implements TelemetryIngestor {
     }
 
     if (input.machineId.length > MAX_MACHINE_ID_LENGTH) {
-      return toFailure('invalid_envelope', `machineId exceeds maximum length of ${String(MAX_MACHINE_ID_LENGTH)}.`);
+      return toFailure(
+        'invalid_envelope',
+        `machineId exceeds maximum length of ${MAX_MACHINE_ID_LENGTH}.`
+      );
     }
 
     if (containsNewlines(input.machineId)) {
@@ -355,7 +386,10 @@ export class DefaultTelemetryIngestor implements TelemetryIngestor {
 
     const normalizedTs = normalizeTimestamp(input.ts);
     if (!normalizedTs) {
-      return toFailure('invalid_timestamp', 'Envelope timestamp must be a valid ISO-8601 UTC value.');
+      return toFailure(
+        'invalid_timestamp',
+        'Envelope timestamp must be a valid ISO-8601 UTC value.'
+      );
     }
 
     const normalizedTrace = normalizeTrace(input.trace);

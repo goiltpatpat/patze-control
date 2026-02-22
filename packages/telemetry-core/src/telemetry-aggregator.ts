@@ -1,6 +1,11 @@
 import type { AnyTelemetryEvent } from './events.js';
 import type { TelemetryEventListener } from './event-bus.js';
-import { buildTelemetrySnapshot, type MachineProjection, type RunProjection, type SessionProjection } from './projections.js';
+import {
+  buildTelemetrySnapshot,
+  type MachineProjection,
+  type RunProjection,
+  type SessionProjection,
+} from './projections.js';
 import { TelemetryNode } from './telemetry-node.js';
 import type { SessionRunLifecycleState } from './types.js';
 
@@ -80,17 +85,13 @@ function createEmptyUnifiedSnapshot(): UnifiedTelemetrySnapshot {
   };
 }
 
-function stringifyId(id: unknown): string {
-  return String(id);
-}
-
 function compareOrderedEvents(left: OrderedEvent, right: OrderedEvent): number {
   const tsCompare = left.event.ts.localeCompare(right.event.ts);
   if (tsCompare !== 0) {
     return tsCompare;
   }
 
-  const idCompare = stringifyId(left.event.id).localeCompare(stringifyId(right.event.id));
+  const idCompare = left.event.id.localeCompare(right.event.id);
   if (idCompare !== 0) {
     return idCompare;
   }
@@ -207,7 +208,7 @@ export class TelemetryAggregator {
   }
 
   private appendEvent(attachment: NodeAttachment, event: Readonly<AnyTelemetryEvent>): boolean {
-    const eventId = stringifyId(event.id);
+    const eventId: string = event.id;
     if (attachment.eventIds.has(eventId)) {
       return false;
     }
@@ -234,20 +235,12 @@ export class TelemetryAggregator {
     const orderedNodeIds = Array.from(this.attachments.keys()).sort((a, b) => a.localeCompare(b));
 
     for (const nodeId of orderedNodeIds) {
-      const attachment = this.attachments.get(nodeId);
-      if (!attachment) {
-        continue;
-      }
-
+      const attachment = this.attachments.get(nodeId)!;
       for (let index = 0; index < attachment.log.length; index += 1) {
-        const event = attachment.log[index];
-        if (!event) {
-          continue;
-        }
         orderedEvents.push({
           nodeId,
           localIndex: index,
-          event,
+          event: attachment.log[index]!,
         });
       }
     }
@@ -259,7 +252,7 @@ export class TelemetryAggregator {
 
     const machineEntries: Array<[string, Readonly<MachineReadModel>]> = [];
     for (const [machineId, machine] of snapshot.machines) {
-      const key = stringifyId(machineId);
+      const key: string = machineId;
       const readModel: MachineReadModel = {
         ...machine,
         machineId: key,
@@ -269,23 +262,23 @@ export class TelemetryAggregator {
 
     const sessionEntries: Array<[string, Readonly<SessionReadModel>]> = [];
     for (const [sessionId, session] of snapshot.sessions) {
-      const key = stringifyId(sessionId);
+      const key: string = sessionId;
       const readModel: SessionReadModel = {
         ...session,
         sessionId: key,
-        machineId: stringifyId(session.machineId),
+        machineId: session.machineId,
       };
       sessionEntries.push([key, Object.freeze(readModel)]);
     }
 
     const runEntries: Array<[string, Readonly<RunReadModel>]> = [];
     for (const [runId, run] of snapshot.runs) {
-      const key = stringifyId(runId);
+      const key: string = runId;
       const readModel: RunReadModel = {
         ...run,
         runId: key,
-        sessionId: stringifyId(run.sessionId),
-        machineId: stringifyId(run.machineId),
+        sessionId: run.sessionId,
+        machineId: run.machineId,
       };
       runEntries.push([key, Object.freeze(readModel)]);
     }
@@ -296,10 +289,7 @@ export class TelemetryAggregator {
 
     const sessionsByMachineMap = new Map<string, string[]>();
     for (const sessionId of Object.keys(sessions).sort((a, b) => a.localeCompare(b))) {
-      const session = sessions[sessionId];
-      if (!session) {
-        continue;
-      }
+      const session = sessions[sessionId]!;
       appendIndexEntry(sessionsByMachineMap, session.machineId, sessionId);
     }
 
@@ -307,10 +297,7 @@ export class TelemetryAggregator {
     const activeRunsByMachineMap = new Map<string, string[]>();
 
     for (const runId of Object.keys(runs).sort((a, b) => a.localeCompare(b))) {
-      const run = runs[runId];
-      if (!run) {
-        continue;
-      }
+      const run = runs[runId]!;
       appendIndexEntry(runsBySessionMap, run.sessionId, runId);
       if (ACTIVE_STATES.has(run.state)) {
         appendIndexEntry(activeRunsByMachineMap, run.machineId, runId);

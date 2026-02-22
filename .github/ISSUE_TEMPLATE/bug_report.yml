@@ -1,0 +1,49 @@
+name: Bug Report
+description: Report a defect or regression
+title: '[bug] '
+labels: ['bug', 'triage']
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots
+      description: Paste relevant logs or attach screenshots
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area
+      options:
+        - Desktop UI
+        - API Server
+        - OpenClaw Bridge
+        - CI / Workflow
+        - Docs
+    validations:
+      required: true

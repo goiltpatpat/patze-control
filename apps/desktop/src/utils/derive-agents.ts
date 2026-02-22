@@ -1,6 +1,5 @@
 import type { FrontendUnifiedSnapshot } from '../types';
-
-const NON_TERMINAL_STATES = new Set(['created', 'queued', 'running', 'waiting_tool', 'streaming']);
+import { ACTIVE_STATES } from './lifecycle';
 
 export interface DerivedAgent {
   readonly agentId: string;
@@ -54,7 +53,7 @@ export function deriveAgents(snapshot: FrontendUnifiedSnapshot): DerivedAgent[] 
     const acc = getOrCreate(accumulators, session.agentId);
     acc.totalSessions += 1;
     acc.machines.add(session.machineId);
-    if (NON_TERMINAL_STATES.has(session.state)) {
+    if (ACTIVE_STATES.has(session.state)) {
       acc.activeSessions += 1;
     }
     const ts = new Date(session.updatedAt).getTime();
@@ -65,7 +64,7 @@ export function deriveAgents(snapshot: FrontendUnifiedSnapshot): DerivedAgent[] 
     const acc = getOrCreate(accumulators, run.agentId);
     acc.totalRuns += 1;
     acc.machines.add(run.machineId);
-    if (NON_TERMINAL_STATES.has(run.state)) {
+    if (ACTIVE_STATES.has(run.state)) {
       acc.activeRuns += 1;
     }
     if (run.state === 'failed') {

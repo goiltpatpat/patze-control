@@ -7,12 +7,17 @@ export interface SeverityBadgeProps {
 
 function toTone(severity: SeverityLevel): string {
   switch (severity) {
-    case 'debug': return 'muted';
-    case 'info': return 'neutral';
-    case 'warn': return 'warn';
+    case 'debug':
+      return 'muted';
+    case 'info':
+      return 'neutral';
+    case 'warn':
+      return 'warn';
     case 'error':
-    case 'critical': return 'bad';
-    default: return 'muted';
+    case 'critical':
+      return 'bad';
+    default:
+      return 'muted';
   }
 }
 

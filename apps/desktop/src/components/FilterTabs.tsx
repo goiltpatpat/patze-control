@@ -21,11 +21,13 @@ export function FilterTabs<T extends string>(props: FilterTabsProps<T>): JSX.Ele
             role="tab"
             aria-selected={isActive}
             className={`filter-tab${isActive ? ' filter-tab-active' : ''}`}
-            onClick={() => { props.onChange(tab.id); }}
+            onClick={() => {
+              props.onChange(tab.id);
+            }}
           >
             {tab.label}
             {tab.count !== undefined && tab.count > 0 ? (
-              <span className="filter-tab-count">{String(tab.count)}</span>
+              <span className="filter-tab-count">{tab.count}</span>
             ) : null}
           </button>
         );

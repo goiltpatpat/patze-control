@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from './components/Toast';
+import { useBridgeConnections } from './hooks/useBridgeConnections';
 import { useEndpointManager } from './hooks/useEndpointManager';
+import { useManagedBridges } from './hooks/useManagedBridges';
 import { useEventToasts } from './hooks/useEventToasts';
 import { AppShell } from './shell/AppShell';
 import type { TunnelEndpointRow } from './views/TunnelsView';
@@ -18,14 +20,102 @@ function toForwardedPort(baseUrl: string): string {
   }
 }
 
+async function detectSidecarPort(): Promise<number | null> {
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const port = await invoke<number>('get_api_port');
+      return port;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+const STORAGE_KEY_URL = 'patze_base_url';
+const STORAGE_KEY_TOKEN = 'patze_token';
+const DEFAULT_BASE_URL = 'http://127.0.0.1:9700';
+
+function loadPersistedString(key: string, fallback: string): string {
+  try {
+    const v = localStorage.getItem(key);
+    return v !== null && v.length > 0 ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistString(key: string, value: string): void {
+  try {
+    if (value.length > 0) {
+      localStorage.setItem(key, value);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    /* storage full / unavailable */
+  }
+}
+
+let moduleAutoConnectDone = false;
+
 export function App(): JSX.Element {
-  const [baseUrl, setBaseUrl] = useState('http://127.0.0.1:8080');
-  const [token, setToken] = useState('');
+  const [baseUrl, setBaseUrl] = useState(() =>
+    loadPersistedString(STORAGE_KEY_URL, DEFAULT_BASE_URL)
+  );
+  const [token, setToken] = useState(() => loadPersistedString(STORAGE_KEY_TOKEN, ''));
   const [isTunnelTransitioning, setIsTunnelTransitioning] = useState(false);
+  const [appReady, setAppReady] = useState(moduleAutoConnectDone);
   const transitionLockRef = useRef(false);
   const { state, connect, disconnect } = useControlMonitor();
   const { addToast } = useToast();
   const prevStatusRef = useRef(state.status);
+
+  const connectRef = useRef(connect);
+  connectRef.current = connect;
+
+  useEffect(() => {
+    if (moduleAutoConnectDone) {
+      setAppReady(true);
+      return;
+    }
+    let cancelled = false;
+
+    const sleep = (ms: number): Promise<void> =>
+      new Promise((r) => {
+        setTimeout(r, ms);
+      });
+
+    const poll = async (): Promise<void> => {
+      const port = await detectSidecarPort();
+      const url = port ? `http://127.0.0.1:${port}` : 'http://127.0.0.1:9700';
+      if (port && !cancelled) setBaseUrl(url);
+
+      const savedToken = loadPersistedString(STORAGE_KEY_TOKEN, '');
+
+      while (!cancelled && !moduleAutoConnectDone) {
+        try {
+          const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(2000) });
+          if (res.ok && !cancelled && !moduleAutoConnectDone) {
+            moduleAutoConnectDone = true;
+            await connectRef.current({ baseUrl: url, token: savedToken });
+            if (!cancelled) setAppReady(true);
+            return;
+          }
+        } catch {
+          /* server not ready */
+        }
+
+        if (!cancelled) await sleep(2000);
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const prev = prevStatusRef.current;
@@ -51,7 +141,20 @@ export function App(): JSX.Element {
     }
   }, [state.status, state.errorMessage, addToast]);
 
+  const handleBaseUrlChange = (value: string): void => {
+    setBaseUrl(value);
+    persistString(STORAGE_KEY_URL, value);
+  };
+
+  const handleTokenChange = (value: string): void => {
+    setToken(value);
+    persistString(STORAGE_KEY_TOKEN, value);
+  };
+
   const endpointManager = useEndpointManager(baseUrl);
+  const isConnected = state.status === 'connected' || state.status === 'degraded';
+  const bridgeConnections = useBridgeConnections(baseUrl, isConnected);
+  const managedBridges = useManagedBridges(baseUrl, token, isConnected);
   useEventToasts(state.snapshot);
 
   const tunnelEndpoints = useMemo<readonly TunnelEndpointRow[]>(() => {
@@ -98,6 +201,26 @@ export function App(): JSX.Element {
     });
   };
 
+  if (!appReady) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          gap: 12,
+          color: 'var(--text-muted)',
+          fontSize: '0.88rem',
+        }}
+      >
+        <span className="mini-spinner" style={{ width: 20, height: 20 }} />
+        <span>Connecting to API server…</span>
+      </div>
+    );
+  }
+
   return (
     <AppShell
       baseUrl={baseUrl}
@@ -107,8 +230,8 @@ export function App(): JSX.Element {
       monitorState={state}
       tunnelEndpoints={tunnelEndpoints}
       isTunnelTransitioning={isTunnelTransitioning}
-      onBaseUrlChange={setBaseUrl}
-      onTokenChange={setToken}
+      onBaseUrlChange={handleBaseUrlChange}
+      onTokenChange={handleTokenChange}
       onConnect={handleConnect}
       onDisconnect={handleDisconnect}
       onReconnect={handleReconnect}
@@ -117,6 +240,12 @@ export function App(): JSX.Element {
       onRemoveEndpoint={endpointManager.removeEndpoint}
       onConnectEndpoint={endpointManager.connectEndpoint}
       onDisconnectEndpoint={endpointManager.disconnectEndpoint}
+      bridgeConnections={bridgeConnections}
+      managedBridges={managedBridges.bridges}
+      onSetupBridge={managedBridges.setupBridge}
+      onDisconnectBridge={managedBridges.disconnectBridge}
+      onRemoveBridge={managedBridges.removeBridge}
+      managedBridgesLoading={managedBridges.loading}
     />
   );
 }

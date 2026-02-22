@@ -7,8 +7,6 @@
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true
+    "skipLibCheck": true
   }
 }

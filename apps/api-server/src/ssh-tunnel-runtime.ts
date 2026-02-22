@@ -46,11 +46,7 @@ function parseRemoteTarget(baseUrl: string): { host: string; port: number } {
   const url = new URL(baseUrl);
 
   const host = url.hostname;
-  const port = url.port.length > 0
-    ? Number(url.port)
-    : url.protocol === 'https:'
-      ? 443
-      : 80;
+  const port = url.port.length > 0 ? Number(url.port) : url.protocol === 'https:' ? 443 : 80;
 
   if (!host) {
     throw new Error(`Invalid endpoint baseUrl: ${baseUrl}`);
@@ -72,9 +68,7 @@ function escapeRegex(value: string): string {
 }
 
 function wildcardToRegex(pattern: string): RegExp {
-  const escaped = escapeRegex(pattern)
-    .replace(/\\\*/g, '.*')
-    .replace(/\\\?/g, '.');
+  const escaped = escapeRegex(pattern).replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
 
   return new RegExp(`^${escaped}$`);
 }
@@ -143,7 +137,10 @@ function parseKnownHosts(content: string): KnownHostEntry[] {
     }
 
     entries.push({
-      hosts: hostsField.split(',').map((hostPattern) => hostPattern.trim()).filter(Boolean),
+      hosts: hostsField
+        .split(',')
+        .map((hostPattern) => hostPattern.trim())
+        .filter(Boolean),
       keyBase64,
     });
   }
@@ -181,7 +178,7 @@ function connectSsh(config: ConnectConfig): Promise<Client> {
       if (!settled) {
         settled = true;
         client.end();
-        reject(new Error(`SSH connection timed out after ${String(SSH_CONNECT_TIMEOUT_MS)}ms`));
+        reject(new Error(`SSH connection timed out after ${SSH_CONNECT_TIMEOUT_MS}ms`));
       }
     }, SSH_CONNECT_TIMEOUT_MS);
 
@@ -192,14 +189,18 @@ function connectSsh(config: ConnectConfig): Promise<Client> {
     };
 
     const onReady = (): void => {
-      if (settled) { return; }
+      if (settled) {
+        return;
+      }
       settled = true;
       cleanup();
       resolve(client);
     };
 
     const onError = (error: Error): void => {
-      if (settled) { return; }
+      if (settled) {
+        return;
+      }
       settled = true;
       cleanup();
       reject(error);
@@ -227,21 +228,21 @@ function createForwardServer(
         remoteHost,
         remotePort,
         (error: Error | undefined, stream: ClientChannel) => {
-        if (error || !stream) {
-          socket.destroy(error ?? undefined);
-          return;
-        }
+          if (error || !stream) {
+            socket.destroy(error ?? undefined);
+            return;
+          }
 
-        socket.pipe(stream);
-        stream.pipe(socket);
+          socket.pipe(stream);
+          stream.pipe(socket);
 
-        const destroyBoth = (): void => {
-          socket.destroy();
-          stream.destroy();
-        };
+          const destroyBoth = (): void => {
+            socket.destroy();
+            stream.destroy();
+          };
 
-        socket.on('error', destroyBoth);
-        stream.on('error', destroyBoth);
+          socket.on('error', destroyBoth);
+          stream.on('error', destroyBoth);
         }
       );
     });
@@ -296,9 +297,7 @@ export class SshTunnelRuntime {
     const expectedHostKeys = await loadKnownHostKeySet(ssh.knownHostsPath, ssh.host, ssh.port);
 
     if (expectedHostKeys.size === 0) {
-      throw new Error(
-        `No matching host key found in known_hosts for ${ssh.host}:${String(ssh.port)}.`
-      );
+      throw new Error(`No matching host key found in known_hosts for ${ssh.host}:${ssh.port}.`);
     }
 
     const privateKey = await readFile(ssh.privateKeyPath, 'utf8');
@@ -383,7 +382,7 @@ export class SshTunnelRuntime {
       label: handle.endpoint.label,
       localHost: handle.localHost,
       localPort: handle.localPort,
-      localBaseUrl: `http://${handle.localHost}:${String(handle.localPort)}`,
+      localBaseUrl: `http://${handle.localHost}:${handle.localPort}`,
       remoteHost: handle.remoteHost,
       remotePort: handle.remotePort,
       openedAt: handle.openedAt,
