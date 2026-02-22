@@ -47,6 +47,9 @@ cd "$ROOT_DIR"
 pnpm --filter @patze/telemetry-core build
 
 OUTFILE="$BINARIES_DIR/patze-api-$TARGET"
+if [[ "$TARGET" == *"windows-msvc" ]]; then
+  OUTFILE="${OUTFILE}.exe"
+fi
 bun build apps/api-server/src/index.ts --compile --outfile "$OUTFILE" --target bun
 
 chmod +x "$OUTFILE"
