@@ -25,7 +25,7 @@
     "test": "pnpm --filter @patze/telemetry-core test",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm --filter @patze/telemetry-core build && pnpm -r typecheck",
     "ci:verify": "pnpm typecheck && pnpm lint && pnpm format && pnpm test",
     "ci:build": "pnpm build"
   },
