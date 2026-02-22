@@ -22,6 +22,7 @@ import { HologramHUD } from './office3d/HologramHUD';
 import { FleetWallScreen } from './office3d/FleetWallScreen';
 import { SkyWindow } from './office3d/SkyWindow';
 import { AmbientParticles } from './office3d/AmbientParticles';
+import { VoxelDinosaur } from './office3d/VoxelDinosaur';
 import { MiniMap } from './office3d/MiniMap';
 
 type DeskStatus = 'active' | 'idle' | 'error' | 'offline';
@@ -271,6 +272,9 @@ function SceneContent(props: {
       <PlantPot position={[10.5, 0, -8.5]} size="medium" />
       <PlantPot position={[-10.5, 0, 7]} size="small" />
       <PlantPot position={[10.5, 0, 7]} size="small" />
+
+      {/* Dinosaur mascot */}
+      <VoxelDinosaur position={[10, 0, 7]} rotation={[0, -Math.PI * 0.7, 0]} />
 
       <WallClock position={[8.5, 3.5, -9.75]} />
 
