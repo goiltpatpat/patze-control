@@ -25,19 +25,38 @@ function sampleJob(overrides: Partial<OpenClawCronJob> = {}): OpenClawCronJob {
   return {
     jobId: 'job_1',
     name: 'Main Job',
-    schedule: { kind: 'cron', expr: '*/5 * * * *', at: undefined, everyMs: undefined, tz: 'UTC' },
+    schedule: {
+      kind: 'cron',
+      expr: '*/5 * * * *',
+      at: undefined,
+      everyMs: undefined,
+      anchorMs: undefined,
+      tz: 'UTC',
+      staggerMs: undefined,
+    },
     execution: { style: 'main', agentId: undefined, sessionTag: undefined },
+    payload: undefined,
     delivery: {
       mode: 'none',
+      channel: undefined,
+      to: undefined,
+      bestEffort: undefined,
       webhookUrl: undefined,
       webhookMethod: undefined,
       channelId: undefined,
     },
+    sessionTarget: undefined,
+    wakeMode: undefined,
+    deleteAfterRun: undefined,
     enabled: true,
     createdAt: '2026-02-20T00:00:00.000Z',
     updatedAt: undefined,
     lastRunAt: '2026-02-20T00:05:00.000Z',
     lastStatus: 'ok',
+    nextRunAtMs: undefined,
+    lastError: undefined,
+    lastDurationMs: undefined,
+    lastDelivered: undefined,
     consecutiveErrors: 0,
     ...overrides,
   };
@@ -63,12 +82,17 @@ test('openclaw sync maps webhook job to scheduled task', () => {
     jobId: 'deliver_job',
     delivery: {
       mode: 'webhook',
+      channel: 'slack',
+      to: 'https://example.com/hook',
+      bestEffort: true,
       webhookUrl: 'https://example.com/hook',
       webhookMethod: 'POST',
       channelId: undefined,
     },
     enabled: false,
     lastStatus: 'timeout',
+    lastError: 'timed out',
+    nextRunAtMs: Date.now() + 60_000,
     consecutiveErrors: 2,
   });
 
@@ -76,6 +100,8 @@ test('openclaw sync maps webhook job to scheduled task', () => {
   assert.equal(task.id, 'oc:deliver_job');
   assert.equal(task.status, 'disabled');
   assert.equal(task.lastRunStatus, 'error');
+  assert.equal(task.lastRunError, 'timed out');
+  assert.ok(typeof task.nextRunAtMs === 'number');
   assert.equal(task.action.action, 'custom_webhook');
   assert.deepEqual(task.action.params, {
     url: 'https://example.com/hook',

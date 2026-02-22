@@ -38,14 +38,45 @@ interface TaskRunRecord {
 interface OpenClawCronJob {
   jobId: string;
   name?: string;
-  schedule: { kind: string; expr?: string; everyMs?: number; at?: string; tz?: string };
+  schedule: {
+    kind: string;
+    expr?: string;
+    everyMs?: number;
+    at?: string;
+    tz?: string;
+    anchorMs?: number;
+    staggerMs?: number;
+  };
   execution: { style: string; agentId?: string; sessionTag?: string };
-  delivery: { mode: string; webhookUrl?: string; webhookMethod?: string; channelId?: string };
+  payload?: {
+    kind?: 'systemEvent' | 'agentTurn';
+    text?: string;
+    message?: string;
+    model?: string;
+    thinking?: string;
+    timeoutSeconds?: number;
+  };
+  delivery: {
+    mode: string;
+    webhookUrl?: string;
+    webhookMethod?: string;
+    channelId?: string;
+    channel?: string;
+    to?: string;
+    bestEffort?: boolean;
+  };
+  sessionTarget?: 'main' | 'isolated';
+  wakeMode?: 'next-heartbeat' | 'now';
+  deleteAfterRun?: boolean;
   enabled: boolean;
   createdAt: string;
   updatedAt?: string;
   lastRunAt?: string;
   lastStatus?: string;
+  nextRunAtMs?: number;
+  lastError?: string;
+  lastDurationMs?: number;
+  lastDelivered?: boolean;
   consecutiveErrors?: number;
 }
 
@@ -166,6 +197,13 @@ function formatDurationMs(ms?: number): string {
   return `${(ms / 60_000).toFixed(1)}m`;
 }
 
+function formatCompactMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+  return `${(ms / 3_600_000).toFixed(1)}h`;
+}
+
 function statusTone(status: string): string {
   switch (status) {
     case 'enabled':
@@ -176,6 +214,8 @@ function statusTone(status: string): string {
     case 'error':
     case 'timeout':
       return 'tone-bad';
+    case 'skipped':
+      return 'tone-warn';
     case 'disabled':
       return 'tone-muted';
     default:
@@ -1752,9 +1792,48 @@ function OpenClawJobsPanel(props: OpenClawJobsPanelProps): JSX.Element {
                   </td>
                   <td className="mono" style={{ fontSize: 12 }}>
                     {formatSchedule(job.schedule)}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      {job.schedule.kind === 'cron' && job.schedule.staggerMs !== undefined ? (
+                        <span
+                          className={`badge ${job.schedule.staggerMs > 0 ? 'tone-neutral' : 'tone-good'}`}
+                        >
+                          {job.schedule.staggerMs > 0
+                            ? `stagger ${formatCompactMs(job.schedule.staggerMs)}`
+                            : 'exact'}
+                        </span>
+                      ) : null}
+                      {job.schedule.kind === 'every' && job.schedule.anchorMs !== undefined ? (
+                        <span
+                          className="badge tone-neutral"
+                          title={`Anchor: ${job.schedule.anchorMs}`}
+                        >
+                          anchor {new Date(job.schedule.anchorMs).toLocaleTimeString()}
+                        </span>
+                      ) : null}
+                      {job.nextRunAtMs ? (
+                        <span className="badge tone-neutral">
+                          next {formatNextRun(job.nextRunAtMs)}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td>
                     <span className="badge tone-neutral">{job.execution.style}</span>
+                    {job.payload?.kind ? (
+                      <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
+                        {job.payload.kind}
+                      </span>
+                    ) : null}
+                    {job.sessionTarget ? (
+                      <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
+                        {job.sessionTarget}
+                      </span>
+                    ) : null}
+                    {job.wakeMode ? (
+                      <span className="badge tone-neutral" style={{ marginLeft: 6 }}>
+                        wake {job.wakeMode === 'next-heartbeat' ? 'next-hb' : 'now'}
+                      </span>
+                    ) : null}
                     {job.execution.sessionTag ? (
                       <span
                         className="badge tone-neutral"
@@ -1794,11 +1873,33 @@ function OpenClawJobsPanel(props: OpenClawJobsPanelProps): JSX.Element {
                         {job.delivery.webhookMethod ?? 'POST'} webhook
                       </span>
                     ) : null}
+                    {job.delivery.channel ? (
+                      <span
+                        className="tone-muted"
+                        style={{ display: 'block', fontSize: 10, marginTop: 2 }}
+                      >
+                        via {job.delivery.channel}
+                      </span>
+                    ) : null}
+                    {job.delivery.to ? (
+                      <span
+                        className="tone-muted"
+                        style={{ display: 'block', fontSize: 10, marginTop: 2 }}
+                        title={job.delivery.to}
+                      >
+                        to {job.delivery.to}
+                      </span>
+                    ) : null}
                   </td>
                   <td>
                     <span className={`badge ${job.enabled ? 'tone-good' : 'tone-muted'}`}>
                       {job.enabled ? 'active' : 'paused'}
                     </span>
+                    {job.lastStatus === 'skipped' ? (
+                      <span className="badge tone-warn" style={{ marginLeft: 6 }}>
+                        skipped
+                      </span>
+                    ) : null}
                     {(job.consecutiveErrors ?? 0) > 0 ? (
                       <span className="badge tone-bad" style={{ marginLeft: 6 }}>
                         {job.consecutiveErrors} err
@@ -1823,6 +1924,28 @@ function OpenClawJobsPanel(props: OpenClawJobsPanelProps): JSX.Element {
                         <span className="tone-muted" style={{ marginLeft: 6, fontSize: 11 }}>
                           {formatRelativeTime(job.lastRunAt)}
                         </span>
+                        {job.lastDurationMs !== undefined ? (
+                          <span className="tone-muted" style={{ marginLeft: 6, fontSize: 11 }}>
+                            {formatDurationMs(job.lastDurationMs)}
+                          </span>
+                        ) : null}
+                        {job.lastDelivered !== undefined ? (
+                          <span
+                            className={`badge ${job.lastDelivered ? 'tone-good' : 'tone-muted'}`}
+                            style={{ marginLeft: 6 }}
+                          >
+                            {job.lastDelivered ? 'delivered' : 'not delivered'}
+                          </span>
+                        ) : null}
+                        {job.lastError ? (
+                          <span
+                            className="tone-bad"
+                            style={{ display: 'block', marginTop: 2, fontSize: 10 }}
+                            title={job.lastError}
+                          >
+                            {job.lastError}
+                          </span>
+                        ) : null}
                       </>
                     ) : (
                       <span className="tone-muted">—</span>

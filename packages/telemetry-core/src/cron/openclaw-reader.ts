@@ -10,12 +10,20 @@ export interface OpenClawCronJob {
   readonly name: string | undefined;
   readonly schedule: OpenClawSchedule;
   readonly execution: OpenClawExecution;
+  readonly payload: OpenClawPayload | undefined;
   readonly delivery: OpenClawDelivery;
+  readonly sessionTarget: 'main' | 'isolated' | undefined;
+  readonly wakeMode: 'next-heartbeat' | 'now' | undefined;
+  readonly deleteAfterRun: boolean | undefined;
   readonly enabled: boolean;
   readonly createdAt: string;
   readonly updatedAt: string | undefined;
   readonly lastRunAt: string | undefined;
-  readonly lastStatus: 'ok' | 'error' | 'timeout' | undefined;
+  readonly lastStatus: 'ok' | 'error' | 'timeout' | 'skipped' | undefined;
+  readonly nextRunAtMs: number | undefined;
+  readonly lastError: string | undefined;
+  readonly lastDurationMs: number | undefined;
+  readonly lastDelivered: boolean | undefined;
   readonly consecutiveErrors: number | undefined;
 }
 
@@ -23,8 +31,10 @@ export interface OpenClawSchedule {
   readonly kind: 'at' | 'every' | 'cron';
   readonly at: string | undefined;
   readonly everyMs: number | undefined;
+  readonly anchorMs: number | undefined;
   readonly expr: string | undefined;
   readonly tz: string | undefined;
+  readonly staggerMs: number | undefined;
 }
 
 export interface OpenClawExecution {
@@ -33,8 +43,20 @@ export interface OpenClawExecution {
   readonly sessionTag: string | undefined;
 }
 
+export interface OpenClawPayload {
+  readonly kind: 'systemEvent' | 'agentTurn';
+  readonly text: string | undefined;
+  readonly message: string | undefined;
+  readonly model: string | undefined;
+  readonly thinking: string | undefined;
+  readonly timeoutSeconds: number | undefined;
+}
+
 export interface OpenClawDelivery {
   readonly mode: 'announce' | 'webhook' | 'none';
+  readonly channel: string | undefined;
+  readonly to: string | undefined;
+  readonly bestEffort: boolean | undefined;
   readonly webhookUrl: string | undefined;
   readonly webhookMethod: string | undefined;
   readonly channelId: string | undefined;
@@ -197,14 +219,33 @@ function normalizeJob(raw: unknown, fallbackId?: string): OpenClawCronJob | null
     name: typeof obj.name === 'string' ? obj.name : undefined,
     schedule,
     execution: parseExecution(obj.execution),
+    payload: parsePayload(obj.payload),
     delivery: parseDelivery(obj.delivery),
+    sessionTarget: parseSessionTarget(obj.sessionTarget),
+    wakeMode: parseWakeMode(obj.wakeMode),
+    deleteAfterRun: typeof obj.deleteAfterRun === 'boolean' ? obj.deleteAfterRun : undefined,
     enabled: obj.enabled !== false,
-    createdAt: typeof obj.createdAt === 'string' ? obj.createdAt : new Date().toISOString(),
-    updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : undefined,
-    lastRunAt: typeof obj.lastRunAt === 'string' ? obj.lastRunAt : undefined,
-    lastStatus: isValidStatus(obj.lastStatus) ? obj.lastStatus : undefined,
+    createdAt: toIsoDate(obj.createdAt) ?? toIsoDate(obj.createdAtMs) ?? new Date().toISOString(),
+    updatedAt: toIsoDate(obj.updatedAt) ?? toIsoDate(obj.updatedAtMs),
+    lastRunAt:
+      toIsoDate(obj.lastRunAt) ??
+      toIsoDate(obj.lastRunAtMs) ??
+      toIsoDate(extractState(obj)?.lastRunAtMs),
+    lastStatus: parseJobStatus(obj.lastStatus, extractState(obj)),
+    nextRunAtMs:
+      parseNumberOrUndefined(obj.nextRunAtMs) ??
+      parseNumberOrUndefined(extractState(obj)?.nextRunAtMs),
+    lastError:
+      parseStringOrUndefined(obj.lastError) ?? parseStringOrUndefined(extractState(obj)?.lastError),
+    lastDurationMs:
+      parseNumberOrUndefined(obj.lastDurationMs) ??
+      parseNumberOrUndefined(extractState(obj)?.lastDurationMs),
+    lastDelivered:
+      parseBooleanOrUndefined(obj.lastDelivered) ??
+      parseBooleanOrUndefined(extractState(obj)?.lastDelivered),
     consecutiveErrors:
-      typeof obj.consecutiveErrors === 'number' ? obj.consecutiveErrors : undefined,
+      parseNumberOrUndefined(obj.consecutiveErrors) ??
+      parseNumberOrUndefined(extractState(obj)?.consecutiveErrors),
   };
 }
 
@@ -223,6 +264,7 @@ function parseSchedule(raw: unknown): OpenClawSchedule | null {
         : typeof obj.intervalMs === 'number'
           ? obj.intervalMs
           : undefined,
+    anchorMs: typeof obj.anchorMs === 'number' ? obj.anchorMs : undefined,
     expr:
       typeof obj.expr === 'string'
         ? obj.expr
@@ -235,6 +277,7 @@ function parseSchedule(raw: unknown): OpenClawSchedule | null {
         : typeof obj.timezone === 'string'
           ? obj.timezone
           : undefined,
+    staggerMs: typeof obj.staggerMs === 'number' ? obj.staggerMs : undefined,
   };
 }
 
@@ -250,23 +293,115 @@ function parseExecution(raw: unknown): OpenClawExecution {
   };
 }
 
-function parseDelivery(raw: unknown): OpenClawDelivery {
+function parsePayload(raw: unknown): OpenClawPayload | undefined {
   if (typeof raw !== 'object' || raw === null) {
-    return { mode: 'none', webhookUrl: undefined, webhookMethod: undefined, channelId: undefined };
+    return undefined;
   }
   const obj = raw as Record<string, unknown>;
-  const mode = obj.mode === 'announce' ? 'announce' : obj.mode === 'webhook' ? 'webhook' : 'none';
-
+  const kind = obj.kind;
+  if (kind !== 'systemEvent' && kind !== 'agentTurn') {
+    return undefined;
+  }
   return {
-    mode,
-    webhookUrl: typeof obj.webhookUrl === 'string' ? obj.webhookUrl : undefined,
-    webhookMethod: typeof obj.webhookMethod === 'string' ? obj.webhookMethod : undefined,
-    channelId: typeof obj.channelId === 'string' ? obj.channelId : undefined,
+    kind,
+    text: typeof obj.text === 'string' ? obj.text : undefined,
+    message: typeof obj.message === 'string' ? obj.message : undefined,
+    model: typeof obj.model === 'string' ? obj.model : undefined,
+    thinking: typeof obj.thinking === 'string' ? obj.thinking : undefined,
+    timeoutSeconds: typeof obj.timeoutSeconds === 'number' ? obj.timeoutSeconds : undefined,
   };
 }
 
-function isValidStatus(v: unknown): v is 'ok' | 'error' | 'timeout' {
-  return v === 'ok' || v === 'error' || v === 'timeout';
+function parseDelivery(raw: unknown): OpenClawDelivery {
+  if (typeof raw !== 'object' || raw === null) {
+    return {
+      mode: 'none',
+      channel: undefined,
+      to: undefined,
+      bestEffort: undefined,
+      webhookUrl: undefined,
+      webhookMethod: undefined,
+      channelId: undefined,
+    };
+  }
+  const obj = raw as Record<string, unknown>;
+  const mode = obj.mode === 'announce' ? 'announce' : obj.mode === 'webhook' ? 'webhook' : 'none';
+  const to = typeof obj.to === 'string' ? obj.to : undefined;
+  const channel = typeof obj.channel === 'string' ? obj.channel : undefined;
+  const channelId = typeof obj.channelId === 'string' ? obj.channelId : channel;
+  const webhookUrl =
+    typeof obj.webhookUrl === 'string'
+      ? obj.webhookUrl
+      : mode === 'webhook' && to && /^https?:\/\//i.test(to)
+        ? to
+        : undefined;
+
+  return {
+    mode,
+    channel,
+    to,
+    bestEffort: typeof obj.bestEffort === 'boolean' ? obj.bestEffort : undefined,
+    webhookUrl,
+    webhookMethod: typeof obj.webhookMethod === 'string' ? obj.webhookMethod : undefined,
+    channelId,
+  };
+}
+
+function parseSessionTarget(value: unknown): 'main' | 'isolated' | undefined {
+  return value === 'main' || value === 'isolated' ? value : undefined;
+}
+
+function parseWakeMode(value: unknown): 'next-heartbeat' | 'now' | undefined {
+  return value === 'next-heartbeat' || value === 'now' ? value : undefined;
+}
+
+function parseJobStatus(
+  value: unknown,
+  state: Record<string, unknown> | undefined
+): 'ok' | 'error' | 'timeout' | 'skipped' | undefined {
+  if (value === 'ok' || value === 'error' || value === 'timeout' || value === 'skipped') {
+    return value;
+  }
+  const stateStatus = state?.lastStatus;
+  if (
+    stateStatus === 'ok' ||
+    stateStatus === 'error' ||
+    stateStatus === 'timeout' ||
+    stateStatus === 'skipped'
+  ) {
+    return stateStatus;
+  }
+  return undefined;
+}
+
+function parseStringOrUndefined(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function parseNumberOrUndefined(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function parseBooleanOrUndefined(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function extractState(job: Record<string, unknown>): Record<string, unknown> | undefined {
+  const state = job.state;
+  return typeof state === 'object' && state !== null
+    ? (state as Record<string, unknown>)
+    : undefined;
+}
+
+function toIsoDate(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? undefined : new Date(parsed).toISOString();
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Date(value).toISOString();
+  }
+  return undefined;
 }
 
 function sanitizeFilename(name: string): string {
