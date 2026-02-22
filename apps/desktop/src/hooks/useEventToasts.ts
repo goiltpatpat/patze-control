@@ -12,15 +12,13 @@ interface ToastEvent {
 
 function diffEvents(
   prev: FrontendUnifiedSnapshot | null,
-  next: FrontendUnifiedSnapshot | null,
+  next: FrontendUnifiedSnapshot | null
 ): ToastEvent[] {
   if (!next || !prev) return [];
 
   const events: ToastEvent[] = [];
 
-  const prevMachineStatus = new Map(
-    prev.machines.map((m) => [m.machineId, m.status]),
-  );
+  const prevMachineStatus = new Map(prev.machines.map((m) => [m.machineId, m.status]));
   for (const machine of next.machines) {
     const prevStatus = prevMachineStatus.get(machine.machineId);
     if (prevStatus && prevStatus !== 'offline' && machine.status === 'offline') {
@@ -32,9 +30,7 @@ function diffEvents(
     }
   }
 
-  const prevRunStates = new Map(
-    prev.runs.map((r) => [r.runId, r.state]),
-  );
+  const prevRunStates = new Map(prev.runs.map((r) => [r.runId, r.state]));
   for (const run of next.runs) {
     const prevState = prevRunStates.get(run.runId);
     if (prevState && prevState !== 'failed' && run.state === 'failed') {

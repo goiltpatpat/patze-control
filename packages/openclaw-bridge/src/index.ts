@@ -34,8 +34,11 @@ async function main(): Promise<void> {
   logger.info('bridge_started', {
     baseUrl: config.controlPlaneBaseUrl,
     machineId: config.machineId,
+    machineIdFile: config.machineIdFile,
     heartbeatMs: config.heartbeatIntervalMs,
+    cronSyncMs: config.cronSyncIntervalMs,
     sourceMode: config.sourceMode,
+    bridgeVersion: config.bridgeVersion,
   });
 }
 

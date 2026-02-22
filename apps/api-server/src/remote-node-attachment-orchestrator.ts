@@ -10,6 +10,7 @@ import { SshTunnelRuntime, type TunnelInfo } from './ssh-tunnel-runtime.js';
 export interface RemoteAttachmentInfo {
   endpointId: string;
   nodeId: string;
+  sshUser: string;
   tunnel: TunnelInfo;
   attachedAt: string;
 }
@@ -147,6 +148,11 @@ export class RemoteNodeAttachmentOrchestrator {
     );
   }
 
+  public getEndpointConfig(endpointId: string): MachineEndpoint | null {
+    const attachment = this.attachments.get(endpointId);
+    return attachment ? { ...attachment.endpoint } : null;
+  }
+
   public async close(): Promise<void> {
     const endpointIds = Array.from(this.attachments.keys());
     for (const endpointId of endpointIds) {
@@ -159,6 +165,7 @@ export class RemoteNodeAttachmentOrchestrator {
     return Object.freeze({
       endpointId: attachment.endpointId,
       nodeId: attachment.nodeId,
+      sshUser: attachment.endpoint.ssh?.user ?? '',
       tunnel: attachment.tunnel,
       attachedAt: attachment.attachedAt,
     });
@@ -179,7 +186,7 @@ export class RemoteNodeAttachmentOrchestrator {
 
     if (!response.ok) {
       throw new Error(
-        `Remote health check failed for endpoint '${endpoint.id}' with status ${String(response.status)}.`
+        `Remote health check failed for endpoint '${endpoint.id}' with status ${response.status}.`
       );
     }
 

@@ -178,10 +178,8 @@ export function createControlClient(options: ControlClientOptions): ControlClien
   const seenEventIds = new Set<string>();
   const seenEventQueue: string[] = [];
 
-  const reconnectBaseDelayMs =
-    options.reconnectBaseDelayMs ?? DEFAULT_RECONNECT_BASE_DELAY_MS;
-  const reconnectMaxDelayMs =
-    options.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS;
+  const reconnectBaseDelayMs = options.reconnectBaseDelayMs ?? DEFAULT_RECONNECT_BASE_DELAY_MS;
+  const reconnectMaxDelayMs = options.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS;
   const maxSeenEventIds = options.maxSeenEventIds ?? DEFAULT_MAX_SEEN_EVENT_IDS;
 
   const snapshotUrl = toAbsoluteUrl(options.baseUrl, '/snapshot');

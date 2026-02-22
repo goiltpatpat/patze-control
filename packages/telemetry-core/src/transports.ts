@@ -41,6 +41,7 @@ export interface MachineEndpoint {
   baseUrl?: string;
   ssh?: SshConfig;
   auth?: AuthConfig;
+  headers?: Record<string, string>;
 }
 
 export class InProcessSourceAdapter implements TelemetryEventSource {
@@ -380,6 +381,9 @@ export class HttpSinkAdapter implements TelemetryEventSink {
     };
     if (this.options.endpoint.auth?.mode === 'token' && this.options.endpoint.auth.token) {
       headers.Authorization = `Bearer ${this.options.endpoint.auth.token}`;
+    }
+    if (this.options.endpoint.headers) {
+      Object.assign(headers, this.options.endpoint.headers);
     }
     return headers;
   }

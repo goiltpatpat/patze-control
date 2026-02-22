@@ -1,4 +1,11 @@
-import type { AnyTelemetryEvent, AgentId, MachineId, RunId, SessionId, SessionRunLifecycleState } from '@patze/telemetry-core';
+import type {
+  AnyTelemetryEvent,
+  AgentId,
+  MachineId,
+  RunId,
+  SessionId,
+  SessionRunLifecycleState,
+} from '@patze/telemetry-core';
 
 export type BridgeSourceMode = 'files' | 'cli';
 

@@ -1,6 +1,13 @@
 import { useEffect } from 'react';
 import type { MonitorState } from '../control-monitor';
-import type { ConnectCredentials, ManagedEndpoint, PersistedEndpoint } from '../hooks/useEndpointManager';
+import type { BridgeConnection } from '../hooks/useBridgeConnections';
+import type {
+  ConnectCredentials,
+  ManagedEndpoint,
+  PersistedEndpoint,
+} from '../hooks/useEndpointManager';
+import type { ManagedBridgeState, BridgeSetupInput } from '../hooks/useManagedBridges';
+import { useOpenClawTargets } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus } from '../types';
 import type { TunnelEndpointRow } from '../views/TunnelsView';
 import { MainView } from './MainView';
@@ -28,6 +35,12 @@ export interface AppShellProps {
   readonly onRemoveEndpoint: (id: string) => void;
   readonly onConnectEndpoint: (id: string, credentials: ConnectCredentials) => Promise<void>;
   readonly onDisconnectEndpoint: (id: string) => Promise<void>;
+  readonly bridgeConnections: readonly BridgeConnection[];
+  readonly managedBridges: readonly ManagedBridgeState[];
+  readonly onSetupBridge: (input: BridgeSetupInput) => Promise<ManagedBridgeState | null>;
+  readonly onDisconnectBridge: (id: string) => Promise<boolean>;
+  readonly onRemoveBridge: (id: string) => Promise<boolean>;
+  readonly managedBridgesLoading: boolean;
 }
 
 const SHORTCUT_MAP: Readonly<Record<string, AppRoute>> = {
@@ -36,9 +49,11 @@ const SHORTCUT_MAP: Readonly<Record<string, AppRoute>> = {
   '3': 'tunnels',
   '4': 'machines',
   '5': 'sessions',
-  '6': 'runs',
-  '7': 'logs',
-  '8': 'settings',
+  '6': 'channels',
+  '7': 'runs',
+  '8': 'logs',
+  '9': 'tasks',
+  '0': 'settings',
 };
 
 function isInputFocused(): boolean {
@@ -48,6 +63,7 @@ function isInputFocused(): boolean {
 
 export function AppShell(props: AppShellProps): JSX.Element {
   const { routeState } = useAppRoute();
+  const openclawTargets = useOpenClawTargets(props.baseUrl, props.token, props.status);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
@@ -64,7 +80,9 @@ export function AppShell(props: AppShellProps): JSX.Element {
     }
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => { window.removeEventListener('keydown', handleKeyDown); };
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   return (
@@ -80,7 +98,12 @@ export function AppShell(props: AppShellProps): JSX.Element {
         onDisconnect={props.onDisconnect}
       />
       <div className="shell-body">
-        <SidebarNav route={routeState.route} onNavigate={(r) => { navigate(r); }} />
+        <SidebarNav
+          route={routeState.route}
+          onNavigate={(r) => {
+            navigate(r);
+          }}
+        />
         <section className="shell-main">
           <MainView
             routeState={routeState}
@@ -88,6 +111,7 @@ export function AppShell(props: AppShellProps): JSX.Element {
             tunnelEndpoints={props.tunnelEndpoints}
             isTunnelTransitioning={props.isTunnelTransitioning}
             baseUrl={props.baseUrl}
+            token={props.token}
             status={props.status}
             onConnect={props.onConnect}
             onAttach={props.onConnect}
@@ -98,10 +122,21 @@ export function AppShell(props: AppShellProps): JSX.Element {
             onRemoveEndpoint={props.onRemoveEndpoint}
             onConnectEndpoint={props.onConnectEndpoint}
             onDisconnectEndpoint={props.onDisconnectEndpoint}
+            bridgeConnections={props.bridgeConnections}
+            managedBridges={props.managedBridges}
+            onSetupBridge={props.onSetupBridge}
+            onDisconnectBridge={props.onDisconnectBridge}
+            onRemoveBridge={props.onRemoveBridge}
+            managedBridgesLoading={props.managedBridgesLoading}
+            openclawTargets={openclawTargets}
           />
         </section>
       </div>
-      <StatusStrip state={props.monitorState} />
+      <StatusStrip
+        state={props.monitorState}
+        bridgeCount={props.bridgeConnections.length}
+        openclawSummary={openclawTargets.summary}
+      />
     </main>
   );
 }

@@ -15,7 +15,7 @@
 
 ## Environment
 
-- `CONTROL_PLANE_BASE_URL` (default: `http://127.0.0.1:8080`)
+- `CONTROL_PLANE_BASE_URL` (default: `http://127.0.0.1:9700`)
 - `CONTROL_PLANE_TOKEN` (optional)
 - `MACHINE_ID` (optional; persisted if omitted)
 - `MACHINE_LABEL` (default: hostname)

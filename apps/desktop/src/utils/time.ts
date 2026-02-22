@@ -5,8 +5,8 @@ const DAY = 24 * HOUR;
 
 export function formatRelativeTime(isoTimestamp: string): string {
   const date = new Date(isoTimestamp);
-  if (Number.isNaN(date.getTime())) {
-    return isoTimestamp;
+  if (Number.isNaN(date.getTime()) || date.getTime() === 0) {
+    return '—';
   }
 
   const diff = Date.now() - date.getTime();
@@ -19,14 +19,14 @@ export function formatRelativeTime(isoTimestamp: string): string {
   }
   if (diff < HOUR) {
     const mins = Math.floor(diff / MINUTE);
-    return `${String(mins)}m ago`;
+    return `${mins}m ago`;
   }
   if (diff < DAY) {
     const hours = Math.floor(diff / HOUR);
-    return `${String(hours)}h ago`;
+    return `${hours}h ago`;
   }
   const days = Math.floor(diff / DAY);
-  return `${String(days)}d ago`;
+  return `${days}d ago`;
 }
 
 export function formatDuration(startIso: string, endIso?: string): string {
@@ -46,26 +46,26 @@ export function formatDuration(startIso: string, endIso?: string): string {
   }
 
   if (diff < MINUTE) {
-    return `${String(Math.floor(diff / SECOND))}s`;
+    return `${Math.floor(diff / SECOND)}s`;
   }
   if (diff < HOUR) {
     const mins = Math.floor(diff / MINUTE);
     const secs = Math.floor((diff % MINUTE) / SECOND);
-    return secs > 0 ? `${String(mins)}m ${String(secs)}s` : `${String(mins)}m`;
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
   }
   if (diff < DAY) {
     const hours = Math.floor(diff / HOUR);
     const mins = Math.floor((diff % HOUR) / MINUTE);
-    return mins > 0 ? `${String(hours)}h ${String(mins)}m` : `${String(hours)}h`;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   }
   const days = Math.floor(diff / DAY);
   const hours = Math.floor((diff % DAY) / HOUR);
-  return hours > 0 ? `${String(days)}d ${String(hours)}h` : `${String(days)}d`;
+  return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
 }
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
-    return `${String(bytes)} B`;
+    return `${bytes} B`;
   }
   if (bytes < 1024 * 1024) {
     return `${(bytes / 1024).toFixed(1)} KB`;

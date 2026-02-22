@@ -1,9 +1,26 @@
 import fs from 'node:fs';
 import os from 'node:os';
-import type { AgentId, LogEntryId, MachineId, SessionId, SessionRunLifecycleState, ToolCallId, TraceId, SpanId, TelemetryEventId, RunId } from '@patze/telemetry-core';
-import type { DetectedRun, MachineInfo, MapperState, SessionTrack, TelemetryEnvelope } from './types.js';
+import {
+  TELEMETRY_SCHEMA_VERSION,
+  type AgentId,
+  type LogEntryId,
+  type MachineId,
+  type RunId,
+  type SessionId,
+  type SessionRunLifecycleState,
+  type SpanId,
+  type TelemetryEventId,
+  type ToolCallId,
+  type TraceId,
+} from '@patze/telemetry-core';
 import { MAPPER_SESSION_CAP, MAPPER_SESSION_EVICT_MS } from './types.js';
-import { TELEMETRY_SCHEMA_VERSION } from '@patze/telemetry-core';
+import type {
+  DetectedRun,
+  MachineInfo,
+  MapperState,
+  SessionTrack,
+  TelemetryEnvelope,
+} from './types.js';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -15,7 +32,8 @@ function makeEventId(): TelemetryEventId {
 
 function makeTrace(): { traceId: TraceId; spanId: SpanId } {
   return {
-    traceId: `trace_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}` as TraceId,
+    traceId:
+      `trace_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}` as TraceId,
     spanId: `span_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}` as SpanId,
   };
 }
@@ -44,16 +62,16 @@ function toRunStateChangedEvent(
   to: SessionRunLifecycleState,
   isFirstSeen?: boolean
 ): TelemetryEnvelope {
-  const ts = isFirstSeen && isValidIsoTimestamp(run.startedAt)
-    ? run.startedAt!
-    : nowIso();
+  const ts = isFirstSeen && isValidIsoTimestamp(run.startedAt) ? run.startedAt! : nowIso();
+
+  const reason = to === 'failed' && run.errorMessage ? run.errorMessage : undefined;
 
   return {
     version: TELEMETRY_SCHEMA_VERSION,
     id: makeEventId(),
     ts,
     machineId,
-    severity: 'info',
+    severity: to === 'failed' ? 'error' : 'info',
     type: 'run.state.changed',
     payload: {
       runId: run.runId,
@@ -61,6 +79,7 @@ function toRunStateChangedEvent(
       agentId: run.agentId,
       from,
       to,
+      ...(reason !== undefined ? { reason } : {}),
     },
     trace: makeTrace(),
   };
@@ -86,7 +105,11 @@ export function toMachineRegisteredEvent(machine: MachineInfo): TelemetryEnvelop
   };
 }
 
-function collectDiskStats(): { diskUsageBytes: number; diskTotalBytes: number; diskPct: number } | null {
+function collectDiskStats(): {
+  diskUsageBytes: number;
+  diskTotalBytes: number;
+  diskPct: number;
+} | null {
   try {
     const stat = fs.statfsSync('/');
     const totalBytes = stat.bsize * stat.blocks;
@@ -195,7 +218,13 @@ function inferSessionEvents(
       };
       state.knownSessions.set(payload.sessionId, newTrack);
       sessionEvents.push(
-        toSessionStateChangedEvent(machineId, payload.sessionId, payload.agentId, 'created', 'running')
+        toSessionStateChangedEvent(
+          machineId,
+          payload.sessionId,
+          payload.agentId,
+          'created',
+          'running'
+        )
       );
     }
 
@@ -209,9 +238,7 @@ function inferSessionEvents(
 
   for (const [sessionId, track] of state.knownSessions) {
     if (track.activeRunIds.size === 0 && isActiveState(track.state)) {
-      const allRuns = Array.from(state.knownRuns.values()).filter(
-        (r) => r.sessionId === sessionId
-      );
+      const allRuns = Array.from(state.knownRuns.values()).filter((r) => r.sessionId === sessionId);
       const anyFailed = allRuns.some((r) => r.state === 'failed');
       const terminalState: SessionRunLifecycleState = anyFailed ? 'failed' : 'completed';
 
@@ -221,7 +248,13 @@ function inferSessionEvents(
       }
 
       sessionEvents.push(
-        toSessionStateChangedEvent(track.machineId, sessionId, track.agentId, track.state, terminalState)
+        toSessionStateChangedEvent(
+          track.machineId,
+          sessionId,
+          track.agentId,
+          track.state,
+          terminalState
+        )
       );
       track.state = terminalState;
       track.terminalSince = Date.now();
@@ -333,7 +366,12 @@ function toRunToolEvents(
           runId: run.runId,
           toolCallId,
           toolName: tc.toolName,
-          status: tc.status === 'cancelled' ? 'cancelled' : tc.status === 'failed' ? 'failed' : 'completed',
+          status:
+            tc.status === 'cancelled'
+              ? 'cancelled'
+              : tc.status === 'failed'
+                ? 'failed'
+                : 'completed',
           durationMs: tc.durationMs ?? 0,
           success: tc.success ?? tc.status === 'completed',
           ...(tc.errorMessage ? { errorMessage: tc.errorMessage } : {}),
@@ -373,7 +411,9 @@ function toRunModelUsageEvent(
       inputTokens: run.modelUsage.inputTokens,
       outputTokens: run.modelUsage.outputTokens,
       totalTokens: run.modelUsage.totalTokens,
-      ...(run.modelUsage.estimatedCostUsd !== undefined ? { estimatedCostUsd: run.modelUsage.estimatedCostUsd } : {}),
+      ...(run.modelUsage.estimatedCostUsd !== undefined
+        ? { estimatedCostUsd: run.modelUsage.estimatedCostUsd }
+        : {}),
       measuredAt: nowIso(),
     },
     trace: makeTrace(),
@@ -434,7 +474,9 @@ export function mapRunStateChangedEvents(
       events.push(...toRunToolEvents(machineId, run, state));
       events.push(...toRunLogEvents(machineId, run, state));
       const modelEvt = toRunModelUsageEvent(machineId, run, state);
-      if (modelEvt) { events.push(modelEvt); }
+      if (modelEvt) {
+        events.push(modelEvt);
+      }
       state.knownRuns.set(run.runId, run);
       continue;
     }
@@ -456,7 +498,9 @@ export function mapRunStateChangedEvents(
     events.push(...toRunToolEvents(machineId, run, state));
     events.push(...toRunLogEvents(machineId, run, state));
     const modelEvt = toRunModelUsageEvent(machineId, run, state);
-    if (modelEvt) { events.push(modelEvt); }
+    if (modelEvt) {
+      events.push(modelEvt);
+    }
     state.knownRuns.set(run.runId, run);
   }
 

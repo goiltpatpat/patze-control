@@ -18,9 +18,7 @@ type MachineFilter = 'all' | 'local' | 'vps' | 'offline';
 export function MachinesView(props: MachinesViewProps): JSX.Element {
   const [filter, setFilter] = useState<MachineFilter>('all');
   const machines = props.snapshot?.machines ?? [];
-  const healthMap = new Map(
-    (props.snapshot?.health.machines ?? []).map((h) => [h.machineId, h])
-  );
+  const healthMap = new Map((props.snapshot?.health.machines ?? []).map((h) => [h.machineId, h]));
 
   const localCount = machines.filter((m) => m.kind === 'local').length;
   const vpsCount = machines.filter((m) => m.kind === 'vps').length;
@@ -35,10 +33,14 @@ export function MachinesView(props: MachinesViewProps): JSX.Element {
 
   const filtered = machines.filter((m) => {
     switch (filter) {
-      case 'local': return m.kind === 'local';
-      case 'vps': return m.kind === 'vps';
-      case 'offline': return m.status === 'offline';
-      case 'all': return true;
+      case 'local':
+        return m.kind === 'local';
+      case 'vps':
+        return m.kind === 'vps';
+      case 'offline':
+        return m.status === 'offline';
+      case 'all':
+        return true;
     }
   });
 
@@ -51,10 +53,20 @@ export function MachinesView(props: MachinesViewProps): JSX.Element {
 
       {filtered.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconServer width={28} height={28} /></div>
-          {machines.length === 0
-            ? 'No machines registered. Connect to a control plane to see machines.'
-            : 'No machines match the current filter.'}
+          <div className="empty-state-icon">
+            <IconServer width={28} height={28} />
+          </div>
+          {machines.length === 0 ? (
+            <>
+              <p style={{ margin: '4px 0 0' }}>No machines registered yet.</p>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                Machines appear when OpenClaw sessions send telemetry. Connect a VPS bridge or start
+                a local agent to see machines here.
+              </p>
+            </>
+          ) : (
+            'No machines match the current filter.'
+          )}
         </div>
       ) : (
         <div className="machine-grid">
@@ -67,7 +79,9 @@ export function MachinesView(props: MachinesViewProps): JSX.Element {
                 className="machine-card machine-card-clickable"
                 role="button"
                 tabIndex={0}
-                onClick={() => { navigate('sessions', { machineId: machine.machineId }); }}
+                onClick={() => {
+                  navigate('sessions', { machineId: machine.machineId });
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
@@ -77,9 +91,7 @@ export function MachinesView(props: MachinesViewProps): JSX.Element {
               >
                 <div className="machine-card-header">
                   <div className="machine-card-title">
-                    <span className="machine-card-name">
-                      {machine.name ?? machine.machineId}
-                    </span>
+                    <span className="machine-card-name">{machine.name ?? machine.machineId}</span>
                     {machine.name ? (
                       <span className="machine-card-id">{machine.machineId}</span>
                     ) : null}
@@ -91,9 +103,7 @@ export function MachinesView(props: MachinesViewProps): JSX.Element {
                   <div className="machine-card-meta-item">
                     <span className="machine-card-meta-label">Kind</span>
                     <span className="machine-card-meta-value">
-                      {machine.kind ? (
-                        <span className="kind-badge">{machine.kind}</span>
-                      ) : '—'}
+                      {machine.kind ? <span className="kind-badge">{machine.kind}</span> : '—'}
                     </span>
                   </div>
                   <div className="machine-card-meta-item">
@@ -110,8 +120,10 @@ export function MachinesView(props: MachinesViewProps): JSX.Element {
                   </div>
                   <div className="machine-card-meta-item">
                     <span className="machine-card-meta-label">Active Runs</span>
-                    <span className={`machine-card-meta-value${(health?.activeRunCount ?? 0) > 0 ? ' metric-active' : ''}`}>
-                      {String(health?.activeRunCount ?? 0)}
+                    <span
+                      className={`machine-card-meta-value${(health?.activeRunCount ?? 0) > 0 ? ' metric-active' : ''}`}
+                    >
+                      {health?.activeRunCount ?? 0}
                     </span>
                   </div>
                 </div>
@@ -122,7 +134,9 @@ export function MachinesView(props: MachinesViewProps): JSX.Element {
                     <GaugeBar
                       label="Memory"
                       value={resource.memoryPct}
-                      formatValue={() => `${resource.memoryPct.toFixed(0)}% (${formatBytes(resource.memoryBytes)})`}
+                      formatValue={() =>
+                        `${resource.memoryPct.toFixed(0)}% (${formatBytes(resource.memoryBytes)})`
+                      }
                     />
                     {resource.diskPct !== undefined ? (
                       <GaugeBar

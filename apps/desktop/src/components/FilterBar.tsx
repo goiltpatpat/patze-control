@@ -16,7 +16,11 @@ function buildSegments(route: AppRoute, filter: RouteFilter): BreadcrumbSegment[
 
   if (filter.machineId) {
     segments.push({ label: 'Machines', route: 'machines' });
-    segments.push({ label: filter.machineId, route: 'machines', filter: { machineId: filter.machineId } });
+    segments.push({
+      label: filter.machineId,
+      route: 'machines',
+      filter: { machineId: filter.machineId },
+    });
   }
 
   if (filter.agentId) {
@@ -26,7 +30,16 @@ function buildSegments(route: AppRoute, filter: RouteFilter): BreadcrumbSegment[
 
   if (filter.sessionId) {
     segments.push({ label: 'Sessions', route: 'sessions' });
-    segments.push({ label: filter.sessionId, route: 'sessions', filter: { sessionId: filter.sessionId } });
+    segments.push({
+      label: filter.sessionId,
+      route: 'sessions',
+      filter: { sessionId: filter.sessionId },
+    });
+  }
+
+  if (filter.taskView === 'openclaw') {
+    segments.push({ label: 'Tasks', route: 'tasks' });
+    segments.push({ label: 'OpenClaw', route: 'tasks', filter: { taskView: 'openclaw' } });
   }
 
   const routeLabels: Record<string, string> = {
@@ -60,14 +73,20 @@ export function FilterBar(props: FilterBarProps): JSX.Element | null {
       {segments.map((seg, i) => {
         const isLast = i === segments.length - 1;
         return (
-          <span key={`${seg.route}-${seg.label}-${String(i)}`} className="breadcrumb-segment">
-            {i > 0 ? <span className="breadcrumb-sep" aria-hidden="true">&rsaquo;</span> : null}
+          <span key={`${seg.route}-${seg.label}-${i}`} className="breadcrumb-segment">
+            {i > 0 ? (
+              <span className="breadcrumb-sep" aria-hidden="true">
+                &rsaquo;
+              </span>
+            ) : null}
             {isLast ? (
               <span className="breadcrumb-current">{truncateId(seg.label)}</span>
             ) : (
               <button
                 className="breadcrumb-link"
-                onClick={() => { navigate(seg.route, seg.filter); }}
+                onClick={() => {
+                  navigate(seg.route, seg.filter);
+                }}
               >
                 {truncateId(seg.label)}
               </button>
@@ -77,7 +96,9 @@ export function FilterBar(props: FilterBarProps): JSX.Element | null {
       })}
       <button
         className="filter-bar-clear"
-        onClick={() => { navigate(props.route); }}
+        onClick={() => {
+          navigate(props.route);
+        }}
         aria-label="Clear filter"
       >
         &times;

@@ -4,16 +4,7 @@
   "title": "Telemetry Envelope (telemetry.v1)",
   "type": "object",
   "additionalProperties": true,
-  "required": [
-    "version",
-    "id",
-    "ts",
-    "machineId",
-    "severity",
-    "type",
-    "payload",
-    "trace"
-  ],
+  "required": ["version", "id", "ts", "machineId", "severity", "type", "payload", "trace"],
   "properties": {
     "version": {
       "type": "string",
@@ -37,13 +28,7 @@
     },
     "severity": {
       "type": "string",
-      "enum": [
-        "debug",
-        "info",
-        "warn",
-        "error",
-        "critical"
-      ]
+      "enum": ["debug", "info", "warn", "error", "critical"]
     },
     "type": {
       "type": "string",
@@ -65,9 +50,7 @@
     "trace": {
       "type": "object",
       "additionalProperties": true,
-      "required": [
-        "traceId"
-      ],
+      "required": ["traceId"],
       "properties": {
         "traceId": {
           "type": "string",

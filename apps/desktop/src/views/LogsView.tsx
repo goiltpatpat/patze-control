@@ -11,12 +11,18 @@ type LogFilter = 'all' | 'error' | 'warn' | 'info' | 'debug';
 
 function levelTone(level: string): string {
   switch (level) {
-    case 'critical': return 'critical';
-    case 'error': return 'bad';
-    case 'warn': return 'warn';
-    case 'info': return 'info';
-    case 'debug': return 'muted';
-    default: return 'neutral';
+    case 'critical':
+      return 'critical';
+    case 'error':
+      return 'bad';
+    case 'warn':
+      return 'warn';
+    case 'info':
+      return 'info';
+    case 'debug':
+      return 'muted';
+    default:
+      return 'neutral';
   }
 }
 
@@ -40,11 +46,16 @@ function truncateId(id: string, maxLen: number): string {
 
 function matchesFilter(log: FrontendLogSnapshot, filter: LogFilter): boolean {
   switch (filter) {
-    case 'all': return true;
-    case 'error': return log.level === 'error' || log.level === 'critical';
-    case 'warn': return log.level === 'warn';
-    case 'info': return log.level === 'info';
-    case 'debug': return log.level === 'debug';
+    case 'all':
+      return true;
+    case 'error':
+      return log.level === 'error' || log.level === 'critical';
+    case 'warn':
+      return log.level === 'warn';
+    case 'info':
+      return log.level === 'info';
+    case 'debug':
+      return log.level === 'debug';
   }
 }
 
@@ -110,7 +121,9 @@ export function LogsView(props: LogsViewProps): JSX.Element {
           type="text"
           placeholder="Search logs by message, runId, sessionId, machineId…"
           value={searchInput}
-          onChange={(e) => { setSearchInput(e.target.value); }}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+          }}
           aria-label="Search logs"
         />
         <span className="log-search-count">
@@ -121,7 +134,9 @@ export function LogsView(props: LogsViewProps): JSX.Element {
         {searchInput ? (
           <button
             className="log-search-clear"
-            onClick={() => { setSearchInput(''); }}
+            onClick={() => {
+              setSearchInput('');
+            }}
             aria-label="Clear search"
           >
             Clear
@@ -132,8 +147,20 @@ export function LogsView(props: LogsViewProps): JSX.Element {
       {filtered.length === 0 ? (
         <div className="panel">
           <div className="empty-state">
-            <div className="empty-state-icon"><IconTerminal width={28} height={28} /></div>
-            <p>{deferredSearch ? 'No logs match the search.' : 'No logs recorded yet.'}</p>
+            <div className="empty-state-icon">
+              <IconTerminal width={28} height={28} />
+            </div>
+            {deferredSearch ? (
+              <p>No logs match the search.</p>
+            ) : (
+              <>
+                <p>No logs recorded yet.</p>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  Logs are captured from agent sessions. They will stream in as agents produce
+                  output.
+                </p>
+              </>
+            )}
           </div>
         </div>
       ) : (
@@ -145,9 +172,15 @@ export function LogsView(props: LogsViewProps): JSX.Element {
                 <span className={`log-level-badge log-level-${levelTone(log.level)}`}>
                   {log.level.toUpperCase()}
                 </span>
-                <span className="log-machine-id" title={log.machineId}>{truncateId(log.machineId, 10)}</span>
-                <span className="log-session-id" title={log.sessionId}>{truncateId(log.sessionId, 10)}</span>
-                <span className="log-run-id" title={log.runId}>{truncateId(log.runId, 12)}</span>
+                <span className="log-machine-id" title={log.machineId}>
+                  {truncateId(log.machineId, 10)}
+                </span>
+                <span className="log-session-id" title={log.sessionId}>
+                  {truncateId(log.sessionId, 10)}
+                </span>
+                <span className="log-run-id" title={log.runId}>
+                  {truncateId(log.runId, 12)}
+                </span>
                 <span className="log-message">{log.message}</span>
               </div>
             ))}

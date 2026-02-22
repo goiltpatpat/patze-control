@@ -128,7 +128,9 @@ function deriveLastUpdated(
   return last;
 }
 
-export function toFrontendUnifiedSnapshot(unified: UnifiedTelemetrySnapshot): FrontendUnifiedSnapshot {
+export function toFrontendUnifiedSnapshot(
+  unified: UnifiedTelemetrySnapshot
+): FrontendUnifiedSnapshot {
   const machines: FrontendMachineSnapshot[] = Object.values(unified.machines)
     .map((machine) => ({ ...machine }))
     .sort(compareMachines);
@@ -142,7 +144,9 @@ export function toFrontendUnifiedSnapshot(unified: UnifiedTelemetrySnapshot): Fr
     .sort(compareRuns);
 
   const activeRuns: FrontendActiveRunSnapshot[] = runs
-    .filter((run): run is FrontendRunSnapshot & { state: ActiveRunState } => isActiveState(run.state))
+    .filter((run): run is FrontendRunSnapshot & { state: ActiveRunState } =>
+      isActiveState(run.state)
+    )
     .map((run) => ({
       ...run,
       isActive: true as const,

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ConnectionStatus } from '../types';
 
 export interface TopMachineContextBarProps {
@@ -13,11 +14,16 @@ export interface TopMachineContextBarProps {
 
 function toStatusLabel(status: ConnectionStatus): string {
   switch (status) {
-    case 'connected': return 'Connected';
-    case 'degraded': return 'Degraded';
-    case 'connecting': return 'Connecting…';
-    case 'error': return 'Error';
-    case 'idle': return 'Idle';
+    case 'connected':
+      return 'Connected';
+    case 'degraded':
+      return 'Degraded';
+    case 'connecting':
+      return 'Connecting…';
+    case 'error':
+      return 'Error';
+    case 'idle':
+      return 'Idle';
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -28,6 +34,9 @@ function toStatusLabel(status: ConnectionStatus): string {
 export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Element {
   const isConnecting = props.status === 'connecting';
   const isConnected = props.status === 'connected' || props.status === 'degraded';
+  const [expanded, setExpanded] = useState(false);
+
+  const showCompact = isConnected && !expanded;
 
   return (
     <header className="context-bar">
@@ -38,52 +47,80 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
 
       <div className="context-divider" />
 
-      <div className="context-controls">
-        <div className="context-field">
-          <span className="context-field-label">Endpoint</span>
-          <input
-            type="url"
-            data-field="url"
-            aria-label="Control plane endpoint URL"
-            value={props.baseUrl}
-            placeholder="http://127.0.0.1:8080"
-            onChange={(event) => {
-              props.onBaseUrlChange(event.target.value);
-            }}
-            disabled={isConnecting}
-          />
-        </div>
-        <div className="context-field">
-          <span className="context-field-label">Token</span>
-          <input
-            type="password"
-            data-field="token"
-            aria-label="Authentication token"
-            value={props.token}
-            placeholder="optional"
-            onChange={(event) => {
-              props.onTokenChange(event.target.value);
-            }}
-            disabled={isConnecting}
-          />
-        </div>
-        <div className="context-actions">
-          <button
-            className="btn-primary"
-            onClick={props.onConnect}
-            disabled={isConnecting || isConnected}
-          >
-            {isConnecting ? 'Connecting…' : 'Connect'}
-          </button>
+      {showCompact ? (
+        <div className="context-controls context-controls-compact">
+          <span className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            {props.baseUrl}
+          </span>
           <button
             className="btn-secondary"
-            onClick={props.onDisconnect}
-            disabled={!isConnected && !isConnecting}
+            style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+            onClick={() => {
+              setExpanded(true);
+            }}
           >
-            Disconnect
+            Edit
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="context-controls">
+          <div className="context-field">
+            <span className="context-field-label">Endpoint</span>
+            <input
+              type="url"
+              data-field="url"
+              aria-label="Control plane endpoint URL"
+              value={props.baseUrl}
+              placeholder="http://127.0.0.1:9700"
+              onChange={(event) => {
+                props.onBaseUrlChange(event.target.value);
+              }}
+              disabled={isConnecting}
+            />
+          </div>
+          <div className="context-field">
+            <span className="context-field-label">Token</span>
+            <input
+              type="password"
+              data-field="token"
+              aria-label="Authentication token"
+              value={props.token}
+              placeholder="optional"
+              onChange={(event) => {
+                props.onTokenChange(event.target.value);
+              }}
+              disabled={isConnecting}
+            />
+          </div>
+          <div className="context-actions">
+            <button
+              className="btn-primary"
+              onClick={props.onConnect}
+              disabled={isConnecting || isConnected}
+            >
+              {isConnecting ? 'Connecting…' : 'Connect'}
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={props.onDisconnect}
+              disabled={!isConnected && !isConnecting}
+            >
+              Disconnect
+            </button>
+            {isConnected ? (
+              <button
+                className="btn-secondary"
+                style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+                onClick={() => {
+                  setExpanded(false);
+                }}
+              >
+                Collapse
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       <div className="context-status-indicator">
         <span className="status-dot" data-status={props.status} />

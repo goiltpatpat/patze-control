@@ -4,6 +4,7 @@ import { IconBot } from '../components/Icons';
 import { navigate, type RouteFilter } from '../shell/routes';
 import type { FrontendUnifiedSnapshot } from '../types';
 import { deriveAgents, type DerivedAgent } from '../utils/derive-agents';
+import { formatCost, formatTokenCount } from '../utils/format';
 import { formatRelativeTime } from '../utils/time';
 
 export interface AgentsViewProps {
@@ -12,18 +13,6 @@ export interface AgentsViewProps {
 }
 
 type AgentFilter = 'all' | 'active' | 'idle';
-
-function formatCost(usd: number): string {
-  if (usd === 0) return '$0.00';
-  if (usd < 0.01) return `$${usd.toFixed(4)}`;
-  return `$${usd.toFixed(2)}`;
-}
-
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
-  return String(tokens);
-}
 
 function lastSeenLabel(agent: DerivedAgent): string {
   if (agent.lastSeenAt === 0) return 'never';
@@ -34,7 +23,7 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
   const [filter, setFilter] = useState<AgentFilter>('all');
   const agents = useMemo(
     () => (props.snapshot ? deriveAgents(props.snapshot) : []),
-    [props.snapshot],
+    [props.snapshot]
   );
 
   const activeCount = agents.filter((a) => a.active).length;
@@ -48,9 +37,12 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
 
   const filtered = agents.filter((a) => {
     switch (filter) {
-      case 'active': return a.active;
-      case 'idle': return !a.active;
-      case 'all': return true;
+      case 'active':
+        return a.active;
+      case 'idle':
+        return !a.active;
+      case 'all':
+        return true;
     }
   });
 
@@ -63,10 +55,20 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
 
       {filtered.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconBot width={28} height={28} /></div>
-          {agents.length === 0
-            ? 'No agents detected. Agents are derived from session and run data.'
-            : 'No agents match the current filter.'}
+          <div className="empty-state-icon">
+            <IconBot width={28} height={28} />
+          </div>
+          {agents.length === 0 ? (
+            <>
+              <p style={{ margin: '4px 0 0' }}>No agents detected yet.</p>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                Agents are derived from telemetry data. Connect an OpenClaw instance or start a
+                session to see agents here.
+              </p>
+            </>
+          ) : (
+            'No agents match the current filter.'
+          )}
         </div>
       ) : (
         <div className="machine-grid">
@@ -76,7 +78,9 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
               className="machine-card machine-card-clickable"
               role="button"
               tabIndex={0}
-              onClick={() => { navigate('sessions', { agentId: agent.agentId }); }}
+              onClick={() => {
+                navigate('sessions', { agentId: agent.agentId });
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
@@ -88,7 +92,7 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
                 <div className="machine-card-title">
                   <span className="machine-card-name">{agent.agentId}</span>
                 </div>
-                <span className={`state-badge state-badge-${agent.active ? 'ok' : 'muted'}`}>
+                <span className={`badge ${agent.active ? 'tone-ok' : 'tone-muted'}`}>
                   {agent.active ? 'active' : 'idle'}
                 </span>
               </div>
@@ -96,23 +100,27 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
               <div className="machine-card-meta">
                 <div className="machine-card-meta-item">
                   <span className="machine-card-meta-label">Machines</span>
-                  <span className="machine-card-meta-value">{String(agent.machines.length)}</span>
+                  <span className="machine-card-meta-value">{agent.machines.length}</span>
                 </div>
                 <div className="machine-card-meta-item">
                   <span className="machine-card-meta-label">Sessions</span>
-                  <span className={`machine-card-meta-value${agent.activeSessions > 0 ? ' metric-active' : ''}`}>
+                  <span
+                    className={`machine-card-meta-value${agent.activeSessions > 0 ? ' metric-active' : ''}`}
+                  >
                     {agent.activeSessions > 0
-                      ? `${String(agent.activeSessions)} active / ${String(agent.totalSessions)}`
-                      : String(agent.totalSessions)}
+                      ? `${agent.activeSessions} active / ${agent.totalSessions}`
+                      : agent.totalSessions}
                   </span>
                 </div>
                 <div className="machine-card-meta-item">
                   <span className="machine-card-meta-label">Runs</span>
-                  <span className={`machine-card-meta-value${agent.activeRuns > 0 ? ' metric-active' : ''}`}>
-                    {String(agent.totalRuns)}
+                  <span
+                    className={`machine-card-meta-value${agent.activeRuns > 0 ? ' metric-active' : ''}`}
+                  >
+                    {agent.totalRuns}
                     {agent.failedRuns > 0 ? (
                       <span className="error" style={{ marginLeft: 4 }}>
-                        ({String(agent.failedRuns)} failed)
+                        ({agent.failedRuns} failed)
                       </span>
                     ) : null}
                   </span>
@@ -125,11 +133,15 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
                   <>
                     <div className="machine-card-meta-item">
                       <span className="machine-card-meta-label">Tokens</span>
-                      <span className="machine-card-meta-value">{formatTokenCount(agent.totalTokens)}</span>
+                      <span className="machine-card-meta-value">
+                        {formatTokenCount(agent.totalTokens)}
+                      </span>
                     </div>
                     <div className="machine-card-meta-item">
                       <span className="machine-card-meta-label">Cost</span>
-                      <span className="machine-card-meta-value">{formatCost(agent.estimatedCostUsd)}</span>
+                      <span className="machine-card-meta-value">
+                        {formatCost(agent.estimatedCostUsd)}
+                      </span>
                     </div>
                   </>
                 ) : null}

@@ -9,6 +9,7 @@ dist/
 # Build output — Rust / Tauri
 **/src-tauri/target/
 **/src-tauri/gen/
+**/src-tauri/binaries/
 
 # Environment files (keep examples)
 .env
@@ -28,6 +29,12 @@ coverage/
 # Turbo
 .turbo/
 
-# IDE (project-specific settings are ok, user settings are not)
+# IDE
 .idea/
+.vscode/
 *.sw[po]
+
+# Caches
+.eslintcache
+
+memory-bank/

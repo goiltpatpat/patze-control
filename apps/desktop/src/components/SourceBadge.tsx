@@ -13,7 +13,7 @@ export interface SourceBadgeProps {
  */
 export function SourceBadge(props: SourceBadgeProps): JSX.Element {
   const connectedRemotes = props.remoteEndpoints.filter(
-    (ep) => ep.status === 'connected' && ep.attachmentId,
+    (ep) => ep.status === 'connected' && ep.attachmentId
   );
 
   if (connectedRemotes.length === 0) {

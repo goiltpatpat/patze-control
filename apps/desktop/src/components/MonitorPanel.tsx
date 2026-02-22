@@ -9,7 +9,9 @@ export interface MonitorPanelProps {
   readonly snapshot: FrontendUnifiedSnapshot | null;
 }
 
-function computeFleetResource(snapshot: FrontendUnifiedSnapshot): { avgCpu: number; avgMem: number } | null {
+function computeFleetResource(
+  snapshot: FrontendUnifiedSnapshot
+): { avgCpu: number; avgMem: number } | null {
   const withResource = snapshot.machines.filter((m) => m.lastResource !== undefined);
   if (withResource.length === 0) {
     return null;
@@ -32,7 +34,9 @@ export function MonitorPanel(props: MonitorPanelProps): JSX.Element {
   if (!props.snapshot) {
     return (
       <div className="empty-state">
-        <div className="empty-state-icon"><IconZap width={28} height={28} /></div>
+        <div className="empty-state-icon">
+          <IconZap width={28} height={28} />
+        </div>
         Connect to a control plane to see live telemetry data.
       </div>
     );
@@ -46,11 +50,19 @@ export function MonitorPanel(props: MonitorPanelProps): JSX.Element {
       <div className="stats-grid">
         <div className="stat-card">
           <span className="stat-label">Health</span>
-          <div><HealthBadge health={health.overall} /></div>
+          <div>
+            <HealthBadge
+              health={
+                health.overall === 'unknown' && machines.length === 0 ? 'healthy' : health.overall
+              }
+            />
+          </div>
         </div>
         <div className="stat-card">
           <span className="stat-label">Machines</span>
-          <span className="stat-value" data-accent="cyan">{String(machines.length)}</span>
+          <span className="stat-value" data-accent="cyan">
+            {String(machines.length)}
+          </span>
         </div>
         <div className="stat-card">
           <span className="stat-label">Active Runs</span>
@@ -84,7 +96,12 @@ export function MonitorPanel(props: MonitorPanelProps): JSX.Element {
           <h3 className="panel-title">Machines</h3>
         </div>
         {machines.length === 0 ? (
-          <div className="empty-state">No machines registered yet.</div>
+          <div className="empty-state">
+            <p>No machines registered yet.</p>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              Connect an OpenClaw instance or VPS bridge to see machine telemetry.
+            </p>
+          </div>
         ) : (
           <div className="table-scroll">
             <table className="data-table compact">
@@ -103,7 +120,9 @@ export function MonitorPanel(props: MonitorPanelProps): JSX.Element {
                   <tr key={machine.machineId}>
                     <td className="mono">{machine.machineId}</td>
                     <td>{machine.name ?? '—'}</td>
-                    <td><StateBadge value={machine.status} /></td>
+                    <td>
+                      <StateBadge value={machine.status} />
+                    </td>
                     <td className="mono">
                       {machine.lastResource ? `${machine.lastResource.cpuPct.toFixed(0)}%` : '—'}
                     </td>
@@ -145,7 +164,9 @@ export function MonitorPanel(props: MonitorPanelProps): JSX.Element {
                     <td className="mono">{run.sessionId}</td>
                     <td>
                       <StateBadge value={run.state} />
-                      <span className="inline-loading"><span className="mini-spinner" /></span>
+                      <span className="inline-loading">
+                        <span className="mini-spinner" />
+                      </span>
                     </td>
                     <td>{formatRelativeTime(run.updatedAt)}</td>
                   </tr>

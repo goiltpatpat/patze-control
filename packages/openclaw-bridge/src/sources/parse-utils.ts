@@ -1,5 +1,10 @@
 import type { AgentId, RunId, SessionId, SessionRunLifecycleState } from '@patze/telemetry-core';
-import type { DetectedLogEntry, DetectedModelUsage, DetectedRun, DetectedToolCall } from '../types.js';
+import type {
+  DetectedLogEntry,
+  DetectedModelUsage,
+  DetectedRun,
+  DetectedToolCall,
+} from '../types.js';
 
 export interface RunRecordLike {
   runId?: string;
@@ -54,24 +59,33 @@ export function normalizeLifecycleState(value: unknown): SessionRunLifecycleStat
   }
   const normalized = value.trim().toLowerCase();
   switch (normalized) {
-    case 'created': return 'created';
+    case 'created':
+      return 'created';
     case 'queued':
-    case 'pending': return 'queued';
+    case 'pending':
+      return 'queued';
     case 'running':
     case 'active':
-    case 'in_progress': return 'running';
+    case 'in_progress':
+      return 'running';
     case 'waiting_tool':
     case 'waiting':
-    case 'tool_wait': return 'waiting_tool';
-    case 'streaming': return 'streaming';
+    case 'tool_wait':
+      return 'waiting_tool';
+    case 'streaming':
+      return 'streaming';
     case 'completed':
     case 'done':
-    case 'success': return 'completed';
+    case 'success':
+      return 'completed';
     case 'failed':
-    case 'error': return 'failed';
+    case 'error':
+      return 'failed';
     case 'cancelled':
-    case 'canceled': return 'cancelled';
-    default: return null;
+    case 'canceled':
+      return 'cancelled';
+    default:
+      return null;
   }
 }
 
@@ -101,9 +115,9 @@ function parseToolCalls(raw: unknown[] | undefined): DetectedToolCall[] | undefi
       continue;
     }
     const statusStr = (e.status ?? e.state ?? 'completed') as string;
-    const status = (['started', 'completed', 'failed', 'cancelled'].includes(statusStr)
-      ? statusStr
-      : 'completed') as DetectedToolCall['status'];
+    const status = (
+      ['started', 'completed', 'failed', 'cancelled'].includes(statusStr) ? statusStr : 'completed'
+    ) as DetectedToolCall['status'];
 
     calls.push({
       toolCallId: id,
@@ -126,7 +140,9 @@ function parseModelUsage(record: RunRecordLike): DetectedModelUsage | undefined 
     return undefined;
   }
 
-  const usage = (record.tokenUsage ?? record.token_usage ?? record.tokens) as Record<string, unknown> | undefined;
+  const usage = (record.tokenUsage ?? record.token_usage ?? record.tokens) as
+    | Record<string, unknown>
+    | undefined;
   if (!isRecord(usage)) {
     return undefined;
   }
@@ -151,10 +167,18 @@ function normLogLevel(raw: unknown): DetectedLogEntry['level'] {
     return 'info';
   }
   const n = raw.toLowerCase();
-  if (n === 'critical' || n === 'fatal') { return 'critical'; }
-  if (n === 'error' || n === 'err') { return 'error'; }
-  if (n === 'warn' || n === 'warning') { return 'warn'; }
-  if (n === 'debug' || n === 'trace') { return 'debug'; }
+  if (n === 'critical' || n === 'fatal') {
+    return 'critical';
+  }
+  if (n === 'error' || n === 'err') {
+    return 'error';
+  }
+  if (n === 'warn' || n === 'warning') {
+    return 'warn';
+  }
+  if (n === 'debug' || n === 'trace') {
+    return 'debug';
+  }
   return 'info';
 }
 
@@ -166,7 +190,12 @@ function parseLogs(raw: unknown[] | undefined): DetectedLogEntry[] | undefined {
   let idx = 0;
   for (const entry of raw) {
     if (typeof entry === 'string') {
-      entries.push({ id: `log_${String(idx++)}`, level: 'info', message: entry, ts: new Date().toISOString() });
+      entries.push({
+        id: `log_${String(idx++)}`,
+        level: 'info',
+        message: entry,
+        ts: new Date().toISOString(),
+      });
       continue;
     }
     if (!isRecord(entry)) {
@@ -178,10 +207,15 @@ function parseLogs(raw: unknown[] | undefined): DetectedLogEntry[] | undefined {
       continue;
     }
     entries.push({
-      id: (typeof e.id === 'string' ? e.id : `log_${String(idx++)}`),
+      id: typeof e.id === 'string' ? e.id : `log_${String(idx++)}`,
       level: normLogLevel(e.level ?? e.severity),
       message,
-      ts: (typeof e.ts === 'string' ? e.ts : typeof e.timestamp === 'string' ? e.timestamp : new Date().toISOString()),
+      ts:
+        typeof e.ts === 'string'
+          ? e.ts
+          : typeof e.timestamp === 'string'
+            ? e.timestamp
+            : new Date().toISOString(),
     });
   }
   return entries.length > 0 ? entries : undefined;
@@ -210,17 +244,19 @@ export function parseRunRecord(input: unknown): DetectedRun | null {
   const modelUsage = parseModelUsage(record);
   const logs = parseLogs(record.logs ?? record.log ?? record.output);
 
-  const errorMessage = typeof record.error === 'string'
-    ? record.error
-    : typeof record.errorMessage === 'string'
-      ? record.errorMessage
-      : typeof record.error_message === 'string'
-        ? record.error_message
-        : typeof record.failureReason === 'string'
-          ? record.failureReason
-          : isRecord(record.error) && typeof (record.error as Record<string, unknown>).message === 'string'
-            ? (record.error as Record<string, unknown>).message as string
-            : undefined;
+  const errorMessage =
+    typeof record.error === 'string'
+      ? record.error
+      : typeof record.errorMessage === 'string'
+        ? record.errorMessage
+        : typeof record.error_message === 'string'
+          ? record.error_message
+          : typeof record.failureReason === 'string'
+            ? record.failureReason
+            : isRecord(record.error) &&
+                typeof (record.error as Record<string, unknown>).message === 'string'
+              ? ((record.error as Record<string, unknown>).message as string)
+              : undefined;
 
   return {
     runId: asRunId(runId),

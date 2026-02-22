@@ -9,16 +9,16 @@ function formatElapsed(diffMs: number): string {
     return '0s';
   }
   if (diffMs < MINUTE) {
-    return `${String(Math.floor(diffMs / SECOND))}s`;
+    return `${Math.floor(diffMs / SECOND)}s`;
   }
   if (diffMs < HOUR) {
     const mins = Math.floor(diffMs / MINUTE);
     const secs = Math.floor((diffMs % MINUTE) / SECOND);
-    return secs > 0 ? `${String(mins)}m ${String(secs)}s` : `${String(mins)}m`;
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
   }
   const hours = Math.floor(diffMs / HOUR);
   const mins = Math.floor((diffMs % HOUR) / MINUTE);
-  return mins > 0 ? `${String(hours)}h ${String(mins)}m` : `${String(hours)}h`;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
 export interface LiveDurationProps {
@@ -41,9 +41,5 @@ export function LiveDuration(props: LiveDurationProps): JSX.Element {
 
   const isLive = !props.endIso;
 
-  return (
-    <span className={isLive ? 'live-duration' : undefined}>
-      {formatElapsed(end - start)}
-    </span>
-  );
+  return <span className={isLive ? 'live-duration' : undefined}>{formatElapsed(end - start)}</span>;
 }

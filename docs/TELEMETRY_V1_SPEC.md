@@ -9,6 +9,7 @@ Non-goals (this phase): runtime implementation, routes, persistence, OpenClaw-sp
 Telemetry v1 defines a forward-compatible event contract for monitoring and controlling distributed agent runtimes across multiple machines (local and VPS).
 
 Primary objectives:
+
 - Multi-machine telemetry normalization
 - Event-driven model compatible with REST snapshots and SSE streams
 - Strictly typed contracts for core domain and event payloads
@@ -19,6 +20,7 @@ Primary objectives:
 The control plane treats runtime nodes as generic machines hosting agents.
 
 Core entities:
+
 - `Machine`
 - `Agent`
 - `Session`
@@ -30,6 +32,7 @@ Core entities:
 - `TraceSpan`
 
 Design constraints:
+
 - All identifiers are opaque strings. ULID format is assumed by convention, not enforced/generated in v1.
 - All timestamps are ISO-8601 UTC strings (example: `2026-02-20T16:41:00.000Z`).
 - Entity references should use IDs (not embedded object graphs) to avoid circular type dependencies.
@@ -37,6 +40,7 @@ Design constraints:
 ## 3) Lifecycle States
 
 `Session` and `Run` both use the same lifecycle state union in v1:
+
 - `created`
 - `queued`
 - `running`
@@ -47,6 +51,7 @@ Design constraints:
 - `cancelled`
 
 State handling notes:
+
 - State transitions are event-driven (append-only event history).
 - Invalid transitions are implementation concerns and out of scope for this phase.
 
@@ -55,6 +60,7 @@ State handling notes:
 Telemetry events use an envelope with discriminated payloads.
 
 Envelope fields:
+
 - `id`: opaque event ID
 - `ts`: ISO-8601 UTC timestamp
 - `machineId`: origin machine
@@ -64,6 +70,7 @@ Envelope fields:
 - `trace`: trace correlation object (`traceId`, optional `spanId`, optional `parentSpanId`)
 
 Forward-compatibility requirements:
+
 - Consumers must dispatch by `type`.
 - Unknown event `type` values should be ignored (or safely stored) without failing stream processing.
 - Payload shape is authoritative per `type` through `TelemetryEventPayloadMap`.
@@ -71,6 +78,7 @@ Forward-compatibility requirements:
 ## 5) Event Types (v1)
 
 Recommended v1 event types:
+
 - `machine.registered`
 - `machine.heartbeat`
 - `agent.state.changed`
@@ -86,11 +94,13 @@ Recommended v1 event types:
 ## 6) Naming + Identifier Conventions
 
 Naming conventions:
+
 - IDs: `<entity>NameId` type aliases in TypeScript
 - Events: lowercase dot-separated (`domain.entity.action`)
 - Enums/unions: lowercase snake_case for runtime states
 
 Identifier conventions:
+
 - ULID string format preferred for lexical sorting and distributed generation
 - IDs remain opaque to API clients and UI
 - No semantic parsing of ID contents in business logic
@@ -98,9 +108,11 @@ Identifier conventions:
 ## 7) Versioning and Compatibility Rules (v1)
 
 Version marker:
+
 - Contract version is `telemetry.v1` at package/spec level.
 
 Compatibility policy:
+
 - Additive changes are backward-compatible in v1:
   - New optional fields in payloads
   - New event types
@@ -110,12 +122,14 @@ Compatibility policy:
   - Re-typing existing required fields
 
 Consumer expectations:
+
 - Must tolerate additional unknown fields in event payloads.
 - Must handle unknown event types gracefully.
 
 ## 8) REST + SSE Compatibility
 
 Transport guidance (design-only):
+
 - REST: suitable for snapshots and recent history reads.
 - SSE: suitable for live append-only event stream.
 - Event envelope is transport-agnostic and identical across REST and SSE payloads.
@@ -244,12 +258,8 @@ Response contract (`200 OK`):
 
 ```json
 {
-  "accepted": [
-    { "index": 0, "event": { "...": "normalized event" } }
-  ],
-  "rejected": [
-    { "index": 1, "error": { "code": "invalid_envelope", "message": "..." } }
-  ],
+  "accepted": [{ "index": 0, "event": { "...": "normalized event" } }],
+  "rejected": [{ "index": 1, "error": { "code": "invalid_envelope", "message": "..." } }],
   "acceptedCount": 1,
   "rejectedCount": 1
 }
