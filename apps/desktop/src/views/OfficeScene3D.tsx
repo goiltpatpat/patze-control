@@ -17,6 +17,7 @@ import { FileCabinet } from './office3d/FileCabinet';
 import { Whiteboard } from './office3d/Whiteboard';
 import { AgentPanel } from './office3d/AgentPanel';
 import { FirstPersonControls } from './office3d/FirstPersonControls';
+import { PlayerAvatar } from './office3d/PlayerAvatar';
 
 type DeskStatus = 'active' | 'idle' | 'error' | 'offline';
 
@@ -30,7 +31,7 @@ export interface OfficeSceneDesk {
   readonly emoji: string;
 }
 
-export type CameraMode = 'orbit' | 'fps';
+export type CameraMode = 'orbit' | 'fps' | 'player';
 
 type InteractionModal = 'memory' | 'roadmap' | 'coffee' | null;
 
@@ -91,6 +92,58 @@ function SceneContent(props: {
   readonly cameraMode: CameraMode;
 }): JSX.Element {
   const avatarPositions = useRef<Map<string, Vector3>>(new Map());
+
+  const furnitureObjects = useMemo(
+    () => [
+      {
+        id: 'furniture:memory',
+        type: 'furniture' as const,
+        position: new Vector3(-9, 0, -5),
+        radius: 1.2,
+      },
+      {
+        id: 'furniture:roadmap',
+        type: 'furniture' as const,
+        position: new Vector3(0, 2.8, -9.75),
+        radius: 2.0,
+      },
+      {
+        id: 'furniture:coffee',
+        type: 'furniture' as const,
+        position: new Vector3(9, 0, -5),
+        radius: 1.2,
+      },
+    ],
+    []
+  );
+
+  const nearbyObjects = useMemo(
+    () => [
+      ...props.deskLayout.map((desk) => ({
+        id: `desk:${desk.id}`,
+        type: 'desk' as const,
+        position: new Vector3(desk.x, 0, desk.z),
+        radius: 1.5,
+      })),
+      ...furnitureObjects,
+    ],
+    [props.deskLayout, furnitureObjects]
+  );
+
+  const handlePlayerInteract = useCallback(
+    (objectId: string, objectType: 'desk' | 'furniture') => {
+      if (objectType === 'desk') {
+        const deskId = objectId.replace('desk:', '');
+        props.onDeskClick(deskId);
+      } else {
+        const furnitureId = objectId.replace('furniture:', '');
+        if (furnitureId === 'memory' || furnitureId === 'roadmap' || furnitureId === 'coffee') {
+          props.onInteraction(furnitureId);
+        }
+      }
+    },
+    [props.onDeskClick, props.onInteraction]
+  );
 
   const handleAvatarPositionUpdate = useCallback((id: string, pos: Vector3) => {
     avatarPositions.current.set(id, pos);
@@ -191,6 +244,16 @@ function SceneContent(props: {
 
       <WallClock position={[5, 3.5, -9.75]} />
 
+      {/* Player Avatar (third-person mode) */}
+      {props.cameraMode === 'player' ? (
+        <PlayerAvatar
+          obstacles={obstacles}
+          nearbyObjects={nearbyObjects}
+          onInteract={handlePlayerInteract}
+          officeBounds={OFFICE_BOUNDS}
+        />
+      ) : null}
+
       {/* Camera Controls */}
       {props.cameraMode === 'orbit' ? (
         <OrbitControls
@@ -202,9 +265,9 @@ function SceneContent(props: {
           maxDistance={30}
           target={[0, 0.7, 0]}
         />
-      ) : (
+      ) : props.cameraMode === 'fps' ? (
         <FirstPersonControls moveSpeed={4} />
-      )}
+      ) : null}
     </>
   );
 }
@@ -326,6 +389,12 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
               <span>Drag to rotate</span>
               <span>Scroll to zoom</span>
               <span>Click desk for info</span>
+            </>
+          ) : props.cameraMode === 'player' ? (
+            <>
+              <span>WASD to walk</span>
+              <span>Shift to sprint</span>
+              <span>E to interact</span>
             </>
           ) : (
             <>

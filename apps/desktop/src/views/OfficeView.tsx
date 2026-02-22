@@ -114,6 +114,15 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
               </button>
               <button
                 type="button"
+                className={`office-mode-btn${cameraMode === 'player' ? ' office-mode-btn-active' : ''}`}
+                onClick={() => {
+                  setCameraMode('player');
+                }}
+              >
+                Walk
+              </button>
+              <button
+                type="button"
                 className={`office-mode-btn${cameraMode === 'fps' ? ' office-mode-btn-active' : ''}`}
                 onClick={() => {
                   setCameraMode('fps');
