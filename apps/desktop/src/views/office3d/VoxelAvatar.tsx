@@ -80,95 +80,93 @@ export function VoxelAvatar(props: VoxelAvatarProps): JSX.Element {
 
   return (
     <group ref={bodyRef} position={[px, py, pz]}>
-     <group position={[0, groundOffset, 0]}>
-      {/* HEAD */}
-      <group ref={headRef} position={[0, 1.55, 0]}>
-        <Box args={[0.28, 0.28, 0.28]} position={[0, 0, 0]}>
-          <meshStandardMaterial color={skinColor} roughness={0.8} />
-        </Box>
+      <group position={[0, groundOffset, 0]}>
+        {/* HEAD */}
+        <group ref={headRef} position={[0, 1.55, 0]}>
+          <Box args={[0.28, 0.28, 0.28]} position={[0, 0, 0]}>
+            <meshStandardMaterial color={skinColor} roughness={0.8} />
+          </Box>
 
-        {/* Eyes */}
-        <Box args={[0.05, 0.05, 0.02]} position={[-0.07, 0.03, 0.14]}>
-          <meshStandardMaterial color="#1a1a2a" />
-        </Box>
-        <Box args={[0.05, 0.05, 0.02]} position={[0.07, 0.03, 0.14]}>
-          <meshStandardMaterial color="#1a1a2a" />
-        </Box>
+          {/* Eyes */}
+          <Box args={[0.05, 0.05, 0.02]} position={[-0.07, 0.03, 0.14]}>
+            <meshStandardMaterial color="#1a1a2a" />
+          </Box>
+          <Box args={[0.05, 0.05, 0.02]} position={[0.07, 0.03, 0.14]}>
+            <meshStandardMaterial color="#1a1a2a" />
+          </Box>
 
-        {/* Pupils */}
-        <Box args={[0.025, 0.025, 0.01]} position={[-0.07, 0.03, 0.155]}>
-          <meshStandardMaterial color="#ffffff" />
-        </Box>
-        <Box args={[0.025, 0.025, 0.01]} position={[0.07, 0.03, 0.155]}>
-          <meshStandardMaterial color="#ffffff" />
-        </Box>
+          {/* Pupils */}
+          <Box args={[0.025, 0.025, 0.01]} position={[-0.07, 0.03, 0.155]}>
+            <meshStandardMaterial color="#ffffff" />
+          </Box>
+          <Box args={[0.025, 0.025, 0.01]} position={[0.07, 0.03, 0.155]}>
+            <meshStandardMaterial color="#ffffff" />
+          </Box>
 
-        {/* Mouth */}
-        <Box args={[0.1, 0.02, 0.02]} position={[0, -0.06, 0.14]}>
-          <meshStandardMaterial
-            color={props.status === 'error' ? '#ee5555' : '#cc8888'}
-          />
-        </Box>
+          {/* Mouth */}
+          <Box args={[0.1, 0.02, 0.02]} position={[0, -0.06, 0.14]}>
+            <meshStandardMaterial color={props.status === 'error' ? '#ee5555' : '#cc8888'} />
+          </Box>
 
-        <Text position={[0, 0.28, 0]} fontSize={0.18} anchorX="center" anchorY="middle">
-          {props.emoji}
-        </Text>
+          <Text position={[0, 0.28, 0]} fontSize={0.18} anchorX="center" anchorY="middle">
+            {props.emoji}
+          </Text>
 
-        {props.status === 'error' ? (
-          <>
-            <mesh position={[0.2, 0.2, 0]}>
-              <sphereGeometry args={[0.02, 6, 6]} />
-              <meshBasicMaterial color="#ff4444" />
-            </mesh>
-            <mesh position={[-0.15, 0.25, 0.1]}>
-              <sphereGeometry args={[0.015, 6, 6]} />
-              <meshBasicMaterial color="#ff6644" />
-            </mesh>
-          </>
-        ) : null}
-      </group>
+          {props.status === 'error' ? (
+            <>
+              <mesh position={[0.2, 0.2, 0]}>
+                <sphereGeometry args={[0.02, 6, 6]} />
+                <meshBasicMaterial color="#ff4444" />
+              </mesh>
+              <mesh position={[-0.15, 0.25, 0.1]}>
+                <sphereGeometry args={[0.015, 6, 6]} />
+                <meshBasicMaterial color="#ff6644" />
+              </mesh>
+            </>
+          ) : null}
+        </group>
 
-      {/* BODY / TORSO */}
-      <Box args={[0.3, 0.4, 0.2]} position={[0, 1.2, 0]}>
-        <meshStandardMaterial color={shirtColor} roughness={0.7} />
-      </Box>
-
-      {/* LEFT ARM - group pivots at shoulder so hand follows rotation */}
-      <group ref={leftArmRef} position={[-0.24, 1.37, 0]}>
-        <Box args={[0.1, 0.38, 0.1]} position={[0, -0.19, 0]}>
+        {/* BODY / TORSO */}
+        <Box args={[0.3, 0.4, 0.2]} position={[0, 1.2, 0]}>
           <meshStandardMaterial color={shirtColor} roughness={0.7} />
         </Box>
-        <Box args={[0.08, 0.08, 0.08]} position={[0, -0.41, 0]}>
-          <meshStandardMaterial color={skinColor} roughness={0.8} />
+
+        {/* LEFT ARM - group pivots at shoulder so hand follows rotation */}
+        <group ref={leftArmRef} position={[-0.24, 1.37, 0]}>
+          <Box args={[0.1, 0.38, 0.1]} position={[0, -0.19, 0]}>
+            <meshStandardMaterial color={shirtColor} roughness={0.7} />
+          </Box>
+          <Box args={[0.08, 0.08, 0.08]} position={[0, -0.41, 0]}>
+            <meshStandardMaterial color={skinColor} roughness={0.8} />
+          </Box>
+        </group>
+
+        {/* RIGHT ARM - group pivots at shoulder so hand follows rotation */}
+        <group ref={rightArmRef} position={[0.24, 1.37, 0]}>
+          <Box args={[0.1, 0.38, 0.1]} position={[0, -0.19, 0]}>
+            <meshStandardMaterial color={shirtColor} roughness={0.7} />
+          </Box>
+          <Box args={[0.08, 0.08, 0.08]} position={[0, -0.41, 0]}>
+            <meshStandardMaterial color={skinColor} roughness={0.8} />
+          </Box>
+        </group>
+
+        {/* LEGS */}
+        <Box args={[0.12, 0.4, 0.12]} position={[-0.08, 0.78, 0]}>
+          <meshStandardMaterial color={pantsColor} roughness={0.7} />
+        </Box>
+        <Box args={[0.12, 0.4, 0.12]} position={[0.08, 0.78, 0]}>
+          <meshStandardMaterial color={pantsColor} roughness={0.7} />
+        </Box>
+
+        {/* SHOES */}
+        <Box args={[0.13, 0.06, 0.18]} position={[-0.08, 0.56, 0.03]}>
+          <meshStandardMaterial color={shoeColor} roughness={0.5} metalness={0.2} />
+        </Box>
+        <Box args={[0.13, 0.06, 0.18]} position={[0.08, 0.56, 0.03]}>
+          <meshStandardMaterial color={shoeColor} roughness={0.5} metalness={0.2} />
         </Box>
       </group>
-
-      {/* RIGHT ARM - group pivots at shoulder so hand follows rotation */}
-      <group ref={rightArmRef} position={[0.24, 1.37, 0]}>
-        <Box args={[0.1, 0.38, 0.1]} position={[0, -0.19, 0]}>
-          <meshStandardMaterial color={shirtColor} roughness={0.7} />
-        </Box>
-        <Box args={[0.08, 0.08, 0.08]} position={[0, -0.41, 0]}>
-          <meshStandardMaterial color={skinColor} roughness={0.8} />
-        </Box>
-      </group>
-
-      {/* LEGS */}
-      <Box args={[0.12, 0.4, 0.12]} position={[-0.08, 0.78, 0]}>
-        <meshStandardMaterial color={pantsColor} roughness={0.7} />
-      </Box>
-      <Box args={[0.12, 0.4, 0.12]} position={[0.08, 0.78, 0]}>
-        <meshStandardMaterial color={pantsColor} roughness={0.7} />
-      </Box>
-
-      {/* SHOES */}
-      <Box args={[0.13, 0.06, 0.18]} position={[-0.08, 0.56, 0.03]}>
-        <meshStandardMaterial color={shoeColor} roughness={0.5} metalness={0.2} />
-      </Box>
-      <Box args={[0.13, 0.06, 0.18]} position={[0.08, 0.56, 0.03]}>
-        <meshStandardMaterial color={shoeColor} roughness={0.5} metalness={0.2} />
-      </Box>
-     </group>
     </group>
   );
 }

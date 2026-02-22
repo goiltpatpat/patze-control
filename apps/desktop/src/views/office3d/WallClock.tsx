@@ -85,7 +85,13 @@ export function WallClock(props: WallClockProps): JSX.Element {
       </mesh>
 
       {/* Label */}
-      <Text position={[0, -0.15, 0.04]} fontSize={0.06} color="#666680" anchorX="center" anchorY="middle">
+      <Text
+        position={[0, -0.15, 0.04]}
+        fontSize={0.06}
+        color="#666680"
+        anchorX="center"
+        anchorY="middle"
+      >
         PATZE
       </Text>
     </group>

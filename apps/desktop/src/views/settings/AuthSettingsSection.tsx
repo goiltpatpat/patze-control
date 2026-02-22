@@ -249,12 +249,12 @@ export function AuthSettingsSection(props: {
               <span>Token authentication is active on the server</span>
             </div>
             <div className="auth-info-hint" style={{ marginTop: 8 }}>
-              Enter the correct token in the <strong>TOKEN</strong> field in the top bar,
-              then click <strong>Connect</strong>.
+              Enter the correct token in the <strong>TOKEN</strong> field in the top bar, then click{' '}
+              <strong>Connect</strong>.
             </div>
             <div className="auth-info-hint" style={{ marginTop: 4, fontSize: '0.78rem' }}>
-              Token is stored in <code>~/.patze-control/auth.json</code> on the server machine.
-              To reset, delete this file and restart the API server.
+              Token is stored in <code>~/.patze-control/auth.json</code> on the server machine. To
+              reset, delete this file and restart the API server.
             </div>
           </div>
         ) : (

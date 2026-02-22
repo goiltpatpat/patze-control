@@ -60,7 +60,11 @@ const PROVIDER_THEME: Readonly<Record<string, { letter: string; color: string; b
 function getProviderTheme(id: string): { letter: string; color: string; bg: string } {
   const key = id.toLowerCase();
   if (PROVIDER_THEME[key]) return PROVIDER_THEME[key];
-  return { letter: id.charAt(0).toUpperCase(), color: 'var(--text-muted)', bg: 'var(--bg-elevated)' };
+  return {
+    letter: id.charAt(0).toUpperCase(),
+    color: 'var(--text-muted)',
+    bg: 'var(--bg-elevated)',
+  };
 }
 
 function authHeaders(token: string): Record<string, string> {
@@ -109,10 +113,8 @@ function channelRecommendation(channel: OpenClawChannel): string {
     return 'Runtime connectivity unknown. Verify with OpenClaw channels status.';
   if (channel.dmPolicy === 'open' && channel.allowFromHasWildcard)
     return 'DM open with wildcard allowFrom. Consider pairing/allowlist.';
-  if (channel.dmPolicy === 'disabled')
-    return 'DM disabled. Enable only if intentional.';
-  if (channel.dmPolicy === 'allowlist')
-    return 'Allowlist active. Keep allowFrom updated.';
+  if (channel.dmPolicy === 'disabled') return 'DM disabled. Enable only if intentional.';
+  if (channel.dmPolicy === 'allowlist') return 'Allowlist active. Keep allowFrom updated.';
   return '';
 }
 
@@ -134,7 +136,8 @@ function SummaryGauge(props: {
       <div className="ch-summary-gauge-head">
         <span className="ch-summary-gauge-label">{props.label}</span>
         <span className="ch-summary-gauge-value">
-          {props.value}<span className="ch-summary-gauge-total">/{props.total}</span>
+          {props.value}
+          <span className="ch-summary-gauge-total">/{props.total}</span>
         </span>
       </div>
       <div className="ch-summary-gauge-track">
@@ -165,7 +168,12 @@ function ChannelCard(props: {
       onClick={onToggle}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
     >
       <header className="channel-card-head-v2">
         <div className="ch-provider-icon" style={{ background: theme.bg, color: theme.color }}>
@@ -174,7 +182,10 @@ function ChannelCard(props: {
         <div className="ch-card-title-col">
           <div className="ch-card-name-row">
             <strong className="channel-card-title">{channel.name}</strong>
-            <span className={`ch-status-dot ${statusDotClass(channel)}`} title={statusLabel(channel)} />
+            <span
+              className={`ch-status-dot ${statusDotClass(channel)}`}
+              title={statusLabel(channel)}
+            />
           </div>
           <div className="ch-card-sub-row">
             <span className="ch-card-status-text">{statusLabel(channel)}</span>
@@ -184,7 +195,10 @@ function ChannelCard(props: {
             </span>
           </div>
         </div>
-        <span className={`ch-expand-chevron${expanded ? ' ch-expand-open' : ''}`} aria-hidden="true">
+        <span
+          className={`ch-expand-chevron${expanded ? ' ch-expand-open' : ''}`}
+          aria-hidden="true"
+        >
           &#x25BE;
         </span>
       </header>
@@ -195,13 +209,15 @@ function ChannelCard(props: {
             <div className="ch-detail-item">
               <span className="ch-detail-label">AllowFrom</span>
               <span className="ch-detail-value">
-                {channel.allowFromCount}{channel.allowFromHasWildcard ? ' (wildcard)' : ''}
+                {channel.allowFromCount}
+                {channel.allowFromHasWildcard ? ' (wildcard)' : ''}
               </span>
             </div>
             <div className="ch-detail-item">
               <span className="ch-detail-label">Groups</span>
               <span className="ch-detail-value">
-                {channel.groupPolicy}{channel.hasGroups ? ' (active)' : ''}
+                {channel.groupPolicy}
+                {channel.hasGroups ? ' (active)' : ''}
               </span>
             </div>
             {channel.accountSummary.total > 0 ? (
@@ -217,19 +233,22 @@ function ChannelCard(props: {
               <span className="ch-detail-value">{channel.messageCount ?? 0}</span>
             </div>
           </div>
-          {recommendation ? (
-            <p className="channel-recommendation">{recommendation}</p>
-          ) : null}
+          {recommendation ? <p className="channel-recommendation">{recommendation}</p> : null}
           <div className="ch-card-actions">
             <button
               className="btn-ghost"
               type="button"
-              onClick={(e) => { e.stopPropagation(); onCopy(`channels.${channel.id}`, `key-${channel.id}`); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy(`channels.${channel.id}`, `key-${channel.id}`);
+              }}
             >
               {copiedKey === `key-${channel.id}` ? 'Copied' : 'Copy Key'}
             </button>
             {channel.lastMessageAt ? (
-              <span className="ch-card-last-msg">Last msg {formatRelativeTime(channel.lastMessageAt)}</span>
+              <span className="ch-card-last-msg">
+                Last msg {formatRelativeTime(channel.lastMessageAt)}
+              </span>
             ) : null}
           </div>
         </div>
@@ -370,7 +389,8 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
     );
   }
 
-  const needsConfigHint = configStatus === 'missing' || configStatus === 'empty' || configStatus === 'invalid';
+  const needsConfigHint =
+    configStatus === 'missing' || configStatus === 'empty' || configStatus === 'invalid';
 
   return (
     <section className="view-panel">
@@ -380,7 +400,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
           {targets.length > 0 ? (
             <select
               value={selectedTargetId ?? ''}
-              onChange={(e) => { setSelectedTargetId(e.target.value || null); }}
+              onChange={(e) => {
+                setSelectedTargetId(e.target.value || null);
+              }}
             >
               {targets.map((target) => (
                 <option key={target.id} value={target.id}>
@@ -391,7 +413,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
           ) : null}
           <button
             className="btn-ghost"
-            onClick={() => { void fetchChannels(); }}
+            onClick={() => {
+              void fetchChannels();
+            }}
             disabled={loading}
           >
             Refresh
@@ -402,35 +426,49 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
       {/* Summary Strip */}
       {summary.total > 0 ? (
         <div className="ch-summary-strip">
-          <SummaryGauge label="Connected" value={summary.connected} total={summary.total} color="var(--green)" />
-          <SummaryGauge label="Configured" value={summary.configured} total={summary.total} color="var(--accent)" />
+          <SummaryGauge
+            label="Connected"
+            value={summary.connected}
+            total={summary.total}
+            color="var(--green)"
+          />
+          <SummaryGauge
+            label="Configured"
+            value={summary.configured}
+            total={summary.total}
+            color="var(--accent)"
+          />
           {summary.riskyDm > 0 ? (
             <div className="ch-summary-alert">
               <span className="ch-summary-alert-dot" />
               {summary.riskyDm} DM risk
             </div>
           ) : null}
-          {configPath ? (
-            <div className="ch-summary-config-path mono">{configPath}</div>
-          ) : null}
+          {configPath ? <div className="ch-summary-config-path mono">{configPath}</div> : null}
         </div>
       ) : null}
 
       {/* Compact config hint */}
       {needsConfigHint ? (
-        <div className={`ch-config-banner${configStatus === 'invalid' ? ' ch-config-banner-error' : ''}`}>
+        <div
+          className={`ch-config-banner${configStatus === 'invalid' ? ' ch-config-banner-error' : ''}`}
+        >
           <div className="ch-config-banner-row">
             <span className="ch-config-banner-icon">{configStatus === 'invalid' ? '!' : 'i'}</span>
             <span className="ch-config-banner-text">
-              {configStatus === 'missing' ? 'Config not detected for this target' :
-               configStatus === 'empty' ? 'Config file is empty' :
-               'Config file has invalid JSON'}
+              {configStatus === 'missing'
+                ? 'Config not detected for this target'
+                : configStatus === 'empty'
+                  ? 'Config file is empty'
+                  : 'Config file has invalid JSON'}
             </span>
-            {(configCandidates.length > 0 || configStatus !== 'invalid') ? (
+            {configCandidates.length > 0 || configStatus !== 'invalid' ? (
               <button
                 className="ch-config-banner-toggle"
                 type="button"
-                onClick={() => { setConfigHintOpen((v) => !v); }}
+                onClick={() => {
+                  setConfigHintOpen((v) => !v);
+                }}
               >
                 {configHintOpen ? 'Hide' : 'Details'}
               </button>
@@ -448,7 +486,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                   <button
                     className="btn-ghost"
                     type="button"
-                    onClick={() => { handleCopy(configCandidates[0]!, 'copy-config-path'); }}
+                    onClick={() => {
+                      handleCopy(configCandidates[0]!, 'copy-config-path');
+                    }}
                   >
                     {copiedKey === 'copy-config-path' ? 'Copied' : 'Copy Path'}
                   </button>
@@ -476,20 +516,26 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
         <input
           type="search"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); }}
+          onChange={(e) => {
+            setSearch(e.target.value);
+          }}
           placeholder="Search channel name or id"
         />
         <div className="channels-toolbar-actions">
           <button
             className={`btn-ghost${showOnlyAttention ? ' is-active' : ''}`}
-            onClick={() => { setShowOnlyAttention((v) => !v); }}
+            onClick={() => {
+              setShowOnlyAttention((v) => !v);
+            }}
             type="button"
           >
             Attention Only
           </button>
           <button
             className={`btn-ghost${showOnlyConfigured ? ' is-active' : ''}`}
-            onClick={() => { setShowOnlyConfigured((v) => !v); }}
+            onClick={() => {
+              setShowOnlyConfigured((v) => !v);
+            }}
             type="button"
           >
             Configured Only
@@ -498,7 +544,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
       </div>
 
       {error ? (
-        <div className="task-error-banner" role="alert">{error}</div>
+        <div className="task-error-banner" role="alert">
+          {error}
+        </div>
       ) : null}
 
       {loading ? (
@@ -509,12 +557,16 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
         </div>
       ) : channels.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconMessage width={28} height={28} /></div>
+          <div className="empty-state-icon">
+            <IconMessage width={28} height={28} />
+          </div>
           <p>No channel configuration found for this target.</p>
         </div>
       ) : filteredChannels.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconMessage width={28} height={28} /></div>
+          <div className="empty-state-icon">
+            <IconMessage width={28} height={28} />
+          </div>
           <p>No channels match current filters.</p>
         </div>
       ) : (
@@ -531,7 +583,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                     key={channel.id}
                     channel={channel}
                     expanded={expandedCardId === channel.id}
-                    onToggle={() => { toggleCard(channel.id); }}
+                    onToggle={() => {
+                      toggleCard(channel.id);
+                    }}
                     copiedKey={copiedKey}
                     onCopy={handleCopy}
                   />
@@ -552,7 +606,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                     key={channel.id}
                     channel={channel}
                     expanded={expandedCardId === channel.id}
-                    onToggle={() => { toggleCard(channel.id); }}
+                    onToggle={() => {
+                      toggleCard(channel.id);
+                    }}
                     copiedKey={copiedKey}
                     onCopy={handleCopy}
                   />

@@ -103,7 +103,11 @@ export function SidebarNav(props: SidebarNavProps): JSX.Element {
       <nav role="navigation" aria-label="Main navigation" className="sidebar-nav-top">
         {NAV_TOP.map((el) => {
           if (el.type === 'section') {
-            return <div key={el.key} className="sidebar-section-label">{el.label}</div>;
+            return (
+              <div key={el.key} className="sidebar-section-label">
+                {el.label}
+              </div>
+            );
           }
           return (
             <NavButton

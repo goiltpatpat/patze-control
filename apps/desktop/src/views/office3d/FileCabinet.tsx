@@ -11,7 +11,9 @@ export function FileCabinet(props: FileCabinetProps): JSX.Element {
   const [px, py, pz] = props.position;
 
   useEffect(() => {
-    return () => { document.body.style.cursor = 'auto'; };
+    return () => {
+      document.body.style.cursor = 'auto';
+    };
   }, []);
 
   const drawerColor = '#2a2a35';
@@ -20,9 +22,18 @@ export function FileCabinet(props: FileCabinetProps): JSX.Element {
   return (
     <group
       position={[px, py, pz]}
-      onClick={(e) => { e.stopPropagation(); props.onClick(); }}
-      onPointerOver={() => { setHovered(true); document.body.style.cursor = 'pointer'; }}
-      onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onClick();
+      }}
+      onPointerOver={() => {
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'auto';
+      }}
     >
       {/* Cabinet body */}
       <Box args={[0.5, 1.0, 0.4]} position={[0, 0.5, 0]}>
@@ -44,8 +55,15 @@ export function FileCabinet(props: FileCabinetProps): JSX.Element {
 
       {/* Hover label */}
       {hovered ? (
-        <Text position={[0, 1.15, 0]} fontSize={0.08} color="#e8f0ff" anchorX="center" anchorY="middle"
-          outlineWidth={0.005} outlineColor="#05070e">
+        <Text
+          position={[0, 1.15, 0]}
+          fontSize={0.08}
+          color="#e8f0ff"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.005}
+          outlineColor="#05070e"
+        >
           MEMORY
         </Text>
       ) : null}

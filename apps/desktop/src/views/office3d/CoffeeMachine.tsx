@@ -14,7 +14,9 @@ export function CoffeeMachine(props: CoffeeMachineProps): JSX.Element {
   const [px, py, pz] = props.position;
 
   useEffect(() => {
-    return () => { document.body.style.cursor = 'auto'; };
+    return () => {
+      document.body.style.cursor = 'auto';
+    };
   }, []);
 
   useFrame((state) => {
@@ -27,9 +29,18 @@ export function CoffeeMachine(props: CoffeeMachineProps): JSX.Element {
   return (
     <group
       position={[px, py, pz]}
-      onClick={(e) => { e.stopPropagation(); props.onClick(); }}
-      onPointerOver={() => { setHovered(true); document.body.style.cursor = 'pointer'; }}
-      onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onClick();
+      }}
+      onPointerOver={() => {
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'auto';
+      }}
     >
       {/* Body */}
       <Box args={[0.35, 0.6, 0.25]} position={[0, 0.3, 0]}>
@@ -81,8 +92,15 @@ export function CoffeeMachine(props: CoffeeMachineProps): JSX.Element {
 
       {/* Hover label */}
       {hovered ? (
-        <Text position={[0, 0.75, 0]} fontSize={0.08} color="#e8f0ff" anchorX="center" anchorY="middle"
-          outlineWidth={0.005} outlineColor="#05070e">
+        <Text
+          position={[0, 0.75, 0]}
+          fontSize={0.08}
+          color="#e8f0ff"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.005}
+          outlineColor="#05070e"
+        >
           COFFEE
         </Text>
       ) : null}

@@ -9,7 +9,13 @@ const execFileAsync = promisify(execFile);
 
 function isBlockedWebhookHost(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  const blocked = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '0000:0000:0000:0000:0000:0000:0000:0001'];
+  const blocked = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '::1',
+    '0000:0000:0000:0000:0000:0000:0000:0001',
+  ];
   if (blocked.includes(h)) return true;
   const parts = h.split('.').map(Number);
   if (parts.length === 4 && parts.every((n) => !isNaN(n))) {

@@ -79,11 +79,7 @@ function gaugeTone(pct: number): string {
   return 'tone-good';
 }
 
-function MiniGauge(props: {
-  label: string;
-  value: number;
-  onClick?: () => void;
-}): JSX.Element {
+function MiniGauge(props: { label: string; value: number; onClick?: () => void }): JSX.Element {
   const pct = Math.min(100, Math.max(0, props.value));
   const Tag = props.onClick ? 'button' : 'span';
   return (
@@ -189,18 +185,24 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
           <MiniGauge
             label="CPU"
             value={fleetResource.avgCpu}
-            onClick={() => { navigate('monitor'); }}
+            onClick={() => {
+              navigate('monitor');
+            }}
           />
           <MiniGauge
             label="MEM"
             value={fleetResource.avgMem}
-            onClick={() => { navigate('monitor'); }}
+            onClick={() => {
+              navigate('monitor');
+            }}
           />
           {fleetResource.avgDisk !== null ? (
             <MiniGauge
               label="DISK"
               value={fleetResource.avgDisk}
-              onClick={() => { navigate('monitor'); }}
+              onClick={() => {
+                navigate('monitor');
+              }}
             />
           ) : null}
           <span className="status-strip-sep" />
@@ -209,7 +211,9 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
       {agentCount > 0 ? (
         <button
           className="status-strip-item status-strip-link"
-          onClick={() => { navigate('agents'); }}
+          onClick={() => {
+            navigate('agents');
+          }}
           title="View agents"
         >
           <span className="status-strip-label">Agents</span>
@@ -218,7 +222,9 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
       ) : null}
       <button
         className="status-strip-item status-strip-link"
-        onClick={() => { navigate('runs'); }}
+        onClick={() => {
+          navigate('runs');
+        }}
         title="View runs"
       >
         <span className="status-strip-label">Active Runs</span>
@@ -229,7 +235,9 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
       {props.bridgeCount > 0 ? (
         <button
           className="status-strip-item status-strip-link"
-          onClick={() => { navigate('tunnels'); }}
+          onClick={() => {
+            navigate('tunnels');
+          }}
           title="View bridges"
         >
           <span className="status-strip-label">Bridges</span>

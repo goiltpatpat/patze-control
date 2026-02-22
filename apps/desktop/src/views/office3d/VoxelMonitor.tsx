@@ -13,19 +13,27 @@ interface VoxelMonitorProps {
 
 function getScreenColor(status: DeskStatus): string {
   switch (status) {
-    case 'active': return '#0a2a1a';
-    case 'idle': return '#1a1a2a';
-    case 'error': return '#2a0a0a';
-    case 'offline': return '#0a0a0a';
+    case 'active':
+      return '#0a2a1a';
+    case 'idle':
+      return '#1a1a2a';
+    case 'error':
+      return '#2a0a0a';
+    case 'offline':
+      return '#0a0a0a';
   }
 }
 
 function getScreenEmissive(status: DeskStatus): string {
   switch (status) {
-    case 'active': return '#1a4a2a';
-    case 'idle': return '#1a2a4a';
-    case 'error': return '#4a1a1a';
-    case 'offline': return '#0a0a0a';
+    case 'active':
+      return '#1a4a2a';
+    case 'idle':
+      return '#1a2a4a';
+    case 'error':
+      return '#4a1a1a';
+    case 'offline':
+      return '#0a0a0a';
   }
 }
 

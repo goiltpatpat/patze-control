@@ -337,7 +337,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-const BLOCKED_DIR_PREFIXES = ['/etc', '/var', '/proc', '/sys', '/dev', '/boot', '/sbin', '/bin', '/usr/sbin', '/usr/bin', '/lib', '/tmp'];
+const BLOCKED_DIR_PREFIXES = [
+  '/etc',
+  '/var',
+  '/proc',
+  '/sys',
+  '/dev',
+  '/boot',
+  '/sbin',
+  '/bin',
+  '/usr/sbin',
+  '/usr/bin',
+  '/lib',
+  '/tmp',
+];
 
 function isOpenClawDirSafe(resolvedDir: string): boolean {
   if (resolvedDir === '/' || resolvedDir === os.homedir()) return false;
@@ -352,9 +365,14 @@ function isOpenClawDirSafe(resolvedDir: string): boolean {
   ];
   const isUnderHome = resolvedDir.startsWith(homeDir + path.sep);
   if (!isUnderHome) return false;
-  const isUnderSshDir = resolvedDir.startsWith(path.join(homeDir, '.ssh') + path.sep) || resolvedDir === path.join(homeDir, '.ssh');
+  const isUnderSshDir =
+    resolvedDir.startsWith(path.join(homeDir, '.ssh') + path.sep) ||
+    resolvedDir === path.join(homeDir, '.ssh');
   if (isUnderSshDir) return false;
-  return safePrefixes.some((p) => resolvedDir === p || resolvedDir.startsWith(p + path.sep)) || isUnderHome;
+  return (
+    safePrefixes.some((p) => resolvedDir === p || resolvedDir.startsWith(p + path.sep)) ||
+    isUnderHome
+  );
 }
 
 function parseBatchBody(body: unknown): readonly unknown[] | null {
@@ -2103,9 +2121,10 @@ app.post('/openclaw/targets', async (request: FastifyRequest, reply: FastifyRepl
       : body.openclawDir
   );
   if (!isOpenClawDirSafe(resolvedDir)) {
-    return reply
-      .code(400)
-      .send({ error: 'invalid_openclaw_dir', message: 'Directory is not allowed for security reasons.' });
+    return reply.code(400).send({
+      error: 'invalid_openclaw_dir',
+      message: 'Directory is not allowed for security reasons.',
+    });
   }
   const input: OpenClawTargetInput = {
     label: body.label,
@@ -2139,7 +2158,10 @@ app.patch(
           : patch.openclawDir
       );
       if (!isOpenClawDirSafe(resolvedDir)) {
-        return reply.code(400).send({ error: 'invalid_openclaw_dir', message: 'Directory is not allowed for security reasons.' });
+        return reply.code(400).send({
+          error: 'invalid_openclaw_dir',
+          message: 'Directory is not allowed for security reasons.',
+        });
       }
     }
     const updated = openclawTargetStore.update(request.params.targetId, patch);

@@ -319,7 +319,10 @@ export class BridgeSetupManager {
     const privateKey = await this.loadSshKey(effective.keyPath);
     const acceptedNewKey = await this.connectClient(client, effective, privateKey);
     if (acceptedNewKey) {
-      this.addLog(bridge, 'WARNING: Unknown SSH host key auto-accepted (TOFU). Verify host fingerprint manually for production use.');
+      this.addLog(
+        bridge,
+        'WARNING: Unknown SSH host key auto-accepted (TOFU). Verify host fingerprint manually for production use.'
+      );
     }
 
     if (bridge.closing) return;

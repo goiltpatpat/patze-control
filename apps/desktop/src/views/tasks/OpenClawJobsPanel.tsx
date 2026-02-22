@@ -3,7 +3,12 @@ import { IconClock } from '../../components/Icons';
 import { navigate } from '../../shell/routes';
 import { parseSessionOrigin } from '../../utils/openclaw';
 import { formatRelativeTime } from '../../utils/time';
-import type { OpenClawCronJob, OpenClawHealthCheck, OpenClawRunRecord, OpenClawSyncStatus } from './types';
+import type {
+  OpenClawCronJob,
+  OpenClawHealthCheck,
+  OpenClawRunRecord,
+  OpenClawSyncStatus,
+} from './types';
 import {
   formatCompactMs,
   formatDurationMs,

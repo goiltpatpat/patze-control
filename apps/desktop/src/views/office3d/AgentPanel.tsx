@@ -1,4 +1,12 @@
-import { IconX, IconBot, IconClock, IconZap, IconLink, IconActivity, IconServer } from '../../components/Icons';
+import {
+  IconX,
+  IconBot,
+  IconClock,
+  IconZap,
+  IconLink,
+  IconActivity,
+  IconServer,
+} from '../../components/Icons';
 import { formatRelativeTime } from '../../utils/time';
 import { navigate } from '../../shell/routes';
 
@@ -18,19 +26,27 @@ interface AgentPanelProps {
 
 function getStatusLabel(status: DeskStatus): string {
   switch (status) {
-    case 'active': return 'Active';
-    case 'idle': return 'Idle';
-    case 'error': return 'Error';
-    case 'offline': return 'Offline';
+    case 'active':
+      return 'Active';
+    case 'idle':
+      return 'Idle';
+    case 'error':
+      return 'Error';
+    case 'offline':
+      return 'Offline';
   }
 }
 
 function getStatusDescription(status: DeskStatus, activeRuns: number): string {
   switch (status) {
-    case 'active': return `Processing ${activeRuns} run${activeRuns !== 1 ? 's' : ''}`;
-    case 'idle': return 'Waiting for tasks';
-    case 'error': return 'Sync failures detected';
-    case 'offline': return 'Not reachable';
+    case 'active':
+      return `Processing ${activeRuns} run${activeRuns !== 1 ? 's' : ''}`;
+    case 'idle':
+      return 'Waiting for tasks';
+    case 'error':
+      return 'Sync failures detected';
+    case 'offline':
+      return 'Not reachable';
   }
 }
 
@@ -94,7 +110,10 @@ export function AgentPanel(props: AgentPanelProps): JSX.Element {
         <div className="office-agent-panel-stat">
           <IconZap width={13} height={13} />
           <span className="office-agent-panel-stat-label">Active Runs</span>
-          <span className="office-agent-panel-stat-value" style={{ color: props.activeRuns > 0 ? props.statusColor : undefined }}>
+          <span
+            className="office-agent-panel-stat-value"
+            style={{ color: props.activeRuns > 0 ? props.statusColor : undefined }}
+          >
             {props.activeRuns}
           </span>
         </div>
@@ -119,28 +138,36 @@ export function AgentPanel(props: AgentPanelProps): JSX.Element {
         <button
           type="button"
           className="office-agent-panel-action-btn office-agent-panel-action-primary"
-          onClick={() => { navigate('tasks', { taskView: 'openclaw' }); }}
+          onClick={() => {
+            navigate('tasks', { taskView: 'openclaw' });
+          }}
         >
           View Tasks
         </button>
         <button
           type="button"
           className="office-agent-panel-action-btn"
-          onClick={() => { navigate('sessions'); }}
+          onClick={() => {
+            navigate('sessions');
+          }}
         >
           View Sessions
         </button>
         <button
           type="button"
           className="office-agent-panel-action-btn"
-          onClick={() => { navigate('runs'); }}
+          onClick={() => {
+            navigate('runs');
+          }}
         >
           View Runs
         </button>
         <button
           type="button"
           className="office-agent-panel-action-btn"
-          onClick={() => { navigate('logs'); }}
+          onClick={() => {
+            navigate('logs');
+          }}
         >
           View Logs
         </button>

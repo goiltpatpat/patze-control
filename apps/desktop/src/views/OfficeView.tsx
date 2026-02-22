@@ -5,7 +5,9 @@ import { navigate } from '../shell/routes';
 import { formatRelativeTime } from '../utils/time';
 import type { CameraMode } from './OfficeScene3D';
 
-const OfficeScene3D = lazy(async () => import('./OfficeScene3D').then((mod) => ({ default: mod.OfficeScene3D })));
+const OfficeScene3D = lazy(async () =>
+  import('./OfficeScene3D').then((mod) => ({ default: mod.OfficeScene3D }))
+);
 
 export interface OfficeViewProps {
   readonly openclawTargets: readonly TargetSyncStatusEntry[];
@@ -82,14 +84,18 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
               type="button"
               className={`office-mode-btn${mode === '3d' ? ' office-mode-btn-active' : ''}`}
               disabled={!supports3D}
-              onClick={() => { setMode('3d'); }}
+              onClick={() => {
+                setMode('3d');
+              }}
             >
               3D
             </button>
             <button
               type="button"
               className={`office-mode-btn${mode === 'classic' ? ' office-mode-btn-active' : ''}`}
-              onClick={() => { setMode('classic'); }}
+              onClick={() => {
+                setMode('classic');
+              }}
             >
               Classic
             </button>
@@ -100,14 +106,18 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
               <button
                 type="button"
                 className={`office-mode-btn${cameraMode === 'orbit' ? ' office-mode-btn-active' : ''}`}
-                onClick={() => { setCameraMode('orbit'); }}
+                onClick={() => {
+                  setCameraMode('orbit');
+                }}
               >
                 Orbit
               </button>
               <button
                 type="button"
                 className={`office-mode-btn${cameraMode === 'fps' ? ' office-mode-btn-active' : ''}`}
-                onClick={() => { setCameraMode('fps'); }}
+                onClick={() => {
+                  setCameraMode('fps');
+                }}
               >
                 FPS
               </button>
@@ -148,36 +158,40 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
         </Suspense>
       ) : (
         <>
-          {!supports3D ? <p className="office-rendering-note">3D unavailable on this device, switched to Classic mode.</p> : null}
-        <div className="office-floor-wrap">
-          <div className="office-floor">
-            {desks.map((desk) => (
-              <button
-                key={desk.id}
-                className={`office-desk office-status-${desk.status}`}
-                onClick={() => {
-                  navigate('tasks', { taskView: 'openclaw' });
-                }}
-                title={`${desk.label} (${desk.type})`}
-              >
-                <div className="office-desk-avatar">{desk.emoji}</div>
-                <div className="office-desk-title">
-                  <IconBot width={12} height={12} />
-                  <span>{desk.label}</span>
-                </div>
-                <div className="office-desk-meta">
-                  <span>{desk.type}</span>
-                  <span>
-                    {desk.activeRuns > 0 ? `${desk.activeRuns.toString()} active` : desk.status}
-                  </span>
-                </div>
-                <div className="office-desk-seen">
-                  {desk.lastSeen ? formatRelativeTime(desk.lastSeen) : 'never synced'}
-                </div>
-              </button>
-            ))}
+          {!supports3D ? (
+            <p className="office-rendering-note">
+              3D unavailable on this device, switched to Classic mode.
+            </p>
+          ) : null}
+          <div className="office-floor-wrap">
+            <div className="office-floor">
+              {desks.map((desk) => (
+                <button
+                  key={desk.id}
+                  className={`office-desk office-status-${desk.status}`}
+                  onClick={() => {
+                    navigate('tasks', { taskView: 'openclaw' });
+                  }}
+                  title={`${desk.label} (${desk.type})`}
+                >
+                  <div className="office-desk-avatar">{desk.emoji}</div>
+                  <div className="office-desk-title">
+                    <IconBot width={12} height={12} />
+                    <span>{desk.label}</span>
+                  </div>
+                  <div className="office-desk-meta">
+                    <span>{desk.type}</span>
+                    <span>
+                      {desk.activeRuns > 0 ? `${desk.activeRuns.toString()} active` : desk.status}
+                    </span>
+                  </div>
+                  <div className="office-desk-seen">
+                    {desk.lastSeen ? formatRelativeTime(desk.lastSeen) : 'never synced'}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
         </>
       )}
     </section>

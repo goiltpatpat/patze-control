@@ -27,7 +27,9 @@ export function AgentDesk(props: AgentDeskProps): JSX.Element {
   const [px, py, pz] = props.position;
 
   useEffect(() => {
-    return () => { document.body.style.cursor = 'auto'; };
+    return () => {
+      document.body.style.cursor = 'auto';
+    };
   }, []);
 
   useFrame(() => {
@@ -37,17 +39,24 @@ export function AgentDesk(props: AgentDeskProps): JSX.Element {
     groupRef.current.scale.setScalar(s + (targetScale - s) * 0.1);
   });
 
-  const statusText = props.activeRuns > 0
-    ? `${props.activeRuns} active`
-    : props.status;
+  const statusText = props.activeRuns > 0 ? `${props.activeRuns} active` : props.status;
 
   return (
     <group
       ref={groupRef}
       position={[px, py, pz]}
-      onClick={(e) => { e.stopPropagation(); props.onClick(); }}
-      onPointerOver={() => { setHovered(true); document.body.style.cursor = 'pointer'; }}
-      onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onClick();
+      }}
+      onPointerOver={() => {
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'auto';
+      }}
     >
       {/* Desk surface */}
       <Box args={[1.8, 0.08, 1.0]} position={[0, 0.72, 0]} castShadow receiveShadow>
@@ -55,14 +64,25 @@ export function AgentDesk(props: AgentDeskProps): JSX.Element {
       </Box>
 
       {/* Desk legs */}
-      {([[-0.8, -0.4], [0.8, -0.4], [-0.8, 0.4], [0.8, 0.4]] as const).map(([lx, lz], i) => (
+      {(
+        [
+          [-0.8, -0.4],
+          [0.8, -0.4],
+          [-0.8, 0.4],
+          [0.8, 0.4],
+        ] as const
+      ).map(([lx, lz], i) => (
         <Box key={i} args={[0.06, 0.72, 0.06]} position={[lx, 0.36, lz]}>
           <meshStandardMaterial color="#2a2420" metalness={0.4} roughness={0.5} />
         </Box>
       ))}
 
       {/* Monitor */}
-      <VoxelMonitor position={[0, 0.76, -0.25]} status={props.status} statusColor={props.statusColor} />
+      <VoxelMonitor
+        position={[0, 0.76, -0.25]}
+        status={props.status}
+        statusColor={props.statusColor}
+      />
 
       {/* Keyboard */}
       <VoxelKeyboard position={[0, 0.77, 0.15]} />

@@ -89,19 +89,30 @@ function LiveClock(): JSX.Element {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const id = setInterval(() => { setNow(Date.now()); }, 1000);
-    return () => { clearInterval(id); };
+    const id = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      clearInterval(id);
+    };
   }, []);
 
   const d = new Date(now);
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   const ss = String(d.getSeconds()).padStart(2, '0');
-  const dateStr = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const dateStr = d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 
   return (
     <span className="ov-live-clock">
-      <span className="ov-clock-time">{hh}:{mm}<span className="ov-clock-seconds">:{ss}</span></span>
+      <span className="ov-clock-time">
+        {hh}:{mm}
+        <span className="ov-clock-seconds">:{ss}</span>
+      </span>
       <span className="ov-clock-date">{dateStr}</span>
     </span>
   );

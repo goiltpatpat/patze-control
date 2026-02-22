@@ -22,8 +22,12 @@ export function FirstPersonControls(props: FirstPersonControlsProps): JSX.Elemen
   useEffect(() => {
     camera.position.set(0, 2.5, 8);
 
-    const onKeyDown = (e: KeyboardEvent) => { keys.current.add(e.code); };
-    const onKeyUp = (e: KeyboardEvent) => { keys.current.delete(e.code); };
+    const onKeyDown = (e: KeyboardEvent) => {
+      keys.current.add(e.code);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      keys.current.delete(e.code);
+    };
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);

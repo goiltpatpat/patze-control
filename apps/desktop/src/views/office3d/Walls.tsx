@@ -29,17 +29,26 @@ export function Walls(): JSX.Element {
       </mesh>
 
       {/* Baseboard trim - back */}
-      <Box args={[ROOM_WIDTH, TRIM_HEIGHT, 0.25]} position={[0, TRIM_HEIGHT / 2, -ROOM_DEPTH / 2 + 0.02]}>
+      <Box
+        args={[ROOM_WIDTH, TRIM_HEIGHT, 0.25]}
+        position={[0, TRIM_HEIGHT / 2, -ROOM_DEPTH / 2 + 0.02]}
+      >
         <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} metalness={0.15} />
       </Box>
 
       {/* Baseboard trim - left */}
-      <Box args={[0.25, TRIM_HEIGHT, ROOM_DEPTH]} position={[-ROOM_WIDTH / 2 + 0.02, TRIM_HEIGHT / 2, 0]}>
+      <Box
+        args={[0.25, TRIM_HEIGHT, ROOM_DEPTH]}
+        position={[-ROOM_WIDTH / 2 + 0.02, TRIM_HEIGHT / 2, 0]}
+      >
         <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} metalness={0.15} />
       </Box>
 
       {/* Baseboard trim - right */}
-      <Box args={[0.25, TRIM_HEIGHT, ROOM_DEPTH]} position={[ROOM_WIDTH / 2 - 0.02, TRIM_HEIGHT / 2, 0]}>
+      <Box
+        args={[0.25, TRIM_HEIGHT, ROOM_DEPTH]}
+        position={[ROOM_WIDTH / 2 - 0.02, TRIM_HEIGHT / 2, 0]}
+      >
         <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} metalness={0.15} />
       </Box>
     </group>

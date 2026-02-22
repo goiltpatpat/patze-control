@@ -50,11 +50,18 @@ const OFFICE_BOUNDS = { minX: -10, maxX: 10, minZ: -8, maxZ: 8 };
 
 function getStatusColor(status: DeskStatus): string {
   switch (status) {
-    case 'active': return '#2fc977';
-    case 'idle': return '#f2bf4d';
-    case 'error': return '#ee5d5d';
-    case 'offline': return '#5e6772';
-    default: { const impossible: never = status; return impossible; }
+    case 'active':
+      return '#2fc977';
+    case 'idle':
+      return '#f2bf4d';
+    case 'error':
+      return '#ee5d5d';
+    case 'offline':
+      return '#5e6772';
+    default: {
+      const impossible: never = status;
+      return impossible;
+    }
   }
 }
 
@@ -89,25 +96,29 @@ function SceneContent(props: {
     avatarPositions.current.set(id, pos);
   }, []);
 
-  const deskLights = useMemo(() =>
-    props.deskLayout.map((desk) => ({
-      x: desk.x,
-      z: desk.z,
-      color: getStatusColor(desk.status),
-      intensity: desk.status === 'active' ? 0.6 : 0.35,
-    })),
-    [props.deskLayout],
+  const deskLights = useMemo(
+    () =>
+      props.deskLayout.map((desk) => ({
+        x: desk.x,
+        z: desk.z,
+        color: getStatusColor(desk.status),
+        intensity: desk.status === 'active' ? 0.6 : 0.35,
+      })),
+    [props.deskLayout]
   );
 
-  const obstacles = useMemo(() => [
-    ...props.deskLayout.map((desk) => ({
-      position: new Vector3(desk.x, 0, desk.z),
-      radius: 1.5,
-    })),
-    { position: new Vector3(-9, 0, -5), radius: 0.8 },
-    { position: new Vector3(0, 0, -8.5), radius: 1.5 },
-    { position: new Vector3(9, 0, -5), radius: 0.6 },
-  ], [props.deskLayout]);
+  const obstacles = useMemo(
+    () => [
+      ...props.deskLayout.map((desk) => ({
+        position: new Vector3(desk.x, 0, desk.z),
+        radius: 1.5,
+      })),
+      { position: new Vector3(-9, 0, -5), radius: 0.8 },
+      { position: new Vector3(0, 0, -8.5), radius: 1.5 },
+      { position: new Vector3(9, 0, -5), radius: 0.6 },
+    ],
+    [props.deskLayout]
+  );
 
   return (
     <>
@@ -129,7 +140,9 @@ function SceneContent(props: {
           position={[desk.x, 0, desk.z]}
           statusColor={getStatusColor(desk.status)}
           isSelected={props.selectedAgent === desk.id}
-          onClick={() => { props.onDeskClick(desk.id); }}
+          onClick={() => {
+            props.onDeskClick(desk.id);
+          }}
         />
       ))}
 
@@ -150,9 +163,25 @@ function SceneContent(props: {
       ))}
 
       {/* Interactive Props */}
-      <FileCabinet position={[-9, 0, -5]} onClick={() => { props.onInteraction('memory'); }} />
-      <Whiteboard position={[0, 2.8, -9.75]} rotation={[0, 0, 0]} onClick={() => { props.onInteraction('roadmap'); }} />
-      <CoffeeMachine position={[9, 0, -5]} onClick={() => { props.onInteraction('coffee'); }} />
+      <FileCabinet
+        position={[-9, 0, -5]}
+        onClick={() => {
+          props.onInteraction('memory');
+        }}
+      />
+      <Whiteboard
+        position={[0, 2.8, -9.75]}
+        rotation={[0, 0, 0]}
+        onClick={() => {
+          props.onInteraction('roadmap');
+        }}
+      />
+      <CoffeeMachine
+        position={[9, 0, -5]}
+        onClick={() => {
+          props.onInteraction('coffee');
+        }}
+      />
 
       {/* Decorative Props */}
       <PlantPot position={[-10.5, 0, -8.5]} size="large" />
@@ -208,7 +237,12 @@ function InteractionModalOverlay(props: {
 
   return (
     <div className="office-interaction-overlay" onClick={props.onClose}>
-      <div className="office-interaction-modal" onClick={(e) => { e.stopPropagation(); }}>
+      <div
+        className="office-interaction-modal"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
         <div className="office-interaction-modal-header">
           <h3>{titles[props.modal]}</h3>
           <button type="button" className="office-agent-panel-close" onClick={props.onClose}>
@@ -220,7 +254,10 @@ function InteractionModalOverlay(props: {
           <button
             type="button"
             className="office-agent-panel-action-btn office-agent-panel-action-primary"
-            onClick={() => { navigate(action.route as Parameters<typeof navigate>[0]); props.onClose(); }}
+            onClick={() => {
+              navigate(action.route as Parameters<typeof navigate>[0]);
+              props.onClose();
+            }}
           >
             {action.label}
           </button>
@@ -257,24 +294,18 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
   }, []);
 
   const sceneSpan = Math.max(
-    deskLayout.length > 0
-      ? Math.max(...deskLayout.map((d) => Math.abs(d.x))) * 2 + 8
-      : 16,
-    deskLayout.length > 0
-      ? Math.max(...deskLayout.map((d) => Math.abs(d.z))) * 2 + 8
-      : 16,
+    deskLayout.length > 0 ? Math.max(...deskLayout.map((d) => Math.abs(d.x))) * 2 + 8 : 16,
+    deskLayout.length > 0 ? Math.max(...deskLayout.map((d) => Math.abs(d.z))) * 2 + 8 : 16
   );
   const cameraY = Math.max(7, sceneSpan * 0.6);
   const cameraZ = Math.max(10, sceneSpan * 0.8);
 
   return (
     <div className="office-3d-wrap office-3d-wrap-full">
-      <div className={`office-3d-canvas office-3d-canvas-full${selectedDesk != null ? ' office-3d-canvas-with-panel' : ''}`}>
-        <Canvas
-          camera={{ position: [0, cameraY, cameraZ], fov: 50 }}
-          shadows
-          dpr={[1, 1.5]}
-        >
+      <div
+        className={`office-3d-canvas office-3d-canvas-full${selectedDesk != null ? ' office-3d-canvas-with-panel' : ''}`}
+      >
+        <Canvas camera={{ position: [0, cameraY, cameraZ], fov: 50 }} shadows dpr={[1, 1.5]}>
           <color attach="background" args={['#0b1320']} />
           <fog attach="fog" args={['#0b1320', 20, 45]} />
           <Suspense fallback={null}>
@@ -331,7 +362,9 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
             key={desk.id}
             type="button"
             className={`office-desk office-status-${desk.status}${selectedAgent === desk.id ? ' office-desk-selected' : ''}`}
-            onClick={() => { handleDeskClick(desk.id); }}
+            onClick={() => {
+              handleDeskClick(desk.id);
+            }}
             title={`${desk.label} (${desk.type})`}
           >
             <div className="office-desk-avatar">{desk.emoji}</div>
@@ -340,9 +373,13 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
             </div>
             <div className="office-desk-meta">
               <span>{desk.type}</span>
-              <span>{desk.activeRuns > 0 ? `${desk.activeRuns.toString()} active` : desk.status}</span>
+              <span>
+                {desk.activeRuns > 0 ? `${desk.activeRuns.toString()} active` : desk.status}
+              </span>
             </div>
-            <div className="office-desk-seen">{desk.lastSeen ? formatRelativeTime(desk.lastSeen) : 'never synced'}</div>
+            <div className="office-desk-seen">
+              {desk.lastSeen ? formatRelativeTime(desk.lastSeen) : 'never synced'}
+            </div>
           </button>
         ))}
       </div>

@@ -50,7 +50,9 @@ export function Floor(): JSX.Element {
   }
 
   useEffect(() => {
-    return () => { textureRef.current?.dispose(); };
+    return () => {
+      textureRef.current?.dispose();
+    };
   }, []);
 
   return (

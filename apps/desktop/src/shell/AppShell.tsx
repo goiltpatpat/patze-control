@@ -157,9 +157,7 @@ export function AppShell(props: AppShellProps): JSX.Element {
     const badges: Partial<Record<AppRoute, number>> = {};
     const failedRuns = snap.runs.filter((r) => r.state === 'failed').length;
     if (failedRuns > 0) badges.runs = failedRuns;
-    const errorLogs = snap.logs.filter(
-      (l) => l.level === 'error' || l.level === 'critical'
-    ).length;
+    const errorLogs = snap.logs.filter((l) => l.level === 'error' || l.level === 'critical').length;
     if (errorLogs > 0) badges.logs = errorLogs;
     return badges;
   }, [props.monitorState.snapshot]);

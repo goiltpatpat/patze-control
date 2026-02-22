@@ -40,7 +40,14 @@ export function VoxelMacMini(props: VoxelMacMiniProps): JSX.Element {
       </mesh>
 
       {/* Rubber feet */}
-      {([[-0.07, -0.07], [0.07, -0.07], [-0.07, 0.07], [0.07, 0.07]] as const).map(([fx, fz], i) => (
+      {(
+        [
+          [-0.07, -0.07],
+          [0.07, -0.07],
+          [-0.07, 0.07],
+          [0.07, 0.07],
+        ] as const
+      ).map(([fx, fz], i) => (
         <Box key={i} args={[0.02, 0.004, 0.02]} position={[fx, -0.002, fz]}>
           <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
         </Box>

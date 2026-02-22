@@ -31,10 +31,14 @@ interface MovingAvatarProps {
 
 function getMovementInterval(status: DeskStatus): [number, number] {
   switch (status) {
-    case 'active': return [8000, 15000];
-    case 'idle': return [3000, 6000];
-    case 'error': return [25000, 40000];
-    case 'offline': return [60000, 120000];
+    case 'active':
+      return [8000, 15000];
+    case 'idle':
+      return [3000, 6000];
+    case 'error':
+      return [25000, 40000];
+    case 'offline':
+      return [60000, 120000];
   }
 }
 
@@ -47,7 +51,7 @@ function isCollisionFree(
   obstacles: readonly Obstacle[],
   otherPositions: ReadonlyMap<string, Vector3>,
   selfId: string,
-  avatarRadius: number,
+  avatarRadius: number
 ): boolean {
   for (const obs of obstacles) {
     if (pos.distanceTo(obs.position) < obs.radius + avatarRadius) return false;
@@ -76,7 +80,7 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
       const candidate = new Vector3(
         randomInRange(bounds.minX + 1, bounds.maxX - 1),
         0,
-        randomInRange(bounds.minZ + 1, bounds.maxZ - 1),
+        randomInRange(bounds.minZ + 1, bounds.maxZ - 1)
       );
 
       if (props.status === 'active') {
@@ -86,12 +90,27 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
         candidate.z = dz + randomInRange(-0.8, 0.8);
       }
 
-      if (isCollisionFree(candidate, props.obstacles, props.otherAvatarPositions, props.id, avatarRadius)) {
+      if (
+        isCollisionFree(
+          candidate,
+          props.obstacles,
+          props.otherAvatarPositions,
+          props.id,
+          avatarRadius
+        )
+      ) {
         targetPos.current.copy(candidate);
         return;
       }
     }
-  }, [props.id, props.status, props.deskPosition, props.officeBounds, props.obstacles, props.otherAvatarPositions]);
+  }, [
+    props.id,
+    props.status,
+    props.deskPosition,
+    props.officeBounds,
+    props.obstacles,
+    props.otherAvatarPositions,
+  ]);
 
   useEffect(() => {
     const [minMs, maxMs] = getMovementInterval(props.status);
@@ -103,7 +122,9 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
       }, delay);
     };
     let timerId = scheduleNext();
-    return () => { window.clearTimeout(timerId); };
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [props.status, pickNewTarget]);
 
   const propsRef = useLatest(props);
