@@ -1,7 +1,6 @@
 import { Suspense, useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment } from '@react-three/drei';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { Vector3 } from 'three';
 import { formatRelativeTime } from '../utils/time';
 import { navigate } from '../shell/routes';
@@ -300,11 +299,6 @@ function SceneContent(props: {
       ) : props.cameraMode === 'fps' ? (
         <FirstPersonControls moveSpeed={4} />
       ) : null}
-
-      {/* Post-processing */}
-      <EffectComposer>
-        <Bloom luminanceThreshold={0.6} luminanceSmoothing={0.4} intensity={0.5} mipmapBlur />
-      </EffectComposer>
     </>
   );
 }
