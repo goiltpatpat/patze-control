@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { CommandPalette } from '../components/CommandPalette';
 import type { MonitorState } from '../control-monitor';
 import type { BridgeConnection } from '../hooks/useBridgeConnections';
 import type {
@@ -64,10 +65,25 @@ function isInputFocused(): boolean {
 export function AppShell(props: AppShellProps): JSX.Element {
   const { routeState } = useAppRoute();
   const openclawTargets = useOpenClawTargets(props.baseUrl, props.token, props.status);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  const closePalette = useCallback(() => { setPaletteOpen(false); }, []);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
+      // Command Palette: Cmd/Ctrl + K
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+        return;
+      }
+
       if (e.ctrlKey || e.metaKey || e.altKey || isInputFocused()) {
+        return;
+      }
+
+      // Don't trigger number shortcuts while palette is open
+      if (paletteOpen) {
         return;
       }
 
@@ -83,10 +99,15 @@ export function AppShell(props: AppShellProps): JSX.Element {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [paletteOpen]);
 
   return (
     <main className="app-shell">
+      <CommandPalette
+        open={paletteOpen}
+        onClose={closePalette}
+        snapshot={props.monitorState.snapshot}
+      />
       <TopMachineContextBar
         baseUrl={props.baseUrl}
         token={props.token}
