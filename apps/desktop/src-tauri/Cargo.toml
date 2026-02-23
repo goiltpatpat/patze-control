@@ -1,6 +1,6 @@
 [package]
 name = "patze-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Patze Control Desktop"
 authors = ["patze-control"]
 edition = "2021"
