@@ -6,7 +6,7 @@
 
 <p align="center">
   Desktop control plane for <a href="https://github.com/nicepkg/openclaw">OpenClaw</a> fleets.<br/>
-  Manage agents, models, channels, and infrastructure from one visual interface&nbsp;—&nbsp;no&nbsp;JSON&nbsp;by&nbsp;hand.
+  Fleet&nbsp;telemetry,&nbsp;config&nbsp;diffs,&nbsp;and&nbsp;reverse&nbsp;SSH&nbsp;tunnels&nbsp;—&nbsp;unified&nbsp;in&nbsp;one&nbsp;Tauri&nbsp;desktop.
 </p>
 
 <p align="center">
