@@ -1079,6 +1079,44 @@ app.delete('/bridge/managed/:id', async (request: FastifyRequest, reply: Fastify
   return reply.code(200).send({ ok: true });
 });
 
+app.post(
+  '/bridge/managed/:id/sudo-password',
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!isAuthorized(request)) {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+    const { id } = request.params as { id: string };
+    const body = request.body as Record<string, unknown> | null;
+    const password = body && typeof body.password === 'string' ? body.password : '';
+    if (!password) {
+      return reply.code(400).send({ error: 'password is required' });
+    }
+    try {
+      const state = await bridgeSetupManager.retryInstallWithSudoPassword(id, password);
+      if (!state) return reply.code(404).send({ error: 'not_found' });
+      return reply.code(200).send(state);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: 'install_failed', message: msg });
+    }
+  }
+);
+
+app.post('/bridge/managed/:id/skip-sudo', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
+  const { id } = request.params as { id: string };
+  try {
+    const state = await bridgeSetupManager.retryInstallUserMode(id);
+    if (!state) return reply.code(404).send({ error: 'not_found' });
+    return reply.code(200).send(state);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return reply.code(500).send({ error: 'install_failed', message: msg });
+  }
+});
+
 app.post('/openclaw/bridge/cron-sync', async (request: FastifyRequest, reply: FastifyReply) => {
   if (!isAuthorized(request)) {
     return reply.code(401).send({ error: 'unauthorized' });

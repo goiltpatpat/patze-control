@@ -9,10 +9,13 @@ export type BridgeSetupPhase =
   | 'ssh_test'
   | 'tunnel_open'
   | 'installing'
+  | 'needs_sudo_password'
   | 'running'
   | 'telemetry_active'
   | 'error'
   | 'disconnected';
+
+export type BridgeInstallMode = 'system' | 'user' | undefined;
 
 export interface ManagedBridgeState {
   readonly id: string;
@@ -26,6 +29,7 @@ export interface ManagedBridgeState {
   readonly logs: readonly string[];
   readonly machineId: string | undefined;
   readonly connectedAt: string | undefined;
+  readonly installMode: BridgeInstallMode;
 }
 
 export interface BridgeSetupInput {
@@ -46,6 +50,7 @@ const ACTIVE_STATUSES = new Set<BridgeSetupPhase>([
   'ssh_test',
   'tunnel_open',
   'installing',
+  'needs_sudo_password',
 ]);
 
 function buildHeaders(token: string, json?: boolean): Record<string, string> {
@@ -141,12 +146,54 @@ export function useManagedBridges(baseUrl: string, token: string, connected: boo
     [baseUrl, fetchBridges, token]
   );
 
+  const submitSudoPassword = useCallback(
+    async (id: string, password: string): Promise<ManagedBridgeState | null> => {
+      try {
+        const res = await fetch(
+          `${baseUrl}/bridge/managed/${encodeURIComponent(id)}/sudo-password`,
+          {
+            method: 'POST',
+            headers: buildHeaders(token, true),
+            body: JSON.stringify({ password }),
+            signal: AbortSignal.timeout(60_000),
+          }
+        );
+        void fetchBridges();
+        if (!res.ok) return null;
+        return (await res.json()) as ManagedBridgeState;
+      } catch {
+        return null;
+      }
+    },
+    [baseUrl, fetchBridges, token]
+  );
+
+  const skipSudo = useCallback(
+    async (id: string): Promise<ManagedBridgeState | null> => {
+      try {
+        const res = await fetch(`${baseUrl}/bridge/managed/${encodeURIComponent(id)}/skip-sudo`, {
+          method: 'POST',
+          headers: buildHeaders(token),
+          signal: AbortSignal.timeout(60_000),
+        });
+        void fetchBridges();
+        if (!res.ok) return null;
+        return (await res.json()) as ManagedBridgeState;
+      } catch {
+        return null;
+      }
+    },
+    [baseUrl, fetchBridges, token]
+  );
+
   return {
     bridges,
     loading,
     setupBridge,
     disconnectBridge,
     removeBridge,
+    submitSudoPassword,
+    skipSudo,
     refresh: fetchBridges,
   } as const;
 }

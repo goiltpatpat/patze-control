@@ -8,6 +8,8 @@ TOKEN=""
 EXPIRES_IN=""
 OPENCLAW_HOME="${HOME}/.openclaw"
 SERVICE_NAME="patze-bridge"
+USER_MODE=false
+SUDO_PASS_MODE=false
 
 print_usage() {
   cat <<'EOF'
@@ -20,6 +22,8 @@ Options:
   --expires-in <duration> Optional token lifetime (example: 24h, 7d)
   --state-dir <path>      State/config dir (default: /etc/patze-bridge)
   --openclaw-home <path>  OpenClaw home dir (default: ~/.openclaw)
+  --user-mode             Install without sudo (user-level systemd + local prefix)
+  --sudo-pass             Read sudo password from stdin for non-interactive sudo -S
   --help                  Show this help
 EOF
 }
@@ -65,6 +69,14 @@ parse_args() {
         OPENCLAW_HOME="$2"
         shift 2
         ;;
+      --user-mode)
+        USER_MODE=true
+        shift
+        ;;
+      --sudo-pass)
+        SUDO_PASS_MODE=true
+        shift
+        ;;
       --help|-h)
         print_usage
         exit 0
@@ -85,16 +97,43 @@ require_node_18() {
   fi
 }
 
+SUDO_PASSWORD=""
+
 resolve_sudo() {
   if [ "$(id -u)" -eq 0 ]; then
     echo ""
     return
   fi
+
+  if [ "$USER_MODE" = true ]; then
+    echo ""
+    return
+  fi
+
+  if [ "$SUDO_PASS_MODE" = true ]; then
+    read -r SUDO_PASSWORD
+    echo "sudo -S"
+    return
+  fi
+
   if has_command sudo; then
     echo "sudo"
     return
   fi
+
   fail "This script needs root access for systemd and /etc. Run as root or install sudo."
+}
+
+run_sudo() {
+  local sudo_cmd="$1"
+  shift
+  if [ "$sudo_cmd" = "sudo -S" ] && [ -n "$SUDO_PASSWORD" ]; then
+    printf '%s\n' "$SUDO_PASSWORD" | sudo -S "$@" 2>/dev/null
+  elif [ -n "$sudo_cmd" ]; then
+    $sudo_cmd "$@"
+  else
+    "$@"
+  fi
 }
 
 compute_expires_at() {
@@ -144,8 +183,8 @@ PY
 ensure_machine_id() {
   local sudo_cmd="$1"
   local machine_id_file="${STATE_DIR}/machine-id"
-  if $sudo_cmd test -f "$machine_id_file"; then
-    $sudo_cmd cat "$machine_id_file"
+  if run_sudo "$sudo_cmd" test -f "$machine_id_file"; then
+    run_sudo "$sudo_cmd" cat "$machine_id_file"
     return
   fi
 
@@ -156,8 +195,8 @@ ensure_machine_id() {
     machine_id="$(node -e 'console.log(crypto.randomUUID())')"
   fi
   machine_id="machine_${machine_id}"
-  $sudo_cmd mkdir -p "$STATE_DIR"
-  printf '%s\n' "$machine_id" | $sudo_cmd tee "$machine_id_file" >/dev/null
+  run_sudo "$sudo_cmd" mkdir -p "$STATE_DIR"
+  printf '%s\n' "$machine_id" | run_sudo "$sudo_cmd" tee "$machine_id_file" >/dev/null
   printf '%s\n' "$machine_id"
 }
 
@@ -168,7 +207,7 @@ write_config() {
   local config_file="${STATE_DIR}/config.env"
   local offset_file="${STATE_DIR}/cron-offsets.json"
 
-  $sudo_cmd mkdir -p "$STATE_DIR"
+  run_sudo "$sudo_cmd" mkdir -p "$STATE_DIR"
   {
     printf 'CONTROL_PLANE_BASE_URL=%s\n' "$CONTROL_PLANE_URL"
     printf 'CONTROL_PLANE_TOKEN=%s\n' "$TOKEN"
@@ -187,13 +226,13 @@ write_config() {
     if [ -n "$expires_at" ]; then
       printf 'TOKEN_EXPIRES_AT=%s\n' "$expires_at"
     fi
-  } | $sudo_cmd tee "$config_file" >/dev/null
+  } | run_sudo "$sudo_cmd" tee "$config_file" >/dev/null
 }
 
-write_service_file() {
+write_system_service() {
   local sudo_cmd="$1"
   local service_file="/etc/systemd/system/${SERVICE_NAME}.service"
-  cat <<EOF | $sudo_cmd tee "$service_file" >/dev/null
+  cat <<EOF | run_sudo "$sudo_cmd" tee "$service_file" >/dev/null
 [Unit]
 Description=Patze OpenClaw Bridge
 After=network-online.target
@@ -212,32 +251,74 @@ WantedBy=multi-user.target
 EOF
 }
 
+write_user_service() {
+  local service_dir="${HOME}/.config/systemd/user"
+  local service_file="${service_dir}/${SERVICE_NAME}.service"
+  local bridge_bin="${HOME}/patze-bridge/bin/openclaw-bridge"
+  mkdir -p "$service_dir"
+  cat <<EOF > "$service_file"
+[Unit]
+Description=Patze OpenClaw Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=${STATE_DIR}/config.env
+ExecStart=${bridge_bin}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+EOF
+}
+
 main() {
   parse_args "$@"
   [ -n "$TOKEN" ] || fail "--token is required"
   require_node_18
+
+  if [ "$USER_MODE" = true ]; then
+    STATE_DIR="${HOME}/.config/patze-bridge"
+    log "User-mode install (no sudo required)."
+  fi
 
   local sudo_cmd
   sudo_cmd="$(resolve_sudo)"
   local expires_at
   expires_at="$(compute_expires_at "$EXPIRES_IN")"
 
-  log "Installing @patze/openclaw-bridge globally..."
-  if [ -n "$sudo_cmd" ]; then
-    $sudo_cmd npm install -g @patze/openclaw-bridge
+  if [ "$USER_MODE" = true ]; then
+    log "Installing @patze/openclaw-bridge to ~/patze-bridge..."
+    npm install --prefix "${HOME}/patze-bridge" @patze/openclaw-bridge
   else
-    npm install -g @patze/openclaw-bridge
+    log "Installing @patze/openclaw-bridge globally..."
+    run_sudo "$sudo_cmd" npm install -g @patze/openclaw-bridge
   fi
 
   local machine_id
   machine_id="$(ensure_machine_id "$sudo_cmd")"
   write_config "$sudo_cmd" "$machine_id" "$expires_at"
-  write_service_file "$sudo_cmd"
 
-  log "Reloading and starting systemd service..."
-  $sudo_cmd systemctl daemon-reload
-  $sudo_cmd systemctl enable --now "$SERVICE_NAME"
-  $sudo_cmd systemctl is-active --quiet "$SERVICE_NAME" || fail "Service failed to start."
+  if [ "$USER_MODE" = true ]; then
+    write_user_service
+    log "Reloading and starting user systemd service..."
+    systemctl --user daemon-reload
+    systemctl --user enable --now "$SERVICE_NAME"
+    systemctl --user is-active --quiet "$SERVICE_NAME" || fail "User service failed to start."
+    if has_command loginctl; then
+      loginctl enable-linger "$(whoami)" 2>/dev/null || true
+    fi
+  else
+    write_system_service "$sudo_cmd"
+    log "Reloading and starting systemd service..."
+    run_sudo "$sudo_cmd" systemctl daemon-reload
+    run_sudo "$sudo_cmd" systemctl enable --now "$SERVICE_NAME"
+    run_sudo "$sudo_cmd" systemctl is-active --quiet "$SERVICE_NAME" || fail "Service failed to start."
+  fi
+
+  SUDO_PASSWORD=""
 
   log "Bridge installed successfully."
   log "Machine ID: $machine_id"

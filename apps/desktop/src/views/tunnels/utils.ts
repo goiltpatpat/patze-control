@@ -28,6 +28,8 @@ export function phaseLabel(status: ManagedBridgeState['status']): string {
       return 'Tunnel Open';
     case 'installing':
       return 'Installing…';
+    case 'needs_sudo_password':
+      return 'Needs Sudo Password';
     case 'running':
       return 'Running';
     case 'telemetry_active':
@@ -54,6 +56,8 @@ export function phaseTone(status: ManagedBridgeState['status']): string {
     case 'connecting':
     case 'installing':
       return 'tone-neutral';
+    case 'needs_sudo_password':
+      return 'tone-warn';
     case 'error':
       return 'tone-bad';
     case 'disconnected':

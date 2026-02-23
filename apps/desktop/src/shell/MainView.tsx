@@ -53,6 +53,11 @@ export interface MainViewProps {
   readonly onSetupBridge: (input: BridgeSetupInput) => Promise<ManagedBridgeState | null>;
   readonly onDisconnectBridge: (id: string) => Promise<boolean>;
   readonly onRemoveBridge: (id: string) => Promise<boolean>;
+  readonly onSubmitSudoPassword: (
+    id: string,
+    password: string
+  ) => Promise<ManagedBridgeState | null>;
+  readonly onSkipSudo: (id: string) => Promise<ManagedBridgeState | null>;
   readonly managedBridgesLoading: boolean;
   readonly openclawTargets: UseOpenClawTargetsResult;
 }
@@ -99,6 +104,8 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           onSetupBridge={props.onSetupBridge}
           onDisconnectBridge={props.onDisconnectBridge}
           onRemoveBridge={props.onRemoveBridge}
+          onSubmitSudoPassword={props.onSubmitSudoPassword}
+          onSkipSudo={props.onSkipSudo}
           managedBridgesLoading={props.managedBridgesLoading}
         />
       );

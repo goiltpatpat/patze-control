@@ -23,6 +23,9 @@ export function TunnelsView(props: TunnelsViewProps): JSX.Element {
   const [confirmDetachOpen, setConfirmDetachOpen] = useState(false);
   const [expandedBridgeId, setExpandedBridgeId] = useState<string | null>(null);
   const [copiedDebugBridgeId, setCopiedDebugBridgeId] = useState<string | null>(null);
+  const [sudoPasswordBridgeId, setSudoPasswordBridgeId] = useState<string | null>(null);
+  const [sudoPassword, setSudoPassword] = useState('');
+  const [sudoSubmitting, setSudoSubmitting] = useState(false);
 
   const endpoint = props.endpoints[0];
   const isConnecting = endpoint?.connectionState === 'connecting';
@@ -286,6 +289,99 @@ export function TunnelsView(props: TunnelsViewProps): JSX.Element {
                               ) : null}
                               {phaseLabel(b.status)}
                             </span>
+                            {b.status === 'needs_sudo_password' ? (
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  padding: '8px 10px',
+                                  background: 'var(--bg-secondary)',
+                                  borderRadius: 6,
+                                  fontSize: '0.78rem',
+                                }}
+                              >
+                                <div style={{ marginBottom: 6, color: 'var(--text-muted)' }}>
+                                  Bridge install requires sudo password for{' '}
+                                  <strong>
+                                    {b.sshUser}@{b.sshHost}
+                                  </strong>
+                                </div>
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                  <input
+                                    type="password"
+                                    placeholder="sudo password"
+                                    value={sudoPasswordBridgeId === b.id ? sudoPassword : ''}
+                                    onFocus={() => {
+                                      if (sudoPasswordBridgeId !== b.id) {
+                                        setSudoPasswordBridgeId(b.id);
+                                        setSudoPassword('');
+                                      }
+                                    }}
+                                    onChange={(e) => {
+                                      setSudoPasswordBridgeId(b.id);
+                                      setSudoPassword(e.target.value);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && sudoPassword && !sudoSubmitting) {
+                                        setSudoSubmitting(true);
+                                        void props
+                                          .onSubmitSudoPassword(b.id, sudoPassword)
+                                          .finally(() => {
+                                            setSudoSubmitting(false);
+                                            setSudoPassword('');
+                                            setSudoPasswordBridgeId(null);
+                                          });
+                                      }
+                                    }}
+                                    disabled={sudoSubmitting}
+                                    style={{
+                                      flex: 1,
+                                      padding: '4px 8px',
+                                      fontSize: '0.78rem',
+                                      borderRadius: 4,
+                                      border: '1px solid var(--border)',
+                                      background: 'var(--bg-primary)',
+                                      color: 'var(--text-primary)',
+                                    }}
+                                  />
+                                  <button
+                                    className="btn-primary"
+                                    style={{ fontSize: '0.72rem', padding: '4px 10px' }}
+                                    disabled={
+                                      sudoSubmitting ||
+                                      !sudoPassword ||
+                                      sudoPasswordBridgeId !== b.id
+                                    }
+                                    onClick={() => {
+                                      setSudoSubmitting(true);
+                                      void props
+                                        .onSubmitSudoPassword(b.id, sudoPassword)
+                                        .finally(() => {
+                                          setSudoSubmitting(false);
+                                          setSudoPassword('');
+                                          setSudoPasswordBridgeId(null);
+                                        });
+                                    }}
+                                  >
+                                    {sudoSubmitting ? 'Submitting…' : 'Submit'}
+                                  </button>
+                                  <button
+                                    className="btn-ghost"
+                                    style={{ fontSize: '0.72rem', padding: '4px 10px' }}
+                                    disabled={sudoSubmitting}
+                                    onClick={() => {
+                                      setSudoSubmitting(true);
+                                      void props.onSkipSudo(b.id).finally(() => {
+                                        setSudoSubmitting(false);
+                                        setSudoPassword('');
+                                        setSudoPasswordBridgeId(null);
+                                      });
+                                    }}
+                                  >
+                                    Skip (user-level)
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
                             {b.error ? (
                               <span
                                 className="error"
@@ -350,7 +446,8 @@ export function TunnelsView(props: TunnelsViewProps): JSX.Element {
                               b.status === 'tunnel_open' ||
                               b.status === 'connecting' ||
                               b.status === 'ssh_test' ||
-                              b.status === 'installing' ? (
+                              b.status === 'installing' ||
+                              b.status === 'needs_sudo_password' ? (
                                 <button
                                   className="btn-danger"
                                   style={{ fontSize: '0.72rem', padding: '2px 8px' }}

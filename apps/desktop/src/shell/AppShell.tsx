@@ -43,6 +43,11 @@ export interface AppShellProps {
   readonly onSetupBridge: (input: BridgeSetupInput) => Promise<ManagedBridgeState | null>;
   readonly onDisconnectBridge: (id: string) => Promise<boolean>;
   readonly onRemoveBridge: (id: string) => Promise<boolean>;
+  readonly onSubmitSudoPassword: (
+    id: string,
+    password: string
+  ) => Promise<ManagedBridgeState | null>;
+  readonly onSkipSudo: (id: string) => Promise<ManagedBridgeState | null>;
   readonly managedBridgesLoading: boolean;
 }
 
@@ -215,6 +220,8 @@ export function AppShell(props: AppShellProps): JSX.Element {
             onSetupBridge={props.onSetupBridge}
             onDisconnectBridge={props.onDisconnectBridge}
             onRemoveBridge={props.onRemoveBridge}
+            onSubmitSudoPassword={props.onSubmitSudoPassword}
+            onSkipSudo={props.onSkipSudo}
             managedBridgesLoading={props.managedBridgesLoading}
             openclawTargets={openclawTargets}
           />

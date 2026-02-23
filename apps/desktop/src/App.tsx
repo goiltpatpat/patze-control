@@ -218,6 +218,8 @@ export function App(): JSX.Element {
       onSetupBridge={managedBridges.setupBridge}
       onDisconnectBridge={managedBridges.disconnectBridge}
       onRemoveBridge={managedBridges.removeBridge}
+      onSubmitSudoPassword={managedBridges.submitSudoPassword}
+      onSkipSudo={managedBridges.skipSudo}
       managedBridgesLoading={managedBridges.loading}
     />
   );

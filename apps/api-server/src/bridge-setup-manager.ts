@@ -24,10 +24,13 @@ export type BridgeSetupPhase =
   | 'ssh_test'
   | 'tunnel_open'
   | 'installing'
+  | 'needs_sudo_password'
   | 'running'
   | 'telemetry_active'
   | 'error'
   | 'disconnected';
+
+export type BridgeInstallMode = 'system' | 'user' | undefined;
 
 export interface ManagedBridgeState {
   readonly id: string;
@@ -41,6 +44,7 @@ export interface ManagedBridgeState {
   readonly logs: readonly string[];
   readonly machineId: string | undefined;
   readonly connectedAt: string | undefined;
+  readonly installMode: BridgeInstallMode;
 }
 
 interface ActiveBridge {
@@ -57,6 +61,8 @@ interface ActiveBridge {
   machineId: string | undefined;
   connectedAt: string | undefined;
   closing: boolean;
+  installMode: BridgeInstallMode;
+  pendingInput: BridgeSetupInput | undefined;
 }
 
 interface EffectiveSshConfig {
@@ -215,6 +221,8 @@ export class BridgeSetupManager {
       machineId: undefined,
       connectedAt: undefined,
       closing: false,
+      installMode: undefined,
+      pendingInput: undefined,
     };
 
     this.bridges.set(id, bridge);
@@ -399,8 +407,12 @@ export class BridgeSetupManager {
 
     if (bridge.closing) return;
 
+    if (installResult === 'needs_sudo_password') {
+      return;
+    }
+
     if (installResult === 'installed' || installResult === 'already_running') {
-      const machineId = await this.tryGetMachineId(client);
+      const machineId = await this.tryGetMachineId(client, bridge.installMode);
       bridge.machineId = machineId ?? undefined;
       bridge.status = 'running';
       bridge.connectedAt = new Date().toISOString();
@@ -534,10 +546,41 @@ export class BridgeSetupManager {
     return acceptedNewKey;
   }
 
+  private buildInstallArgs(input: BridgeSetupInput, extra?: string): string {
+    const remoteUrl = `http://localhost:${input.remotePort}`;
+    let cmdArgs = `--url ${this.shellQuote(remoteUrl)} --token ${this.shellQuote(input.authToken)}`;
+    if (input.expiresIn) {
+      cmdArgs += ` --expires-in ${this.shellQuote(input.expiresIn)}`;
+    }
+    if (input.openclawHome) {
+      cmdArgs += ` --openclaw-home ${this.shellQuote(input.openclawHome)}`;
+    }
+    if (extra) cmdArgs += ` ${extra}`;
+    return cmdArgs;
+  }
+
+  private async detectPrivilege(
+    client: Client
+  ): Promise<'root' | 'sudo_nopass' | 'sudo_needs_pass' | 'no_sudo'> {
+    const idResult = await this.remoteExec(client, 'id -u');
+    if (idResult.exitCode === 0 && idResult.stdout.trim() === '0') {
+      return 'root';
+    }
+    const sudoCheck = await this.remoteExec(client, 'sudo -n true 2>/dev/null');
+    if (sudoCheck.exitCode === 0) {
+      return 'sudo_nopass';
+    }
+    const hasSudo = await this.remoteExec(client, 'command -v sudo >/dev/null 2>&1 && echo yes');
+    if (hasSudo.exitCode === 0 && hasSudo.stdout.trim() === 'yes') {
+      return 'sudo_needs_pass';
+    }
+    return 'no_sudo';
+  }
+
   private async tryInstallBridge(
     bridge: ActiveBridge,
     input: BridgeSetupInput
-  ): Promise<'installed' | 'already_running' | 'skipped'> {
+  ): Promise<'installed' | 'already_running' | 'skipped' | 'needs_sudo_password'> {
     const { client } = bridge;
 
     const serviceActive = await this.remoteExec(
@@ -546,8 +589,21 @@ export class BridgeSetupManager {
     );
     if (serviceActive.exitCode === 0) {
       this.addLog(bridge, 'Bridge service already running on VPS. Restarting with new config...');
+      bridge.installMode = 'system';
       await this.remoteWriteConfig(bridge, input);
       await this.remoteExec(client, 'sudo systemctl restart patze-bridge');
+      return 'already_running';
+    }
+
+    const userServiceActive = await this.remoteExec(
+      client,
+      'systemctl --user is-active --quiet patze-bridge 2>/dev/null'
+    );
+    if (userServiceActive.exitCode === 0) {
+      this.addLog(bridge, 'Bridge user service already running. Restarting with new config...');
+      bridge.installMode = 'user';
+      await this.remoteWriteConfig(bridge, input);
+      await this.remoteExec(client, 'systemctl --user restart patze-bridge');
       return 'already_running';
     }
 
@@ -556,21 +612,48 @@ export class BridgeSetupManager {
       return 'skipped';
     }
 
+    const privilege = await this.detectPrivilege(client);
+    this.addLog(bridge, `Privilege detection: ${privilege}`);
+
+    if (privilege === 'sudo_needs_pass') {
+      bridge.status = 'needs_sudo_password';
+      bridge.pendingInput = input;
+      this.addLog(
+        bridge,
+        'sudo requires a password. Waiting for user to provide it or skip to user-level install.'
+      );
+      return 'needs_sudo_password';
+    }
+
     bridge.status = 'installing';
-    this.addLog(bridge, 'Installing bridge on VPS...');
+    const extraFlags = privilege === 'no_sudo' ? '--user-mode' : '';
+    if (privilege === 'no_sudo') {
+      bridge.installMode = 'user';
+      this.addLog(bridge, 'Installing bridge (user-level, no sudo required)...');
+    } else {
+      bridge.installMode = 'system';
+      this.addLog(bridge, 'Installing bridge (system-level)...');
+    }
 
+    return this.runInstallScript(bridge, input, extraFlags);
+  }
+
+  private async runInstallScript(
+    bridge: ActiveBridge,
+    input: BridgeSetupInput,
+    extraFlags: string,
+    stdinPrefix?: string
+  ): Promise<'installed' | 'skipped'> {
     try {
-      const scriptContent = await readFile(this.installScriptPath, 'utf-8');
-      const remoteUrl = `http://localhost:${input.remotePort}`;
-      let cmdArgs = `--url ${this.shellQuote(remoteUrl)} --token ${this.shellQuote(input.authToken)}`;
-      if (input.expiresIn) {
-        cmdArgs += ` --expires-in ${this.shellQuote(input.expiresIn)}`;
-      }
-      if (input.openclawHome) {
-        cmdArgs += ` --openclaw-home ${this.shellQuote(input.openclawHome)}`;
-      }
+      const scriptContent = await readFile(this.installScriptPath!, 'utf-8');
+      const cmdArgs = this.buildInstallArgs(input, extraFlags);
+      const fullStdin = stdinPrefix ? stdinPrefix + '\n' + scriptContent : scriptContent;
 
-      const result = await this.remoteExecWithStdin(client, `bash -s -- ${cmdArgs}`, scriptContent);
+      const result = await this.remoteExecWithStdin(
+        bridge.client,
+        `bash -s -- ${cmdArgs}`,
+        fullStdin
+      );
       if (result.stdout) this.addLog(bridge, scrubSensitive(result.stdout));
       if (result.stderr) this.addLog(bridge, `stderr: ${scrubSensitive(result.stderr)}`);
 
@@ -587,6 +670,66 @@ export class BridgeSetupManager {
     } catch (err) {
       this.addLog(bridge, `Install failed: ${err instanceof Error ? err.message : String(err)}`);
       return 'skipped';
+    }
+  }
+
+  async retryInstallWithSudoPassword(
+    bridgeId: string,
+    password: string
+  ): Promise<ManagedBridgeState | null> {
+    const bridge = this.bridges.get(bridgeId);
+    if (!bridge || bridge.status !== 'needs_sudo_password' || !bridge.pendingInput) {
+      return bridge ? this.toState(bridge) : null;
+    }
+
+    bridge.status = 'installing';
+    bridge.installMode = 'system';
+    this.addLog(bridge, 'Retrying install with sudo password...');
+
+    const result = await this.runInstallScript(
+      bridge,
+      bridge.pendingInput,
+      '--sudo-pass',
+      password
+    );
+    bridge.pendingInput = undefined;
+
+    await this.finishPostInstall(bridge, result);
+    return this.toState(bridge);
+  }
+
+  async retryInstallUserMode(bridgeId: string): Promise<ManagedBridgeState | null> {
+    const bridge = this.bridges.get(bridgeId);
+    if (!bridge || bridge.status !== 'needs_sudo_password' || !bridge.pendingInput) {
+      return bridge ? this.toState(bridge) : null;
+    }
+
+    bridge.status = 'installing';
+    bridge.installMode = 'user';
+    this.addLog(bridge, 'Installing bridge (user-level, no sudo required)...');
+
+    const result = await this.runInstallScript(bridge, bridge.pendingInput, '--user-mode');
+    bridge.pendingInput = undefined;
+
+    await this.finishPostInstall(bridge, result);
+    return this.toState(bridge);
+  }
+
+  private async finishPostInstall(
+    bridge: ActiveBridge,
+    result: 'installed' | 'skipped'
+  ): Promise<void> {
+    if (bridge.closing) return;
+
+    if (result === 'installed') {
+      const machineId = await this.tryGetMachineId(bridge.client, bridge.installMode);
+      bridge.machineId = machineId ?? undefined;
+      bridge.status = 'running';
+      bridge.connectedAt = new Date().toISOString();
+      this.addLog(bridge, `Bridge is running. Machine ID: ${bridge.machineId ?? 'pending'}`);
+    } else {
+      bridge.status = 'tunnel_open';
+      this.addLog(bridge, 'Reverse tunnel is open. Bridge can connect through it.');
     }
   }
 
@@ -621,16 +764,37 @@ export class BridgeSetupManager {
       `CRON_SYNC_INTERVAL_MS=30000`,
     ].join('\n');
 
-    const cmd = `sudo tee /etc/patze-bridge/config.env > /dev/null << 'PATZE_EOF'\n${configContent}\nPATZE_EOF`;
+    const configPath =
+      bridge.installMode === 'user'
+        ? '$HOME/.config/patze-bridge/config.env'
+        : '/etc/patze-bridge/config.env';
+    const mkdirCmd =
+      bridge.installMode === 'user'
+        ? 'mkdir -p $HOME/.config/patze-bridge'
+        : 'sudo mkdir -p /etc/patze-bridge';
+    const writeCmd =
+      bridge.installMode === 'user'
+        ? `tee ${configPath} > /dev/null`
+        : `sudo tee ${configPath} > /dev/null`;
+
+    await this.remoteExec(bridge.client, mkdirCmd);
+    const cmd = `${writeCmd} << 'PATZE_EOF'\n${configContent}\nPATZE_EOF`;
     const result = await this.remoteExec(bridge.client, cmd);
     if (result.exitCode !== 0) {
       this.addLog(bridge, `Config update failed: ${result.stderr}`);
     }
   }
 
-  private async tryGetMachineId(client: Client): Promise<string | null> {
+  private async tryGetMachineId(
+    client: Client,
+    installMode?: BridgeInstallMode
+  ): Promise<string | null> {
+    const idPath =
+      installMode === 'user'
+        ? '$HOME/.config/patze-bridge/machine-id'
+        : '/etc/patze-bridge/machine-id';
     try {
-      const result = await this.remoteExec(client, 'cat /etc/patze-bridge/machine-id 2>/dev/null');
+      const result = await this.remoteExec(client, `cat ${idPath} 2>/dev/null`);
       return result.exitCode === 0 && result.stdout.trim() ? result.stdout.trim() : null;
     } catch {
       return null;
@@ -745,6 +909,7 @@ export class BridgeSetupManager {
       logs: Object.freeze([...bridge.logs]),
       machineId: bridge.machineId,
       connectedAt: bridge.connectedAt,
+      installMode: bridge.installMode,
     });
   }
 }

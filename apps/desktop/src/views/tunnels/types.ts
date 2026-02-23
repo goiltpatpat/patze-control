@@ -36,6 +36,11 @@ export interface TunnelsViewProps {
   readonly onSetupBridge: (input: BridgeSetupInput) => Promise<ManagedBridgeState | null>;
   readonly onDisconnectBridge: (id: string) => Promise<boolean>;
   readonly onRemoveBridge: (id: string) => Promise<boolean>;
+  readonly onSubmitSudoPassword: (
+    id: string,
+    password: string
+  ) => Promise<ManagedBridgeState | null>;
+  readonly onSkipSudo: (id: string) => Promise<ManagedBridgeState | null>;
   readonly managedBridgesLoading: boolean;
 }
 
@@ -46,6 +51,7 @@ export const BRIDGE_PROGRESS_FLOW: readonly ManagedBridgeState['status'][] = [
   'ssh_test',
   'tunnel_open',
   'installing',
+  'needs_sudo_password',
   'running',
   'telemetry_active',
 ];
@@ -58,6 +64,7 @@ export const BRIDGE_PROGRESS_STEPS: ReadonlyArray<{
   { key: 'ssh_test', label: 'SSH Test' },
   { key: 'tunnel_open', label: 'Tunnel' },
   { key: 'installing', label: 'Install' },
+  { key: 'needs_sudo_password', label: 'Sudo' },
   { key: 'running', label: 'Bridge Up' },
   { key: 'telemetry_active', label: 'Telemetry' },
 ];
