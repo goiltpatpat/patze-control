@@ -244,11 +244,16 @@ export class BridgeSetupManager {
         await this.connectClient(client, effective, privateKey, false);
       } catch (connErr) {
         const msg = connErr instanceof Error ? connErr.message : String(connErr);
-        if (msg.includes('Handshake failed') || msg.includes('KEY_EXCHANGE')) {
+        const isHostVerifyFail =
+          msg.includes('verification failed') ||
+          msg.includes('Host denied') ||
+          msg.includes('Handshake failed') ||
+          msg.includes('KEY_EXCHANGE');
+        if (isHostVerifyFail) {
           throw new Error(
-            `Unknown SSH host key for ${effective.host}:${effective.port}. ` +
-              `Add the host to ~/.ssh/known_hosts first (e.g. ssh-keyscan -p ${effective.port} ${effective.host} >> ~/.ssh/known_hosts), ` +
-              `or use full bridge setup which accepts keys on first use.`
+            `Host key not found in ~/.ssh/known_hosts for ${effective.host}:${effective.port}. ` +
+              `Run: ssh-keyscan -p ${effective.port} ${effective.host} >> ~/.ssh/known_hosts — ` +
+              `or click "Connect" which accepts the key on first use.`
           );
         }
         throw connErr;
