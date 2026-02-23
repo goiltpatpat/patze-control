@@ -139,10 +139,13 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
     let cancelled = false;
     const scheduleNext = (): void => {
       if (cancelled) return;
-      timerId = setTimeout(() => {
-        pickNewTarget();
-        scheduleNext();
-      }, rand(minMs, maxMs));
+      timerId = setTimeout(
+        () => {
+          pickNewTarget();
+          scheduleNext();
+        },
+        rand(minMs, maxMs)
+      );
     };
     scheduleNext();
 

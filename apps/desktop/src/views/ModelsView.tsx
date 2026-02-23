@@ -59,14 +59,50 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
   );
 
   const handleCreate = useCallback(
-    (data: { id: string; name: string; provider: string; model: string; apiKey: string; baseUrl: string; enabled: boolean }) => {
+    (data: {
+      id: string;
+      name: string;
+      provider: string;
+      model: string;
+      apiKey: string;
+      baseUrl: string;
+      enabled: boolean;
+    }) => {
       const cmds: { command: string; args: string[]; description: string }[] = [];
-      if (data.name) cmds.push({ command: 'openclaw', args: ['config', 'set', `models.${data.id}.name`, data.name], description: `Set model name` });
-      cmds.push({ command: 'openclaw', args: ['config', 'set', `models.${data.id}.provider`, data.provider], description: `Set provider` });
-      cmds.push({ command: 'openclaw', args: ['config', 'set', `models.${data.id}.model`, data.model], description: `Set model ID` });
-      if (data.apiKey) cmds.push({ command: 'openclaw', args: ['config', 'set', `models.${data.id}.apiKey`, data.apiKey], description: `Set API key` });
-      if (data.baseUrl) cmds.push({ command: 'openclaw', args: ['config', 'set', `models.${data.id}.baseUrl`, data.baseUrl], description: `Set base URL` });
-      if (!data.enabled) cmds.push({ command: 'openclaw', args: ['config', 'set', `models.${data.id}.enabled`, 'false'], description: `Disable model` });
+      if (data.name)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${data.id}.name`, data.name],
+          description: `Set model name`,
+        });
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `models.${data.id}.provider`, data.provider],
+        description: `Set provider`,
+      });
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `models.${data.id}.model`, data.model],
+        description: `Set model ID`,
+      });
+      if (data.apiKey)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${data.id}.apiKey`, data.apiKey],
+          description: `Set API key`,
+        });
+      if (data.baseUrl)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${data.id}.baseUrl`, data.baseUrl],
+          description: `Set base URL`,
+        });
+      if (!data.enabled)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${data.id}.enabled`, 'false'],
+          description: `Disable model`,
+        });
       void queueCommand(cmds);
       setShowCreate(false);
     },
@@ -76,7 +112,11 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
   const handleDelete = useCallback(
     (modelId: string) => {
       void queueCommand([
-        { command: 'openclaw', args: ['config', 'unset', `models.${modelId}`], description: `Remove model "${modelId}"` },
+        {
+          command: 'openclaw',
+          args: ['config', 'unset', `models.${modelId}`],
+          description: `Remove model "${modelId}"`,
+        },
       ]);
     },
     [queueCommand]
@@ -85,7 +125,11 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
   const handleSetDefault = useCallback(
     (modelId: string) => {
       void queueCommand([
-        { command: 'openclaw', args: ['config', 'set', 'agents.defaults.model.primary', modelId], description: `Set default model to "${modelId}"` },
+        {
+          command: 'openclaw',
+          args: ['config', 'set', 'agents.defaults.model.primary', modelId],
+          description: `Set default model to "${modelId}"`,
+        },
       ]);
     },
     [queueCommand]
@@ -111,12 +155,16 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
 
       {!isConnected ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconCpu width={28} height={28} /></div>
+          <div className="empty-state-icon">
+            <IconCpu width={28} height={28} />
+          </div>
           <p style={{ margin: '4px 0 0' }}>Connect an OpenClaw instance to manage models.</p>
         </div>
       ) : models.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconCpu width={28} height={28} /></div>
+          <div className="empty-state-icon">
+            <IconCpu width={28} height={28} />
+          </div>
           <p style={{ margin: '4px 0 0' }}>No model profiles configured yet.</p>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
             Add a model profile to get started.
@@ -149,20 +197,34 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
                 </div>
                 <div className="machine-card-meta-item">
                   <span className="machine-card-meta-label">API Key</span>
-                  <span className="machine-card-meta-value">{model.apiKey ? '••••••' : 'not set'}</span>
+                  <span className="machine-card-meta-value">
+                    {model.apiKey ? '••••••' : 'not set'}
+                  </span>
                 </div>
                 {model.baseUrl ? (
                   <div className="machine-card-meta-item">
                     <span className="machine-card-meta-label">Base URL</span>
-                    <span className="machine-card-meta-value" style={{ fontSize: '0.7rem' }}>{model.baseUrl}</span>
+                    <span className="machine-card-meta-value" style={{ fontSize: '0.7rem' }}>
+                      {model.baseUrl}
+                    </span>
                   </div>
                 ) : null}
               </div>
               <div className="model-card-actions">
-                <button type="button" className="card-action-btn" onClick={() => handleSetDefault(model.id)} title="Set as default model">
+                <button
+                  type="button"
+                  className="card-action-btn"
+                  onClick={() => handleSetDefault(model.id)}
+                  title="Set as default model"
+                >
                   Set Default
                 </button>
-                <button type="button" className="card-action-btn card-action-danger" onClick={() => handleDelete(model.id)} title="Remove model">
+                <button
+                  type="button"
+                  className="card-action-btn card-action-danger"
+                  onClick={() => handleDelete(model.id)}
+                  title="Remove model"
+                >
                   <IconTrash width={13} height={13} />
                 </button>
               </div>
@@ -172,10 +234,7 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
       )}
 
       {showCreate ? (
-        <CreateModelDialog
-          onSubmit={handleCreate}
-          onClose={() => setShowCreate(false)}
-        />
+        <CreateModelDialog onSubmit={handleCreate} onClose={() => setShowCreate(false)} />
       ) : null}
     </section>
   );

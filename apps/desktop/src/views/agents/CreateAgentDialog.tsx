@@ -59,7 +59,11 @@ export function CreateAgentDialog(props: CreateAgentDialogProps): JSX.Element {
           </button>
         </div>
         <form onSubmit={handleSubmit} className="dialog-form-grid">
-          {error ? <div className="dialog-form-error" role="alert">{error}</div> : null}
+          {error ? (
+            <div className="dialog-form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
           <label className="dialog-form-label">
             Agent ID *
             <input

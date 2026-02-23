@@ -39,7 +39,9 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
         /* ignore */
       }
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [baseUrl, token, connected]);
 
   const allTags = Array.from(new Set(recipes.flatMap((r) => r.tags)));
@@ -48,7 +50,11 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
     if (tagFilter && !r.tags.includes(tagFilter)) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      return r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q) || r.tags.some((t) => t.includes(q));
+      return (
+        r.name.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        r.tags.some((t) => t.includes(q))
+      );
     }
     return true;
   });
@@ -57,11 +63,14 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
     async (recipeId: string, params: Record<string, unknown>) => {
       if (!props.targetId) return;
       try {
-        const resolveRes = await fetch(`${baseUrl}/recipes/${encodeURIComponent(recipeId)}/resolve`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ params }),
-        });
+        const resolveRes = await fetch(
+          `${baseUrl}/recipes/${encodeURIComponent(recipeId)}/resolve`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ params }),
+          }
+        );
         if (!resolveRes.ok) return;
         const { commands } = (await resolveRes.json()) as {
           commands: { command: string; args: string[]; description: string }[];
@@ -87,7 +96,9 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
 
       {!connected ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconBook width={28} height={28} /></div>
+          <div className="empty-state-icon">
+            <IconBook width={28} height={28} />
+          </div>
           <p>Connect to load recipes.</p>
         </div>
       ) : (
@@ -133,7 +144,12 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
                   role="button"
                   tabIndex={0}
                   onClick={() => setSelectedRecipe(recipe)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedRecipe(recipe); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedRecipe(recipe);
+                    }
+                  }}
                 >
                   <div className="machine-card-header">
                     <div className="machine-card-title">
@@ -141,7 +157,10 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
                     </div>
                     <span
                       className="badge"
-                      style={{ background: DIFFICULTY_COLORS[recipe.difficulty] ?? '#888', color: '#fff' }}
+                      style={{
+                        background: DIFFICULTY_COLORS[recipe.difficulty] ?? '#888',
+                        color: '#fff',
+                      }}
                     >
                       {recipe.difficulty}
                     </span>
@@ -149,7 +168,9 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
                   <p className="recipe-description">{recipe.description}</p>
                   <div className="recipe-tags-row">
                     {recipe.tags.map((tag) => (
-                      <span key={tag} className="recipe-tag">{tag}</span>
+                      <span key={tag} className="recipe-tag">
+                        {tag}
+                      </span>
                     ))}
                   </div>
                   <div className="machine-card-meta">

@@ -66,7 +66,9 @@ function ConfigHistorySection(props: {
       {!props.connected ? (
         <p className="doctor-hint">Connect to view config history.</p>
       ) : snapshots.length === 0 ? (
-        <p className="doctor-hint">No config snapshots yet. Changes applied via the Command Queue will appear here.</p>
+        <p className="doctor-hint">
+          No config snapshots yet. Changes applied via the Command Queue will appear here.
+        </p>
       ) : (
         <>
           <div className="config-history-list">
@@ -74,15 +76,13 @@ function ConfigHistorySection(props: {
               <div key={snap.id} className="config-history-item">
                 <div className="config-history-meta">
                   <span className="config-history-source">{snap.source}</span>
-                  <span className="config-history-time">{new Date(snap.timestamp).toLocaleString()}</span>
+                  <span className="config-history-time">
+                    {new Date(snap.timestamp).toLocaleString()}
+                  </span>
                 </div>
                 <span className="config-history-desc">{snap.description}</span>
                 <div className="config-history-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    onClick={() => viewDiff(snap, idx)}
-                  >
+                  <button type="button" className="btn-ghost" onClick={() => viewDiff(snap, idx)}>
                     View
                   </button>
                   <button
@@ -121,7 +121,9 @@ function ConfigHistorySection(props: {
 
 function UpdateSection(): JSX.Element {
   const [checking, setChecking] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'up-to-date'>('idle');
+  const [updateStatus, setUpdateStatus] = useState<
+    'idle' | 'checking' | 'available' | 'up-to-date'
+  >('idle');
   const [updateInfo, setUpdateInfo] = useState<string | null>(null);
 
   const checkForUpdates = useCallback(async () => {
@@ -152,11 +154,19 @@ function UpdateSection(): JSX.Element {
       <div className="settings-row">
         <span className="settings-row-label">Status</span>
         <span className="settings-row-value">
-          {updateStatus === 'idle' ? 'Not checked' : updateStatus === 'checking' ? 'Checking...' : updateStatus === 'available' ? 'Update available!' : 'Up to date'}
+          {updateStatus === 'idle'
+            ? 'Not checked'
+            : updateStatus === 'checking'
+              ? 'Checking...'
+              : updateStatus === 'available'
+                ? 'Update available!'
+                : 'Up to date'}
         </span>
       </div>
       {updateInfo ? (
-        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>{updateInfo}</p>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>
+          {updateInfo}
+        </p>
       ) : null}
       <button
         type="button"

@@ -295,7 +295,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
   const [configHintOpen, setConfigHintOpen] = useState(false);
   const [configDialogChannel, setConfigDialogChannel] = useState<OpenClawChannel | null>(null);
   const [agentOptions, setAgentOptions] = useState<readonly { id: string; name: string }[]>([]);
-  const [modelOptionsForDialog, setModelOptionsForDialog] = useState<readonly { id: string; name: string }[]>([]);
+  const [modelOptionsForDialog, setModelOptionsForDialog] = useState<
+    readonly { id: string; name: string }[]
+  >([]);
 
   const isConnected = props.status === 'connected' || props.status === 'degraded';
   const headers = useMemo(() => authHeaders(props.token), [props.token]);
@@ -351,8 +353,14 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
       if (!selectedTargetId) return;
       try {
         const [agRes, modRes] = await Promise.all([
-          fetch(`${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/agents`, { headers }),
-          fetch(`${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/models`, { headers }),
+          fetch(
+            `${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/agents`,
+            { headers }
+          ),
+          fetch(
+            `${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/models`,
+            { headers }
+          ),
         ]);
         if (agRes.ok) {
           const data = (await agRes.json()) as { agents: OpenClawAgent[] };
@@ -370,17 +378,48 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
   );
 
   const handleChannelConfig = useCallback(
-    (data: { enabled?: boolean; dmPolicy?: string; groupPolicy?: string; modelOverride?: string }) => {
+    (data: {
+      enabled?: boolean;
+      dmPolicy?: string;
+      groupPolicy?: string;
+      modelOverride?: string;
+    }) => {
       if (!configDialogChannel || !selectedTargetId) return;
       const cmds: { command: string; args: string[]; description: string }[] = [];
       if (data.enabled !== undefined)
-        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.enabled`, String(data.enabled)], description: `Toggle channel` });
+        cmds.push({
+          command: 'openclaw',
+          args: [
+            'config',
+            'set',
+            `channels.${configDialogChannel.id}.enabled`,
+            String(data.enabled),
+          ],
+          description: `Toggle channel`,
+        });
       if (data.dmPolicy)
-        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.dmPolicy`, data.dmPolicy], description: `Set DM policy` });
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `channels.${configDialogChannel.id}.dmPolicy`, data.dmPolicy],
+          description: `Set DM policy`,
+        });
       if (data.groupPolicy)
-        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.groupPolicy`, data.groupPolicy], description: `Set group policy` });
+        cmds.push({
+          command: 'openclaw',
+          args: [
+            'config',
+            'set',
+            `channels.${configDialogChannel.id}.groupPolicy`,
+            data.groupPolicy,
+          ],
+          description: `Set group policy`,
+        });
       if (data.modelOverride)
-        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.model`, data.modelOverride], description: `Set model override` });
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `channels.${configDialogChannel.id}.model`, data.modelOverride],
+          description: `Set model override`,
+        });
       if (cmds.length > 0) {
         void fetch(`${props.baseUrl}/openclaw/queue`, {
           method: 'POST',
@@ -397,10 +436,18 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
     (agentId: string, modelOverride?: string) => {
       if (!configDialogChannel || !selectedTargetId) return;
       const cmds: { command: string; args: string[]; description: string }[] = [
-        { command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.agents.+`, agentId], description: `Bind agent` },
+        {
+          command: 'openclaw',
+          args: ['config', 'set', `channels.${configDialogChannel.id}.agents.+`, agentId],
+          description: `Bind agent`,
+        },
       ];
       if (modelOverride) {
-        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.model`, modelOverride], description: `Set model override` });
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `channels.${configDialogChannel.id}.model`, modelOverride],
+          description: `Set model override`,
+        });
       }
       void fetch(`${props.baseUrl}/openclaw/queue`, {
         method: 'POST',
@@ -711,8 +758,14 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
           channelId={configDialogChannel.id}
           channelName={configDialogChannel.name}
           initialEnabled={configDialogChannel.configured}
-          initialDmPolicy={configDialogChannel.dmPolicy !== 'unknown' ? configDialogChannel.dmPolicy : undefined}
-          initialGroupPolicy={configDialogChannel.groupPolicy !== 'unknown' ? configDialogChannel.groupPolicy : undefined}
+          initialDmPolicy={
+            configDialogChannel.dmPolicy !== 'unknown' ? configDialogChannel.dmPolicy : undefined
+          }
+          initialGroupPolicy={
+            configDialogChannel.groupPolicy !== 'unknown'
+              ? configDialogChannel.groupPolicy
+              : undefined
+          }
           agentOptions={agentOptions}
           modelOptions={modelOptionsForDialog}
           onSubmit={handleChannelConfig}

@@ -48,7 +48,12 @@ export function CookWizard(props: CookWizardProps): JSX.Element {
       >
         <div className="office-interaction-modal-header">
           <h3>{recipe.name}</h3>
-          <button type="button" className="office-agent-panel-close" aria-label="Close" onClick={props.onClose}>
+          <button
+            type="button"
+            className="office-agent-panel-close"
+            aria-label="Close"
+            onClick={props.onClose}
+          >
             &times;
           </button>
         </div>
@@ -70,7 +75,9 @@ export function CookWizard(props: CookWizardProps): JSX.Element {
               {resolvedSteps.map((s, i) => (
                 <li key={i} className="pending-changes-item">
                   <strong>{s.label}</strong>
-                  <code>{s.action} {Object.values(s.args).join(' ')}</code>
+                  <code>
+                    {s.action} {Object.values(s.args).join(' ')}
+                  </code>
                 </li>
               ))}
             </ul>
@@ -89,16 +96,30 @@ export function CookWizard(props: CookWizardProps): JSX.Element {
         <div className="dialog-form-actions" style={{ marginTop: 16 }}>
           {step === 'params' ? (
             <>
-              <button type="button" className="dialog-btn-secondary" onClick={props.onClose}>Cancel</button>
-              <button type="button" className="dialog-btn-primary" onClick={handleNext}>Next</button>
+              <button type="button" className="dialog-btn-secondary" onClick={props.onClose}>
+                Cancel
+              </button>
+              <button type="button" className="dialog-btn-primary" onClick={handleNext}>
+                Next
+              </button>
             </>
           ) : step === 'review' ? (
             <>
-              <button type="button" className="dialog-btn-secondary" onClick={() => setStep('params')}>Back</button>
-              <button type="button" className="dialog-btn-primary" onClick={handleNext}>Queue All</button>
+              <button
+                type="button"
+                className="dialog-btn-secondary"
+                onClick={() => setStep('params')}
+              >
+                Back
+              </button>
+              <button type="button" className="dialog-btn-primary" onClick={handleNext}>
+                Queue All
+              </button>
             </>
           ) : (
-            <button type="button" className="dialog-btn-primary" onClick={props.onClose}>Close</button>
+            <button type="button" className="dialog-btn-primary" onClick={props.onClose}>
+              Close
+            </button>
           )}
         </div>
       </div>

@@ -175,7 +175,11 @@ export class OpenClawCommandQueue {
   }
 
   public getSnapshot(targetId: string, snapshotId: string): OpenClawConfigSnapshot | null {
-    const snapshotPath = path.join(this.snapshotDir, sanitizeId(targetId), `${sanitizeId(snapshotId)}.json`);
+    const snapshotPath = path.join(
+      this.snapshotDir,
+      sanitizeId(targetId),
+      `${sanitizeId(snapshotId)}.json`
+    );
     if (!fs.existsSync(snapshotPath)) return null;
     try {
       const raw = fs.readFileSync(snapshotPath, 'utf-8');
@@ -192,9 +196,7 @@ export class OpenClawCommandQueue {
     const configPath = getConfigPath(openclawDir);
     if (!configPath) return { ok: false, error: 'Config file not found' };
 
-    const targetDirs = fs.existsSync(this.snapshotDir)
-      ? fs.readdirSync(this.snapshotDir)
-      : [];
+    const targetDirs = fs.existsSync(this.snapshotDir) ? fs.readdirSync(this.snapshotDir) : [];
     const safeSnapshotId = sanitizeId(snapshotId);
     for (const dir of targetDirs) {
       const snapshotPath = path.join(this.snapshotDir, dir, `${safeSnapshotId}.json`);

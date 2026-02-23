@@ -70,7 +70,9 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
       }
     })();
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [props.baseUrl, props.token, props.targetId]);
 
   const queueCommand = useCallback(
@@ -93,15 +95,51 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
   );
 
   const handleCreateAgent = useCallback(
-    (data: { id: string; name: string; emoji: string; systemPrompt: string; modelPrimary: string; enabled: boolean }) => {
+    (data: {
+      id: string;
+      name: string;
+      emoji: string;
+      systemPrompt: string;
+      modelPrimary: string;
+      enabled: boolean;
+    }) => {
       const cmds: { command: string; args: string[]; description: string }[] = [
-        { command: 'openclaw', args: ['agents', 'add', data.id, '--non-interactive'], description: `Create agent "${data.id}"` },
+        {
+          command: 'openclaw',
+          args: ['agents', 'add', data.id, '--non-interactive'],
+          description: `Create agent "${data.id}"`,
+        },
       ];
-      if (data.name) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${data.id}.name`, data.name], description: `Set name` });
-      if (data.emoji) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${data.id}.emoji`, data.emoji], description: `Set emoji` });
-      if (data.systemPrompt) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${data.id}.systemPrompt`, data.systemPrompt], description: `Set system prompt` });
-      if (data.modelPrimary) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${data.id}.model.primary`, data.modelPrimary], description: `Set model` });
-      if (!data.enabled) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${data.id}.enabled`, 'false'], description: `Disable agent` });
+      if (data.name)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${data.id}.name`, data.name],
+          description: `Set name`,
+        });
+      if (data.emoji)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${data.id}.emoji`, data.emoji],
+          description: `Set emoji`,
+        });
+      if (data.systemPrompt)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${data.id}.systemPrompt`, data.systemPrompt],
+          description: `Set system prompt`,
+        });
+      if (data.modelPrimary)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${data.id}.model.primary`, data.modelPrimary],
+          description: `Set model`,
+        });
+      if (!data.enabled)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${data.id}.enabled`, 'false'],
+          description: `Disable agent`,
+        });
       void queueCommand(cmds);
       setShowCreate(false);
     },
@@ -109,15 +147,52 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
   );
 
   const handleEditAgent = useCallback(
-    (data: { name: string; emoji: string; systemPrompt: string; modelPrimary: string; modelFallback: string; enabled: boolean }) => {
+    (data: {
+      name: string;
+      emoji: string;
+      systemPrompt: string;
+      modelPrimary: string;
+      modelFallback: string;
+      enabled: boolean;
+    }) => {
       if (!editAgent) return;
       const cmds: { command: string; args: string[]; description: string }[] = [];
-      if (data.name !== editAgent.name) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${editAgent.id}.name`, data.name], description: `Update name` });
-      if (data.emoji !== (editAgent.emoji ?? '')) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${editAgent.id}.emoji`, data.emoji], description: `Update emoji` });
-      if (data.systemPrompt !== (editAgent.systemPrompt ?? '')) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${editAgent.id}.systemPrompt`, data.systemPrompt], description: `Update prompt` });
-      if (data.modelPrimary !== (editAgent.model?.primary ?? '')) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${editAgent.id}.model.primary`, data.modelPrimary], description: `Update primary model` });
-      if (data.modelFallback !== (editAgent.model?.fallback ?? '')) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${editAgent.id}.model.fallback`, data.modelFallback], description: `Update fallback model` });
-      if (data.enabled !== editAgent.enabled) cmds.push({ command: 'openclaw', args: ['config', 'set', `agents.${editAgent.id}.enabled`, String(data.enabled)], description: `Toggle enabled` });
+      if (data.name !== editAgent.name)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${editAgent.id}.name`, data.name],
+          description: `Update name`,
+        });
+      if (data.emoji !== (editAgent.emoji ?? ''))
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${editAgent.id}.emoji`, data.emoji],
+          description: `Update emoji`,
+        });
+      if (data.systemPrompt !== (editAgent.systemPrompt ?? ''))
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${editAgent.id}.systemPrompt`, data.systemPrompt],
+          description: `Update prompt`,
+        });
+      if (data.modelPrimary !== (editAgent.model?.primary ?? ''))
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${editAgent.id}.model.primary`, data.modelPrimary],
+          description: `Update primary model`,
+        });
+      if (data.modelFallback !== (editAgent.model?.fallback ?? ''))
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${editAgent.id}.model.fallback`, data.modelFallback],
+          description: `Update fallback model`,
+        });
+      if (data.enabled !== editAgent.enabled)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${editAgent.id}.enabled`, String(data.enabled)],
+          description: `Toggle enabled`,
+        });
       if (cmds.length > 0) void queueCommand(cmds);
       setEditAgent(null);
     },
@@ -127,7 +202,11 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
   const handleDeleteAgent = useCallback(() => {
     if (!editAgent) return;
     void queueCommand([
-      { command: 'openclaw', args: ['agents', 'remove', editAgent.id], description: `Remove agent "${editAgent.id}"` },
+      {
+        command: 'openclaw',
+        args: ['agents', 'remove', editAgent.id],
+        description: `Remove agent "${editAgent.id}"`,
+      },
     ]);
     setEditAgent(null);
   }, [editAgent, queueCommand]);
@@ -176,9 +255,18 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
           <h3 className="section-subtitle">OpenClaw Agents</h3>
           <div className="machine-grid">
             {openclawAgents.map((agent) => (
-              <div key={agent.id} className="machine-card machine-card-clickable" role="button" tabIndex={0}
+              <div
+                key={agent.id}
+                className="machine-card machine-card-clickable"
+                role="button"
+                tabIndex={0}
                 onClick={() => setEditAgent(agent)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditAgent(agent); } }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setEditAgent(agent);
+                  }
+                }}
               >
                 <div className="machine-card-header">
                   <div className="machine-card-title">
@@ -201,7 +289,14 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
                     </div>
                   ) : null}
                 </div>
-                <button type="button" className="card-edit-btn" onClick={(e) => { e.stopPropagation(); setEditAgent(agent); }}>
+                <button
+                  type="button"
+                  className="card-edit-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditAgent(agent);
+                  }}
+                >
                   <IconEdit width={14} height={14} />
                 </button>
               </div>
@@ -212,7 +307,9 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
 
       {agents.length > 0 ? (
         <>
-          <h3 className="section-subtitle" style={{ marginTop: 16 }}>Telemetry Agents</h3>
+          <h3 className="section-subtitle" style={{ marginTop: 16 }}>
+            Telemetry Agents
+          </h3>
           {filtered.length === 0 ? (
             <div className="empty-state">No agents match the current filter.</div>
           ) : (
@@ -242,8 +339,12 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
                   <div className="machine-card-meta">
                     <div className="machine-card-meta-item">
                       <span className="machine-card-meta-label">Sessions</span>
-                      <span className={`machine-card-meta-value${agent.activeSessions > 0 ? ' metric-active' : ''}`}>
-                        {agent.activeSessions > 0 ? `${agent.activeSessions} active / ${agent.totalSessions}` : agent.totalSessions}
+                      <span
+                        className={`machine-card-meta-value${agent.activeSessions > 0 ? ' metric-active' : ''}`}
+                      >
+                        {agent.activeSessions > 0
+                          ? `${agent.activeSessions} active / ${agent.totalSessions}`
+                          : agent.totalSessions}
                       </span>
                     </div>
                     <div className="machine-card-meta-item">
@@ -254,11 +355,15 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
                       <>
                         <div className="machine-card-meta-item">
                           <span className="machine-card-meta-label">Tokens</span>
-                          <span className="machine-card-meta-value">{formatTokenCount(agent.totalTokens)}</span>
+                          <span className="machine-card-meta-value">
+                            {formatTokenCount(agent.totalTokens)}
+                          </span>
                         </div>
                         <div className="machine-card-meta-item">
                           <span className="machine-card-meta-label">Cost</span>
-                          <span className="machine-card-meta-value">{formatCost(agent.estimatedCostUsd)}</span>
+                          <span className="machine-card-meta-value">
+                            {formatCost(agent.estimatedCostUsd)}
+                          </span>
                         </div>
                       </>
                     ) : null}
@@ -270,7 +375,9 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
         </>
       ) : !hasBackend ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><IconBot width={28} height={28} /></div>
+          <div className="empty-state-icon">
+            <IconBot width={28} height={28} />
+          </div>
           <p style={{ margin: '4px 0 0' }}>No agents detected yet.</p>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
             Connect an OpenClaw instance to manage agents.

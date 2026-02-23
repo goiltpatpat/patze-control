@@ -37,17 +37,17 @@ function computeDiffLines(before: string, after: string): readonly DiffLine[] {
 }
 
 export function DiffViewer(props: DiffViewerProps): JSX.Element {
-  const lines = useMemo(() => computeDiffLines(props.before, props.after), [props.before, props.after]);
+  const lines = useMemo(
+    () => computeDiffLines(props.before, props.after),
+    [props.before, props.after]
+  );
 
   return (
     <div className="diff-viewer">
       {props.title ? <div className="diff-viewer-title">{props.title}</div> : null}
       <pre className="diff-viewer-content">
         {lines.map((line, i) => (
-          <div
-            key={i}
-            className={`diff-line diff-line-${line.type}`}
-          >
+          <div key={i} className={`diff-line diff-line-${line.type}`}>
             <span className="diff-line-num">{line.lineNum}</span>
             <span className="diff-line-prefix">
               {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}

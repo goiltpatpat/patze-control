@@ -95,7 +95,9 @@ export function EditAgentDialog(props: EditAgentDialogProps): JSX.Element {
             >
               <option value="">-- None --</option>
               {props.modelOptions.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
               ))}
             </select>
           </label>
@@ -108,7 +110,9 @@ export function EditAgentDialog(props: EditAgentDialogProps): JSX.Element {
             >
               <option value="">-- None --</option>
               {props.modelOptions.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
               ))}
             </select>
           </label>
@@ -130,11 +134,7 @@ export function EditAgentDialog(props: EditAgentDialogProps): JSX.Element {
                 Delete
               </button>
             ) : (
-              <button
-                type="button"
-                className="dialog-btn-danger"
-                onClick={props.onDelete}
-              >
+              <button type="button" className="dialog-btn-danger" onClick={props.onDelete}>
                 Confirm Delete
               </button>
             )}

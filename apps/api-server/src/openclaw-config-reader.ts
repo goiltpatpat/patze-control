@@ -14,10 +14,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function resolveConfigPath(openclawDir: string): string | null {
   const base = path.resolve(openclawDir);
-  const candidates = [
-    path.join(base, 'openclaw.json'),
-    path.join(base, 'config', 'openclaw.json'),
-  ];
+  const candidates = [path.join(base, 'openclaw.json'), path.join(base, 'config', 'openclaw.json')];
   for (const candidate of candidates) {
     try {
       if (fs.existsSync(candidate)) return candidate;
@@ -70,7 +67,8 @@ function parseAgents(raw: Record<string, unknown>): OpenClawAgent[] {
 function parseModels(raw: Record<string, unknown>): OpenClawModelProfile[] {
   const models: OpenClawModelProfile[] = [];
 
-  const modelsRecord = raw.models ?? (isRecord(raw.agents) ? (raw.agents as Record<string, unknown>).models : null);
+  const modelsRecord =
+    raw.models ?? (isRecord(raw.agents) ? (raw.agents as Record<string, unknown>).models : null);
   if (!isRecord(modelsRecord)) return models;
 
   for (const [id, value] of Object.entries(modelsRecord)) {

@@ -35,7 +35,8 @@ export function ParamForm(props: ParamFormProps): JSX.Element {
           case 'select':
             return (
               <label key={param.id} className="dialog-form-label">
-                {param.label}{param.required ? ' *' : ''}
+                {param.label}
+                {param.required ? ' *' : ''}
                 {param.description ? (
                   <span className="dialog-form-hint">{param.description}</span>
                 ) : null}
@@ -46,7 +47,9 @@ export function ParamForm(props: ParamFormProps): JSX.Element {
                 >
                   <option value="">-- Select --</option>
                   {(param.options ?? []).map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -55,7 +58,8 @@ export function ParamForm(props: ParamFormProps): JSX.Element {
           case 'number':
             return (
               <label key={param.id} className="dialog-form-label">
-                {param.label}{param.required ? ' *' : ''}
+                {param.label}
+                {param.required ? ' *' : ''}
                 {param.description ? (
                   <span className="dialog-form-hint">{param.description}</span>
                 ) : null}
@@ -71,7 +75,8 @@ export function ParamForm(props: ParamFormProps): JSX.Element {
           default:
             return (
               <label key={param.id} className="dialog-form-label">
-                {param.label}{param.required ? ' *' : ''}
+                {param.label}
+                {param.required ? ' *' : ''}
                 {param.description ? (
                   <span className="dialog-form-hint">{param.description}</span>
                 ) : null}

@@ -3162,8 +3162,14 @@ app.post('/openclaw/queue', async (request: FastifyRequest, reply: FastifyReply)
     if (!ALLOWED_COMMANDS.has(command)) {
       return reply.code(400).send({ error: `Disallowed command: ${command}` });
     }
-    const args = Array.isArray(cmd.args) ? cmd.args.filter((a: unknown): a is string => typeof a === 'string') : [];
-    parsed.push({ command, args, description: typeof cmd.description === 'string' ? cmd.description : '' });
+    const args = Array.isArray(cmd.args)
+      ? cmd.args.filter((a: unknown): a is string => typeof a === 'string')
+      : [];
+    parsed.push({
+      command,
+      args,
+      description: typeof cmd.description === 'string' ? cmd.description : '',
+    });
   }
   if (parsed.length === 0) return reply.code(400).send({ error: 'No valid commands' });
 
@@ -3193,9 +3199,10 @@ app.post(
   '/openclaw/queue/:targetId/apply',
   async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
     if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
-    const source = isRecord(request.body) && typeof request.body.source === 'string'
-      ? request.body.source
-      : 'manual';
+    const source =
+      isRecord(request.body) && typeof request.body.source === 'string'
+        ? request.body.source
+        : 'manual';
     const result = await commandQueue.apply(request.params.targetId, source);
     if (!result.ok) return reply.code(422).send(result);
     broadcastSse({ kind: 'config-changed', payload: { targetId: request.params.targetId } });
@@ -3250,7 +3257,8 @@ app.post(
         description: `Set agent "${agentId}" emoji`,
       });
     }
-    const systemPrompt = typeof request.body.systemPrompt === 'string' ? request.body.systemPrompt : '';
+    const systemPrompt =
+      typeof request.body.systemPrompt === 'string' ? request.body.systemPrompt : '';
     if (systemPrompt) {
       cmds.push({
         command: 'openclaw',
@@ -3300,7 +3308,8 @@ app.patch(
 
     if (typeof request.body.name === 'string') fieldMap.name = request.body.name;
     if (typeof request.body.emoji === 'string') fieldMap.emoji = request.body.emoji;
-    if (typeof request.body.systemPrompt === 'string') fieldMap.systemPrompt = request.body.systemPrompt;
+    if (typeof request.body.systemPrompt === 'string')
+      fieldMap.systemPrompt = request.body.systemPrompt;
     if (typeof request.body.enabled === 'boolean') fieldMap.enabled = String(request.body.enabled);
 
     for (const [field, value] of Object.entries(fieldMap)) {
@@ -3342,7 +3351,8 @@ app.delete(
     reply: FastifyReply
   ) => {
     if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
-    if (!isValidEntityId(request.params.agentId)) return reply.code(400).send({ error: 'Invalid agent id' });
+    if (!isValidEntityId(request.params.agentId))
+      return reply.code(400).send({ error: 'Invalid agent id' });
     const target = openclawTargetStore.get(request.params.targetId);
     if (!target) return reply.code(404).send({ error: 'target_not_found' });
 
@@ -3440,7 +3450,8 @@ app.delete(
     reply: FastifyReply
   ) => {
     if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
-    if (!isValidEntityId(request.params.modelId)) return reply.code(400).send({ error: 'Invalid model id' });
+    if (!isValidEntityId(request.params.modelId))
+      return reply.code(400).send({ error: 'Invalid model id' });
     const target = openclawTargetStore.get(request.params.targetId);
     if (!target) return reply.code(404).send({ error: 'target_not_found' });
 
@@ -3533,7 +3544,8 @@ app.post(
       },
     ];
 
-    const modelOverride = typeof request.body.modelOverride === 'string' ? request.body.modelOverride : '';
+    const modelOverride =
+      typeof request.body.modelOverride === 'string' ? request.body.modelOverride : '';
     if (modelOverride) {
       cmds.push({
         command: 'openclaw',
