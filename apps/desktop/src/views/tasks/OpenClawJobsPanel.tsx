@@ -30,7 +30,7 @@ export function OpenClawJobsPanel(props: OpenClawJobsPanelProps): JSX.Element {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [runs, setRuns] = useState<OpenClawRunRecord[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(false);
-  const issueChecks = props.health?.checks.filter((check) => check.status !== 'ok') ?? [];
+  const issueChecks = (props.health?.checks ?? []).filter((check) => check.status !== 'ok');
 
   const fetchRuns = useCallback(
     async (jobId: string) => {
@@ -44,8 +44,8 @@ export function OpenClawJobsPanel(props: OpenClawJobsPanelProps): JSX.Element {
           signal: AbortSignal.timeout(10_000),
         });
         if (res.ok) {
-          const data = (await res.json()) as { runs: OpenClawRunRecord[] };
-          setRuns(data.runs);
+          const data = (await res.json()) as { runs?: OpenClawRunRecord[] };
+          setRuns(data.runs ?? []);
         }
       } catch {
         /* ok */

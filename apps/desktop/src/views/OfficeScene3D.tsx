@@ -167,6 +167,19 @@ function SceneContent(props: {
     avatarPositions.current.set(id, pos);
   }, []);
 
+  const handleMemoryClick = useCallback(() => props.onInteraction('memory'), [props.onInteraction]);
+  const handleRoadmapClick = useCallback(
+    () => props.onInteraction('roadmap'),
+    [props.onInteraction]
+  );
+  const handleCoffeeClick = useCallback(() => props.onInteraction('coffee'), [props.onInteraction]);
+  const handleDinoClick = useCallback(() => props.onInteraction('dinosaur'), [props.onInteraction]);
+
+  const fleetDesks = useMemo(
+    () => props.deskLayout.map((d) => ({ status: d.status, label: d.label })),
+    [props.deskLayout]
+  );
+
   const deskLights = useMemo(
     () =>
       props.deskLayout.map((desk) => ({
@@ -240,25 +253,9 @@ function SceneContent(props: {
       ))}
 
       {/* Interactive Props */}
-      <FileCabinet
-        position={[-9, 0, -5]}
-        onClick={() => {
-          props.onInteraction('memory');
-        }}
-      />
-      <Whiteboard
-        position={[0, 2.8, -9.75]}
-        rotation={[0, 0, 0]}
-        onClick={() => {
-          props.onInteraction('roadmap');
-        }}
-      />
-      <CoffeeMachine
-        position={[9, 0, -5]}
-        onClick={() => {
-          props.onInteraction('coffee');
-        }}
-      />
+      <FileCabinet position={[-9, 0, -5]} onClick={handleMemoryClick} />
+      <Whiteboard position={[0, 2.8, -9.75]} rotation={[0, 0, 0]} onClick={handleRoadmapClick} />
+      <CoffeeMachine position={[9, 0, -5]} onClick={handleCoffeeClick} />
 
       {/* Holographic HUDs above desks */}
       {props.deskLayout.map((desk) => (
@@ -273,10 +270,7 @@ function SceneContent(props: {
       ))}
 
       {/* Fleet Wall Screen */}
-      <FleetWallScreen
-        position={[-5, 2.8, -9.75]}
-        desks={props.deskLayout.map((d) => ({ status: d.status, label: d.label }))}
-      />
+      <FleetWallScreen position={[-5, 2.8, -9.75]} desks={fleetDesks} />
 
       {/* Sky Window */}
       <SkyWindow position={[5, 3.0, -9.8]} />
@@ -294,9 +288,7 @@ function SceneContent(props: {
       <VoxelDinosaur
         position={[10, 0, 7]}
         rotation={[0, -Math.PI * 0.7, 0]}
-        onClick={() => {
-          props.onInteraction('dinosaur');
-        }}
+        onClick={handleDinoClick}
       />
 
       <WallClock position={[8.5, 3.5, -9.75]} />
@@ -527,17 +519,6 @@ function InteractionModalOverlay(props: {
           </button>
         ) : null}
       </div>
-      {isDino ? (
-        <style>{`
-          @keyframes dino-shake {
-            0%, 100% { transform: translateX(0); }
-            20% { transform: translateX(-6px) rotate(-1deg); }
-            40% { transform: translateX(6px) rotate(1deg); }
-            60% { transform: translateX(-4px) rotate(-0.5deg); }
-            80% { transform: translateX(4px) rotate(0.5deg); }
-          }
-        `}</style>
-      ) : null}
     </div>
   );
 }
@@ -545,8 +526,12 @@ function InteractionModalOverlay(props: {
 export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [interactionModal, setInteractionModal] = useState<InteractionModal>(null);
-  const [playerPos, setPlayerPos] = useState<{ x: number; z: number } | null>(null);
+  const playerPosRef = useRef<{ x: number; z: number } | null>(null);
   const deskLayout = useMemo(() => layoutDesks(props.desks), [props.desks]);
+
+  useEffect(() => {
+    if (props.cameraMode !== 'player') playerPosRef.current = null;
+  }, [props.cameraMode]);
 
   const selectedDesk = useMemo(() => {
     if (selectedAgent == null) return null;
@@ -570,8 +555,13 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
   }, []);
 
   const handlePlayerPositionUpdate = useCallback((x: number, z: number) => {
-    setPlayerPos({ x, z });
+    playerPosRef.current = { x, z };
   }, []);
+
+  const miniMapDesks = useMemo(
+    () => deskLayout.map((d) => ({ x: d.x, z: d.z, status: d.status, label: d.label })),
+    [deskLayout]
+  );
 
   const sceneSpan = Math.max(
     deskLayout.length > 0 ? Math.max(...deskLayout.map((d) => Math.abs(d.x))) * 2 + 8 : 16,
@@ -629,11 +619,7 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
         </div>
 
         {/* Mini-map overlay */}
-        <MiniMap
-          desks={deskLayout.map((d) => ({ x: d.x, z: d.z, status: d.status, label: d.label }))}
-          playerPosition={props.cameraMode === 'player' ? playerPos : null}
-          roomBounds={OFFICE_BOUNDS}
-        />
+        <MiniMap desks={miniMapDesks} playerPositionRef={playerPosRef} roomBounds={OFFICE_BOUNDS} />
       </div>
 
       {/* Agent Panel Sidebar */}

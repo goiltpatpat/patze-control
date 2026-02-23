@@ -1,7 +1,7 @@
-import { useRef } from 'react';
+import { useRef, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
-import type { Group, Mesh } from 'three';
+import type { Group, Mesh, MeshBasicMaterial } from 'three';
 
 type DeskStatus = 'active' | 'idle' | 'error' | 'offline';
 
@@ -26,13 +26,32 @@ function getStatusGlow(status: DeskStatus): number {
   }
 }
 
+const OPACITY_EPSILON = 0.001;
+
 export function HologramHUD(props: HologramHUDProps): JSX.Element {
   const groupRef = useRef<Group>(null);
   const ring1Ref = useRef<Mesh>(null);
   const ring2Ref = useRef<Mesh>(null);
-  const dataRef = useRef<Group>(null);
   const statusRef = useRef(props.status);
   statusRef.current = props.status;
+
+  const dataMaterials = useRef<MeshBasicMaterial[]>([]);
+  const currentOpacity = useRef(0.85);
+
+  const dataGroupRef = useCallback((node: Group | null) => {
+    if (!node) {
+      dataMaterials.current = [];
+      return;
+    }
+    const mats: MeshBasicMaterial[] = [];
+    node.traverse((child) => {
+      const mesh = child as Mesh;
+      if (mesh.material && 'opacity' in mesh.material) {
+        mats.push(mesh.material as MeshBasicMaterial);
+      }
+    });
+    dataMaterials.current = mats;
+  }, []);
 
   const [px, py, pz] = props.position;
   const baseY = py + 2.2;
@@ -54,17 +73,14 @@ export function HologramHUD(props: HologramHUDProps): JSX.Element {
       groupRef.current.position.y = baseY + Math.sin(t * 1.5) * 0.04;
     }
 
-    if (dataRef.current) {
-      const targetOpacity = status === 'offline' ? 0.15 : 0.85;
-      const current = dataRef.current.userData.opacity ?? 0.85;
-      const next = current + (targetOpacity - current) * 0.05;
-      dataRef.current.userData.opacity = next;
-      dataRef.current.traverse((child) => {
-        const mesh = child as import('three').Mesh;
-        if (mesh.material && 'opacity' in mesh.material) {
-          (mesh.material as import('three').MeshBasicMaterial).opacity = next;
-        }
-      });
+    const targetOpacity = status === 'offline' ? 0.15 : 0.85;
+    const diff = targetOpacity - currentOpacity.current;
+    if (Math.abs(diff) > OPACITY_EPSILON) {
+      const next = currentOpacity.current + diff * 0.05;
+      currentOpacity.current = next;
+      for (const mat of dataMaterials.current) {
+        mat.opacity = next;
+      }
     }
   });
 
@@ -107,7 +123,7 @@ export function HologramHUD(props: HologramHUDProps): JSX.Element {
       </mesh>
 
       {/* Data text */}
-      <group ref={dataRef}>
+      <group ref={dataGroupRef}>
         <Text
           position={[0, 0.22, 0]}
           fontSize={0.08}

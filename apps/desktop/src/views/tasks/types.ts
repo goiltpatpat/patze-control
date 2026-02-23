@@ -108,6 +108,8 @@ export interface OpenClawHealthCheck {
     readonly details?: string;
   }[];
   readonly syncStatus: OpenClawSyncStatus;
+  readonly cliAvailable?: boolean;
+  readonly cliVersion?: string | null;
 }
 
 export interface OpenClawTarget {

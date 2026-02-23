@@ -32,8 +32,8 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok && active) {
-          const data = (await res.json()) as { recipes: RecipeDefinition[] };
-          setRecipes(data.recipes);
+          const data = (await res.json()) as { recipes?: RecipeDefinition[] };
+          setRecipes(data.recipes ?? []);
         }
       } catch {
         /* ignore */
@@ -72,9 +72,10 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
           }
         );
         if (!resolveRes.ok) return;
-        const { commands } = (await resolveRes.json()) as {
-          commands: { command: string; args: string[]; description: string }[];
+        const resolved = (await resolveRes.json()) as {
+          commands?: { command: string; args: string[]; description: string }[];
         };
+        const commands = resolved.commands ?? [];
         await fetch(`${baseUrl}/openclaw/queue`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

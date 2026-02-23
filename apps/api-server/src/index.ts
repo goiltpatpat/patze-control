@@ -38,6 +38,13 @@ import {
   readRawConfigString,
 } from './openclaw-config-reader.js';
 import { OpenClawCommandQueue } from './openclaw-command-queue.js';
+import { SftpSessionManager, type CustomSshConnection } from './sftp-session-manager.js';
+import multipart from '@fastify/multipart';
+
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileNode = promisify(execFileCb);
 
 const INGEST_BODY_LIMIT_BYTES = 1024 * 1024;
 const CRON_SYNC_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
@@ -48,6 +55,37 @@ const BRIDGE_CRON_SYNC_RATE_LIMIT_WINDOW_MS = 60_000;
 const BRIDGE_CRON_SYNC_RATE_LIMIT_MAX_REQUESTS = Number(
   process.env.BRIDGE_CRON_SYNC_RATE_LIMIT_MAX ?? '60'
 );
+
+// ── OpenClaw CLI detection ──
+
+interface CliStatus {
+  readonly available: boolean;
+  readonly version: string | null;
+  readonly checkedAt: number;
+}
+
+let cachedCliStatus: CliStatus = { available: false, version: null, checkedAt: 0 };
+const CLI_CHECK_TTL_MS = 60_000;
+
+async function checkOpenClawCli(): Promise<CliStatus> {
+  if (Date.now() - cachedCliStatus.checkedAt < CLI_CHECK_TTL_MS) return cachedCliStatus;
+  try {
+    const { stdout } = await execFileNode('openclaw', ['--version'], {
+      timeout: 5_000,
+      maxBuffer: 256 * 1024,
+    });
+    cachedCliStatus = {
+      available: true,
+      version: stdout.trim() || 'unknown',
+      checkedAt: Date.now(),
+    };
+  } catch {
+    cachedCliStatus = { available: false, version: null, checkedAt: Date.now() };
+  }
+  return cachedCliStatus;
+}
+
+void checkOpenClawCli();
 
 interface HealthCheckItem {
   readonly id: string;
@@ -62,6 +100,13 @@ interface OpenClawHealthCheck {
   readonly target: string;
   readonly checks: readonly HealthCheckItem[];
   readonly syncStatus: OpenClawSyncStatus;
+  readonly cliAvailable: boolean;
+  readonly cliVersion: string | null;
+}
+
+interface OpenClawChannelBoundAgent {
+  readonly agentId: string;
+  readonly modelOverride?: string;
 }
 
 interface OpenClawChannelSummary {
@@ -83,6 +128,7 @@ interface OpenClawChannelSummary {
     readonly connected: number;
     readonly runtimeKnown: number;
   };
+  readonly boundAgents: readonly OpenClawChannelBoundAgent[];
   readonly lastMessageAt?: string;
   readonly messageCount?: number;
 }
@@ -632,10 +678,13 @@ app.post('/ingest/batch', async (request: BatchIngestRequest, reply: FastifyRepl
 });
 
 app.get('/health', async (_request: FastifyRequest, reply: FastifyReply) => {
+  const cli = await checkOpenClawCli();
   return reply.code(200).send({
     ok: true,
     authMode: authConfig.mode,
     authRequired: authConfig.mode === 'token',
+    openclawCliAvailable: cli.available,
+    openclawCliVersion: cli.version,
   });
 });
 
@@ -1149,10 +1198,11 @@ function readableDir(targetPath: string): boolean {
   }
 }
 
-function buildOpenClawHealth(
+async function buildOpenClawHealth(
   targetPath: string,
   syncStatus: OpenClawSyncStatus
-): OpenClawHealthCheck {
+): Promise<OpenClawHealthCheck> {
+  const cli = await checkOpenClawCli();
   const cronDir = path.join(targetPath, 'cron');
   const checks: HealthCheckItem[] = [];
 
@@ -1276,12 +1326,32 @@ function buildOpenClawHealth(
     });
   }
 
+  if (!cli.available) {
+    checks.push({
+      id: 'openclaw-cli',
+      name: 'OpenClaw CLI',
+      status: 'error',
+      message: 'openclaw command not found in PATH',
+      details: 'Install the OpenClaw CLI to enable config management and command execution.',
+    });
+  } else {
+    checks.push({
+      id: 'openclaw-cli',
+      name: 'OpenClaw CLI',
+      status: 'ok',
+      message: `openclaw ${cli.version ?? 'unknown'}`,
+      details: undefined,
+    });
+  }
+
   const ok = checks.every((check) => check.status === 'ok');
   return {
     ok,
     target: path.resolve(targetPath),
     checks,
     syncStatus,
+    cliAvailable: cli.available,
+    cliVersion: cli.version,
   };
 }
 
@@ -1422,6 +1492,7 @@ function readOpenClawChannels(openclawHome: string): {
           connected: 0,
           runtimeKnown: 0,
         },
+        boundAgents: [],
       })),
     };
   }
@@ -1452,6 +1523,7 @@ function readOpenClawChannels(openclawHome: string): {
             connected: 0,
             runtimeKnown: 0,
           },
+          boundAgents: [],
         })),
       };
     }
@@ -1500,6 +1572,30 @@ function readOpenClawChannels(openclawHome: string): {
         (channelRuntimeState === 'unknown' && accountConnected > 0);
       const lastMessageAt = toStringOrUndefined(sessionStats.lastMessageAt);
       const messageCount = toNumberOrUndefined(sessionStats.messageCount);
+
+      const boundAgents: OpenClawChannelBoundAgent[] = [];
+      const agentsList = channelConfig.agents ?? channelConfig.bindings;
+      if (Array.isArray(agentsList)) {
+        for (const entry of agentsList) {
+          if (typeof entry === 'string') {
+            boundAgents.push({ agentId: entry });
+          } else if (isRecord(entry)) {
+            const aid =
+              typeof entry.agentId === 'string'
+                ? entry.agentId
+                : typeof entry.id === 'string'
+                  ? entry.id
+                  : '';
+            if (aid) {
+              boundAgents.push({
+                agentId: aid,
+                ...(typeof entry.model === 'string' ? { modelOverride: entry.model } : {}),
+              });
+            }
+          }
+        }
+      }
+
       return {
         id: channel.id,
         name: channel.name,
@@ -1519,6 +1615,7 @@ function readOpenClawChannels(openclawHome: string): {
           connected: accountConnected,
           runtimeKnown: accountRuntimeKnown,
         },
+        boundAgents,
         ...(lastMessageAt ? { lastMessageAt } : {}),
         ...(messageCount !== undefined ? { messageCount } : {}),
       };
@@ -1549,6 +1646,7 @@ function readOpenClawChannels(openclawHome: string): {
           connected: 0,
           runtimeKnown: 0,
         },
+        boundAgents: [],
       })),
     };
   }
@@ -1647,6 +1745,8 @@ const bridgeSetupManager = new BridgeSetupManager({
   localPort: port,
   installScriptPath,
 });
+const sftpSessionManager = new SftpSessionManager(bridgeSetupManager);
+await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } });
 
 if (authConfig.mode === 'none') {
   app.log.warn('Auth mode is "none" — all endpoints are publicly accessible.');
@@ -2293,7 +2393,7 @@ app.get(
       lastError: undefined,
       stale: false,
     };
-    return reply.code(200).send(buildOpenClawHealth(target.openclawDir, status));
+    return reply.code(200).send(await buildOpenClawHealth(target.openclawDir, status));
   }
 );
 
@@ -2333,7 +2433,7 @@ app.get('/openclaw/health', async (request: FastifyRequest, reply: FastifyReply)
     lastError: undefined,
     stale: false,
   };
-  return reply.code(200).send(buildOpenClawHealth(openclawDir, status));
+  return reply.code(200).send(await buildOpenClawHealth(openclawDir, status));
 });
 
 app.get(
@@ -3559,6 +3659,35 @@ app.post(
   }
 );
 
+app.post(
+  '/openclaw/targets/:targetId/channels/:channelId/unbind',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; channelId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+    const agentId = typeof request.body.agentId === 'string' ? request.body.agentId : '';
+    if (!agentId) return reply.code(400).send({ error: 'agentId is required' });
+    if (!isValidEntityId(agentId)) return reply.code(400).send({ error: 'Invalid agent id' });
+
+    const channelId = request.params.channelId;
+    if (!isValidEntityId(channelId)) return reply.code(400).send({ error: 'Invalid channel id' });
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, [
+      {
+        command: 'openclaw',
+        args: ['config', 'unset', `channels.${channelId}.agents.${agentId}`],
+        description: `Unbind agent "${agentId}" from channel "${channelId}"`,
+      },
+    ]);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
 // ── Config Snapshots ──
 
 app.get(
@@ -3668,12 +3797,400 @@ app.post(
   }
 );
 
+// ── File Manager (SFTP) ─────────────────────────────────────────────
+
+function validateAbsolutePath(p: string): boolean {
+  if (!p || !p.startsWith('/')) return false;
+  if (p.includes('/../') || p.endsWith('/..') || p === '..') return false;
+  return true;
+}
+
+app.get('/files/connections', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+  const connections = await sftpSessionManager.getConnections();
+  return reply.code(200).send(connections);
+});
+
+app.post(
+  '/files/connections',
+  async (
+    request: FastifyRequest<{
+      Body: Omit<CustomSshConnection, 'id'>;
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const { label, host, port: sshPort, user, keyPath } = request.body;
+    if (!host || !user || !keyPath) {
+      return reply.code(400).send({ error: 'host, user, and keyPath are required' });
+    }
+    const conn = await sftpSessionManager.addCustomConnection({
+      label: label || `${user}@${host}`,
+      host,
+      port: sshPort || 22,
+      user,
+      keyPath,
+    });
+    return reply.code(201).send(conn);
+  }
+);
+
+app.delete(
+  '/files/connections/:id',
+  async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const removed = await sftpSessionManager.removeCustomConnection(request.params.id);
+    if (!removed) return reply.code(404).send({ error: 'connection not found' });
+    return reply.code(200).send({ ok: true });
+  }
+);
+
+app.get(
+  '/files/:connId/ls',
+  async (
+    request: FastifyRequest<{
+      Params: { connId: string };
+      Querystring: { path?: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const remotePath = (request.query as { path?: string }).path || '/';
+    if (!validateAbsolutePath(remotePath)) {
+      return reply.code(400).send({ error: 'Invalid path' });
+    }
+
+    try {
+      const sftp = await sftpSessionManager.getSftp(request.params.connId);
+      const entries = await new Promise<
+        Array<{
+          filename: string;
+          longname: string;
+          attrs: { size: number; mtime: number; mode: number; uid: number; gid: number };
+        }>
+      >((resolve, reject) => {
+        sftp.readdir(remotePath, (err, list) => {
+          if (err) return reject(err);
+          resolve(list as never);
+        });
+      });
+
+      const files = entries
+        .filter((e) => e.filename !== '.' && e.filename !== '..')
+        .map((e) => {
+          const isDir = (e.attrs.mode & 0o40000) !== 0;
+          const isLink = (e.attrs.mode & 0o120000) === 0o120000;
+          const perms = (e.attrs.mode & 0o7777).toString(8).padStart(4, '0');
+          return {
+            name: e.filename,
+            type: isLink ? 'symlink' : isDir ? 'directory' : 'file',
+            size: e.attrs.size,
+            mtime: e.attrs.mtime * 1000,
+            permissions: perms,
+          };
+        })
+        .sort((a, b) => {
+          if (a.type === 'directory' && b.type !== 'directory') return -1;
+          if (a.type !== 'directory' && b.type === 'directory') return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+      return reply.code(200).send({ path: remotePath, entries: files });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: msg });
+    }
+  }
+);
+
+app.get(
+  '/files/:connId/stat',
+  async (
+    request: FastifyRequest<{
+      Params: { connId: string };
+      Querystring: { path?: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const remotePath = (request.query as { path?: string }).path || '/';
+    if (!validateAbsolutePath(remotePath)) {
+      return reply.code(400).send({ error: 'Invalid path' });
+    }
+
+    try {
+      const sftp = await sftpSessionManager.getSftp(request.params.connId);
+      const attrs = await new Promise<{
+        size: number;
+        mtime: number;
+        mode: number;
+        uid: number;
+        gid: number;
+      }>((resolve, reject) => {
+        sftp.stat(remotePath, (err, stats) => {
+          if (err) return reject(err);
+          resolve(stats as never);
+        });
+      });
+
+      const isDir = (attrs.mode & 0o40000) !== 0;
+      return reply.code(200).send({
+        path: remotePath,
+        type: isDir ? 'directory' : 'file',
+        size: attrs.size,
+        mtime: attrs.mtime * 1000,
+        permissions: (attrs.mode & 0o7777).toString(8).padStart(4, '0'),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: msg });
+    }
+  }
+);
+
+app.get(
+  '/files/:connId/download',
+  async (
+    request: FastifyRequest<{
+      Params: { connId: string };
+      Querystring: { path?: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const remotePath = (request.query as { path?: string }).path;
+    if (!remotePath || !validateAbsolutePath(remotePath)) {
+      return reply.code(400).send({ error: 'Invalid path' });
+    }
+
+    try {
+      const sftp = await sftpSessionManager.getSftp(request.params.connId);
+
+      const attrs = await new Promise<{ size: number }>((resolve, reject) => {
+        sftp.stat(remotePath, (err, stats) => {
+          if (err) return reject(err);
+          resolve(stats as never);
+        });
+      });
+
+      const basename = path.basename(remotePath);
+      void reply.header('Content-Type', 'application/octet-stream');
+      void reply.header(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(basename)}"`
+      );
+      void reply.header('Content-Length', attrs.size);
+
+      const stream = sftp.createReadStream(remotePath);
+      return reply.send(stream);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: msg });
+    }
+  }
+);
+
+app.post(
+  '/files/:connId/upload',
+  async (request: FastifyRequest<{ Params: { connId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    try {
+      const sftp = await sftpSessionManager.getSftp(request.params.connId);
+      const parts = request.parts();
+      let remotePath = '/tmp';
+      const uploaded: string[] = [];
+
+      for await (const part of parts) {
+        if (part.type === 'field' && part.fieldname === 'remotePath') {
+          remotePath = String(part.value);
+          if (!validateAbsolutePath(remotePath)) {
+            return reply.code(400).send({ error: 'Invalid remotePath' });
+          }
+          continue;
+        }
+        if (part.type === 'file') {
+          const destPath = path.posix.join(remotePath, part.filename);
+          await new Promise<void>((resolve, reject) => {
+            const writeStream = sftp.createWriteStream(destPath);
+            part.file.pipe(writeStream);
+            writeStream.on('close', resolve);
+            writeStream.on('error', reject);
+            part.file.on('error', reject);
+          });
+          uploaded.push(destPath);
+        }
+      }
+
+      return reply.code(200).send({ ok: true, uploaded });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: msg });
+    }
+  }
+);
+
+app.post(
+  '/files/:connId/mkdir',
+  async (
+    request: FastifyRequest<{
+      Params: { connId: string };
+      Body: { path: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const remotePath = request.body.path;
+    if (!remotePath || !validateAbsolutePath(remotePath)) {
+      return reply.code(400).send({ error: 'Invalid path' });
+    }
+
+    try {
+      const sftp = await sftpSessionManager.getSftp(request.params.connId);
+      await new Promise<void>((resolve, reject) => {
+        sftp.mkdir(remotePath, (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+      return reply.code(201).send({ ok: true, path: remotePath });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: msg });
+    }
+  }
+);
+
+app.post(
+  '/files/:connId/rename',
+  async (
+    request: FastifyRequest<{
+      Params: { connId: string };
+      Body: { oldPath: string; newPath: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const { oldPath, newPath } = request.body;
+    if (!validateAbsolutePath(oldPath) || !validateAbsolutePath(newPath)) {
+      return reply.code(400).send({ error: 'Invalid path' });
+    }
+
+    try {
+      const sftp = await sftpSessionManager.getSftp(request.params.connId);
+      await new Promise<void>((resolve, reject) => {
+        sftp.rename(oldPath, newPath, (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+      return reply.code(200).send({ ok: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: msg });
+    }
+  }
+);
+
+app.delete(
+  '/files/:connId/rm',
+  async (
+    request: FastifyRequest<{
+      Params: { connId: string };
+      Querystring: { path?: string; recursive?: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const remotePath = (request.query as { path?: string }).path;
+    const recursive = (request.query as { recursive?: string }).recursive === 'true';
+    if (!remotePath || !validateAbsolutePath(remotePath)) {
+      return reply.code(400).send({ error: 'Invalid path' });
+    }
+
+    try {
+      const sftp = await sftpSessionManager.getSftp(request.params.connId);
+
+      const attrs = await new Promise<{ mode: number }>((resolve, reject) => {
+        sftp.stat(remotePath, (err, stats) => {
+          if (err) return reject(err);
+          resolve(stats as never);
+        });
+      });
+
+      const isDir = (attrs.mode & 0o40000) !== 0;
+
+      if (isDir) {
+        if (recursive) {
+          await removeDirRecursive(sftp, remotePath);
+        } else {
+          await new Promise<void>((resolve, reject) => {
+            sftp.rmdir(remotePath, (err) => {
+              if (err) return reject(err);
+              resolve();
+            });
+          });
+        }
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          sftp.unlink(remotePath, (err) => {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+      }
+
+      return reply.code(200).send({ ok: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: msg });
+    }
+  }
+);
+
+async function removeDirRecursive(
+  sftp: Awaited<ReturnType<typeof sftpSessionManager.getSftp>>,
+  dirPath: string
+): Promise<void> {
+  const entries = await new Promise<Array<{ filename: string; attrs: { mode: number } }>>(
+    (resolve, reject) => {
+      sftp.readdir(dirPath, (err, list) => {
+        if (err) return reject(err);
+        resolve(list as never);
+      });
+    }
+  );
+
+  for (const entry of entries) {
+    if (entry.filename === '.' || entry.filename === '..') continue;
+    const fullPath = path.posix.join(dirPath, entry.filename);
+    const isDir = (entry.attrs.mode & 0o40000) !== 0;
+    if (isDir) {
+      await removeDirRecursive(sftp, fullPath);
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        sftp.unlink(fullPath, (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    sftp.rmdir(dirPath, (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
 // ── Shutdown ────────────────────────────────────────────────────────
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info(`Received ${signal}, shutting down gracefully…`);
   cronService.stop();
   openclawSyncManager.stopAll();
+  sftpSessionManager.closeAll();
   await bridgeSetupManager.closeAll();
   clearInterval(heartbeatChecker);
   await orchestrator.close();

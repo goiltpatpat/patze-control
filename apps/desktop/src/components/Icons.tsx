@@ -428,3 +428,53 @@ export function IconPlus(props: IconProps): JSX.Element {
     </Icon>
   );
 }
+
+export function IconUpload(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <polyline points="16 16 12 12 8 16" />
+      <line x1="12" y1="12" x2="12" y2="21" />
+      <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+    </Icon>
+  );
+}
+
+export function IconDownload(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <polyline points="8 17 12 21 16 17" />
+      <line x1="12" y1="12" x2="12" y2="21" />
+      <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29" />
+    </Icon>
+  );
+}
+
+export function IconHardDrive(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <line x1="22" y1="12" x2="2" y2="12" />
+      <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+      <line x1="6" y1="16" x2="6.01" y2="16" />
+      <line x1="10" y1="16" x2="10.01" y2="16" />
+    </Icon>
+  );
+}
+
+export function IconRefresh(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </Icon>
+  );
+}
+
+export function IconMoreVertical(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </Icon>
+  );
+}

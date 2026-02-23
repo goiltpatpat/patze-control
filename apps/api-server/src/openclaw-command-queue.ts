@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type {
@@ -82,11 +83,59 @@ export class OpenClawCommandQueue {
     if (!tq || tq.commands.length === 0) return null;
 
     const before = readRawConfigString(tq.openclawDir) ?? '{}';
-    return {
-      before,
-      after: before,
-      commandCount: tq.commands.length,
-    };
+    const commands = tq.commands.map((cmd) => ({
+      description: cmd.description,
+      cli: `${cmd.command} ${cmd.args.join(' ')}`,
+    }));
+
+    const configPath = getConfigPath(tq.openclawDir);
+    if (!configPath) {
+      return {
+        before,
+        after: before,
+        commandCount: tq.commands.length,
+        commands,
+        simulated: false,
+      };
+    }
+
+    const tmpDir = path.join(
+      os.tmpdir(),
+      `patze-preview-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    );
+    try {
+      const relPath = path.relative(tq.openclawDir, configPath);
+      const tmpConfigPath = path.join(tmpDir, relPath);
+      fs.mkdirSync(path.dirname(tmpConfigPath), { recursive: true });
+      fs.copyFileSync(configPath, tmpConfigPath);
+
+      for (const cmd of tq.commands) {
+        await execFileAsync(cmd.command, [...cmd.args], {
+          timeout: 10_000,
+          maxBuffer: 2 * 1024 * 1024,
+          cwd: tmpDir,
+        });
+      }
+
+      const after = fs.readFileSync(tmpConfigPath, 'utf-8');
+      return { before, after, commandCount: tq.commands.length, commands, simulated: true };
+    } catch (err: unknown) {
+      const simulationError = err instanceof Error ? err.message : String(err);
+      return {
+        before,
+        after: before,
+        commandCount: tq.commands.length,
+        commands,
+        simulated: false,
+        simulationError,
+      };
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* ignore cleanup errors */
+      }
+    }
   }
 
   public async apply(

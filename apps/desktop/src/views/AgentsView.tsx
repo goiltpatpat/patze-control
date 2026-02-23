@@ -1,6 +1,7 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { FilterTabs, type FilterTab } from '../components/FilterTabs';
 import { IconBot, IconEdit, IconPlus } from '../components/Icons';
+import { onConfigChanged } from '../utils/openclaw-events';
 import { navigate, type RouteFilter } from '../shell/routes';
 import type { FrontendUnifiedSnapshot } from '../types';
 import { deriveAgents, type DerivedAgent } from '../utils/derive-agents';
@@ -39,41 +40,40 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
 
   const hasBackend = Boolean(props.baseUrl && props.token && props.targetId);
 
-  useEffect(() => {
+  const fetchOpenClawData = useCallback(async () => {
     if (!props.baseUrl || !props.token || !props.targetId) return;
-    const url = props.baseUrl;
-    const tok = props.token;
-    const tid = props.targetId;
-    let active = true;
-
-    void (async () => {
-      try {
-        const [agentsRes, modelsRes] = await Promise.all([
-          fetch(`${url}/openclaw/targets/${encodeURIComponent(tid)}/agents`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          fetch(`${url}/openclaw/targets/${encodeURIComponent(tid)}/models`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-        ]);
-        if (!active) return;
-        if (agentsRes.ok) {
-          const data = (await agentsRes.json()) as { agents: OpenClawAgent[] };
-          setOpenclawAgents(data.agents);
-        }
-        if (modelsRes.ok) {
-          const data = (await modelsRes.json()) as { models: OpenClawModelProfile[] };
-          setModelOptions(data.models);
-        }
-      } catch {
-        /* ignore */
+    try {
+      const [agentsRes, modelsRes] = await Promise.all([
+        fetch(`${props.baseUrl}/openclaw/targets/${encodeURIComponent(props.targetId)}/agents`, {
+          headers: { Authorization: `Bearer ${props.token}` },
+        }),
+        fetch(`${props.baseUrl}/openclaw/targets/${encodeURIComponent(props.targetId)}/models`, {
+          headers: { Authorization: `Bearer ${props.token}` },
+        }),
+      ]);
+      if (agentsRes.ok) {
+        const data = (await agentsRes.json()) as { agents?: OpenClawAgent[] };
+        setOpenclawAgents(data.agents ?? []);
       }
-    })();
-
-    return () => {
-      active = false;
-    };
+      if (modelsRes.ok) {
+        const data = (await modelsRes.json()) as { models?: OpenClawModelProfile[] };
+        setModelOptions(data.models ?? []);
+      }
+    } catch {
+      /* ignore */
+    }
   }, [props.baseUrl, props.token, props.targetId]);
+
+  useEffect(() => {
+    void fetchOpenClawData();
+  }, [fetchOpenClawData]);
+
+  const fetchRef = useRef(fetchOpenClawData);
+  fetchRef.current = fetchOpenClawData;
+
+  useEffect(() => {
+    return onConfigChanged(() => void fetchRef.current());
+  }, []);
 
   const queueCommand = useCallback(
     async (commands: readonly { command: string; args: string[]; description: string }[]) => {
@@ -199,6 +199,19 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
     [editAgent, queueCommand]
   );
 
+  const handleToggleAgent = useCallback(
+    (agentId: string, currentEnabled: boolean) => {
+      void queueCommand([
+        {
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${agentId}.enabled`, currentEnabled ? 'false' : 'true'],
+          description: `${currentEnabled ? 'Disable' : 'Enable'} agent "${agentId}"`,
+        },
+      ]);
+    },
+    [queueCommand]
+  );
+
   const handleDeleteAgent = useCallback(() => {
     if (!editAgent) return;
     void queueCommand([
@@ -211,27 +224,37 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
     setEditAgent(null);
   }, [editAgent, queueCommand]);
 
-  const activeCount = agents.filter((a) => a.active).length;
+  const activeCount = useMemo(() => agents.filter((a) => a.active).length, [agents]);
   const idleCount = agents.length - activeCount;
 
-  const tabs: ReadonlyArray<FilterTab<AgentFilter>> = [
-    { id: 'all', label: 'All', count: agents.length },
-    { id: 'active', label: 'Active', count: activeCount },
-    { id: 'idle', label: 'Idle', count: idleCount },
-  ];
+  const tabs: ReadonlyArray<FilterTab<AgentFilter>> = useMemo(
+    () => [
+      { id: 'all', label: 'All', count: agents.length },
+      { id: 'active', label: 'Active', count: activeCount },
+      { id: 'idle', label: 'Idle', count: idleCount },
+    ],
+    [agents.length, activeCount, idleCount]
+  );
 
-  const filtered = agents.filter((a) => {
-    switch (filter) {
-      case 'active':
-        return a.active;
-      case 'idle':
-        return !a.active;
-      case 'all':
-        return true;
-    }
-  });
+  const filtered = useMemo(
+    () =>
+      agents.filter((a) => {
+        switch (filter) {
+          case 'active':
+            return a.active;
+          case 'idle':
+            return !a.active;
+          case 'all':
+            return true;
+        }
+      }),
+    [agents, filter]
+  );
 
-  const modelOpts = modelOptions.map((m) => ({ id: m.id, name: m.name }));
+  const modelOpts = useMemo(
+    () => modelOptions.map((m) => ({ id: m.id, name: m.name })),
+    [modelOptions]
+  );
 
   return (
     <section className="view-panel">
@@ -273,9 +296,17 @@ export function AgentsView(props: AgentsViewProps): JSX.Element {
                     {agent.emoji ? <span style={{ marginRight: 6 }}>{agent.emoji}</span> : null}
                     <span className="machine-card-name">{agent.name || agent.id}</span>
                   </div>
-                  <span className={`badge ${agent.enabled ? 'tone-ok' : 'tone-muted'}`}>
+                  <button
+                    type="button"
+                    className={`badge-toggle ${agent.enabled ? 'badge-toggle-on' : 'badge-toggle-off'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleAgent(agent.id, agent.enabled);
+                    }}
+                    title={agent.enabled ? 'Click to disable' : 'Click to enable'}
+                  >
                     {agent.enabled ? 'enabled' : 'disabled'}
-                  </span>
+                  </button>
                 </div>
                 <div className="machine-card-meta">
                   <div className="machine-card-meta-item">

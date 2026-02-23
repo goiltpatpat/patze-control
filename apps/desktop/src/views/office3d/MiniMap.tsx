@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 type DeskStatus = 'active' | 'idle' | 'error' | 'offline';
 
@@ -11,7 +11,7 @@ interface MiniMapDesk {
 
 interface MiniMapProps {
   readonly desks: readonly MiniMapDesk[];
-  readonly playerPosition: { readonly x: number; readonly z: number } | null;
+  readonly playerPositionRef: RefObject<{ x: number; z: number } | null>;
   readonly roomBounds: {
     readonly minX: number;
     readonly maxX: number;
@@ -22,6 +22,7 @@ interface MiniMapProps {
 
 const MAP_SIZE = 140;
 const PADDING = 10;
+const DRAW_INTERVAL_MS = 100;
 
 function statusToColor(status: DeskStatus): string {
   switch (status) {
@@ -49,9 +50,14 @@ export function MiniMap(props: MiniMapProps): JSX.Element {
   const animRef = useRef<number>(0);
   const propsRef = useRef(props);
   propsRef.current = props;
+  const lastDrawRef = useRef(0);
 
   useEffect(() => {
-    const draw = () => {
+    const draw = (now: number) => {
+      animRef.current = requestAnimationFrame(draw);
+      if (now - lastDrawRef.current < DRAW_INTERVAL_MS) return;
+      lastDrawRef.current = now;
+
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -85,10 +91,10 @@ export function MiniMap(props: MiniMapProps): JSX.Element {
         ctx.globalAlpha = 1;
       }
 
-      if (p.playerPosition) {
-        const [plx, ply] = worldToMap(p.playerPosition.x, p.playerPosition.z, p.roomBounds);
-        const time = Date.now() * 0.003;
-        const pulseR = 5 + Math.sin(time) * 1.5;
+      const playerPos = p.playerPositionRef.current;
+      if (playerPos) {
+        const [plx, ply] = worldToMap(playerPos.x, playerPos.z, p.roomBounds);
+        const pulseR = 5 + Math.sin(now * 0.003) * 1.5;
 
         ctx.fillStyle = 'rgba(74, 158, 255, 0.2)';
         ctx.beginPath();
@@ -106,8 +112,6 @@ export function MiniMap(props: MiniMapProps): JSX.Element {
         ctx.arc(plx, ply, 3.5, 0, Math.PI * 2);
         ctx.stroke();
       }
-
-      animRef.current = requestAnimationFrame(draw);
     };
 
     animRef.current = requestAnimationFrame(draw);

@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
-import { IconCpu, IconPlus, IconTrash } from '../components/Icons';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { IconCpu, IconEdit, IconPlus, IconTrash } from '../components/Icons';
 import type { OpenClawModelProfile } from '@patze/telemetry-core';
+import { onConfigChanged } from '../utils/openclaw-events';
 import { CreateModelDialog } from './models/CreateModelDialog';
+import { EditModelDialog } from './models/EditModelDialog';
 
 export interface ModelsViewProps {
   readonly baseUrl: string;
@@ -21,6 +23,7 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
   const { baseUrl, token, connected, targetId } = props;
   const [models, setModels] = useState<readonly OpenClawModelProfile[]>([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [editModel, setEditModel] = useState<OpenClawModelProfile | null>(null);
 
   const fetchModels = useCallback(async () => {
     if (!connected || !targetId) return;
@@ -30,8 +33,8 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.ok) {
-        const data = (await res.json()) as { models: OpenClawModelProfile[] };
-        setModels(data.models);
+        const data = (await res.json()) as { models?: OpenClawModelProfile[] };
+        setModels(data.models ?? []);
       }
     } catch {
       /* ignore */
@@ -41,6 +44,13 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
   useEffect(() => {
     void fetchModels();
   }, [fetchModels]);
+
+  const fetchModelsRef = useRef(fetchModels);
+  fetchModelsRef.current = fetchModels;
+
+  useEffect(() => {
+    return onConfigChanged(() => void fetchModelsRef.current());
+  }, []);
 
   const queueCommand = useCallback(
     async (commands: readonly { command: string; args: string[]; description: string }[]) => {
@@ -135,6 +145,81 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
     [queueCommand]
   );
 
+  const handleToggle = useCallback(
+    (modelId: string, currentEnabled: boolean) => {
+      void queueCommand([
+        {
+          command: 'openclaw',
+          args: ['config', 'set', `models.${modelId}.enabled`, currentEnabled ? 'false' : 'true'],
+          description: `${currentEnabled ? 'Disable' : 'Enable'} model "${modelId}"`,
+        },
+      ]);
+    },
+    [queueCommand]
+  );
+
+  const handleEditSubmit = useCallback(
+    (data: {
+      name: string;
+      provider: string;
+      model: string;
+      apiKey: string;
+      baseUrl: string;
+      enabled: boolean;
+    }) => {
+      if (!editModel) return;
+      const id = editModel.id;
+      const cmds: { command: string; args: string[]; description: string }[] = [];
+      if (data.name !== editModel.name)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${id}.name`, data.name],
+          description: `Update model name`,
+        });
+      if (data.provider !== editModel.provider)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${id}.provider`, data.provider],
+          description: `Update provider`,
+        });
+      if (data.model !== editModel.model)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${id}.model`, data.model],
+          description: `Update model ID`,
+        });
+      if (data.apiKey)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${id}.apiKey`, data.apiKey],
+          description: `Update API key`,
+        });
+      if (data.baseUrl !== (editModel.baseUrl ?? ''))
+        cmds.push({
+          command: 'openclaw',
+          args: data.baseUrl
+            ? ['config', 'set', `models.${id}.baseUrl`, data.baseUrl]
+            : ['config', 'unset', `models.${id}.baseUrl`],
+          description: data.baseUrl ? `Update base URL` : `Remove base URL`,
+        });
+      if (data.enabled !== editModel.enabled)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `models.${id}.enabled`, String(data.enabled)],
+          description: `${data.enabled ? 'Enable' : 'Disable'} model`,
+        });
+      if (cmds.length > 0) void queueCommand(cmds);
+      setEditModel(null);
+    },
+    [editModel, queueCommand]
+  );
+
+  const handleEditDelete = useCallback(() => {
+    if (!editModel) return;
+    handleDelete(editModel.id);
+    setEditModel(null);
+  }, [editModel, handleDelete]);
+
   const isConnected = connected && targetId;
 
   return (
@@ -182,9 +267,14 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
                   />
                   <span className="machine-card-name">{model.name || model.id}</span>
                 </div>
-                <span className={`badge ${model.enabled ? 'tone-ok' : 'tone-muted'}`}>
+                <button
+                  type="button"
+                  className={`badge-toggle ${model.enabled ? 'badge-toggle-on' : 'badge-toggle-off'}`}
+                  onClick={() => handleToggle(model.id, model.enabled)}
+                  title={model.enabled ? 'Click to disable' : 'Click to enable'}
+                >
                   {model.enabled ? 'enabled' : 'disabled'}
-                </span>
+                </button>
               </div>
               <div className="machine-card-meta">
                 <div className="machine-card-meta-item">
@@ -214,6 +304,14 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
                 <button
                   type="button"
                   className="card-action-btn"
+                  onClick={() => setEditModel(model)}
+                  title="Edit model"
+                >
+                  <IconEdit width={13} height={13} /> Edit
+                </button>
+                <button
+                  type="button"
+                  className="card-action-btn"
                   onClick={() => handleSetDefault(model.id)}
                   title="Set as default model"
                 >
@@ -235,6 +333,15 @@ export function ModelsView(props: ModelsViewProps): JSX.Element {
 
       {showCreate ? (
         <CreateModelDialog onSubmit={handleCreate} onClose={() => setShowCreate(false)} />
+      ) : null}
+
+      {editModel ? (
+        <EditModelDialog
+          model={editModel}
+          onSubmit={handleEditSubmit}
+          onDelete={handleEditDelete}
+          onClose={() => setEditModel(null)}
+        />
       ) : null}
     </section>
   );

@@ -325,10 +325,18 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
   const sessionCount = snapshot.sessions.length;
   const totalRuns = snapshot.runs.length;
   const activeRuns = snapshot.activeRuns.length;
-  const failedRuns = snapshot.runs.filter((r) => r.state === 'failed').length;
-  const errorLogs = snapshot.logs.filter(
-    (l) => l.level === 'error' || l.level === 'critical'
-  ).length;
+  const failedRuns = useMemo(
+    () => snapshot.runs.filter((r) => r.state === 'failed').length,
+    [snapshot.runs]
+  );
+  const errorLogs = useMemo(
+    () => snapshot.logs.filter((l) => l.level === 'error' || l.level === 'critical').length,
+    [snapshot.logs]
+  );
+  const heatmapEvents = useMemo(
+    () => snapshot.recentEvents.map((e) => ({ ts: e.ts, type: e.type })),
+    [snapshot.recentEvents]
+  );
   const fleetResource = computeFleetResource(snapshot);
   const overallHealth =
     snapshot.health.overall === 'unknown' && machineCount === 0
@@ -639,11 +647,7 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
             </div>
           </div>
           <div className="ov-grid-panel-body">
-            {snapshot.recentEvents.length > 0 ? (
-              <ActivityHeatmap
-                events={snapshot.recentEvents.map((e) => ({ ts: e.ts, type: e.type }))}
-              />
-            ) : null}
+            {snapshot.recentEvents.length > 0 ? <ActivityHeatmap events={heatmapEvents} /> : null}
             <ActivityFeed snapshot={snapshot} />
             <Notepad />
           </div>

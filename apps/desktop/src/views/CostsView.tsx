@@ -292,7 +292,7 @@ export function CostsView(props: CostsViewProps): JSX.Element {
               <tbody>
                 {agentCosts.map((row) => (
                   <tr key={row.agentId}>
-                    <td className="cell-mono">{row.agentId}</td>
+                    <td className="mono">{row.agentId}</td>
                     <td className="cell-right">{row.runs}</td>
                     <td className="cell-right">{formatTokens(row.inputTokens)}</td>
                     <td className="cell-right">{formatTokens(row.outputTokens)}</td>
@@ -329,8 +329,8 @@ export function CostsView(props: CostsViewProps): JSX.Element {
               <tbody>
                 {modelCosts.map((row) => (
                   <tr key={`${row.provider}/${row.model}`}>
-                    <td className="cell-mono">{row.provider}</td>
-                    <td className="cell-mono">{row.model}</td>
+                    <td className="mono">{row.provider}</td>
+                    <td className="mono">{row.model}</td>
                     <td className="cell-right">{row.runs}</td>
                     <td className="cell-right">{formatTokens(row.inputTokens)}</td>
                     <td className="cell-right">{formatTokens(row.outputTokens)}</td>

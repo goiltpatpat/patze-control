@@ -205,8 +205,8 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
         signal: AbortSignal.timeout(5_000),
       });
       if (!res.ok || !mountedRef.current) return;
-      const data = (await res.json()) as { roots: WorkspaceRoot[] };
-      if (mountedRef.current) setRoots(data.roots);
+      const data = (await res.json()) as { roots?: WorkspaceRoot[] };
+      if (mountedRef.current) setRoots(data.roots ?? []);
     } catch {
       /* silent */
     }
@@ -220,8 +220,8 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
           signal: AbortSignal.timeout(8_000),
         });
         if (!res.ok) return [];
-        const data = (await res.json()) as { entries: WorkspaceEntry[] };
-        return data.entries.map((entry) => ({
+        const data = (await res.json()) as { entries?: WorkspaceEntry[] };
+        return (data.entries ?? []).map((entry) => ({
           entry,
           children: null,
           expanded: false,

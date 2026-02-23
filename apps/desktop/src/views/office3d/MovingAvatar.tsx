@@ -37,7 +37,13 @@ interface MovingAvatarProps {
 
 const MIN_DIST_OBSTACLE = 0.3;
 const MIN_DIST_AVATAR = 1.0;
-const REPORT_EVERY = 10;
+const REPORT_EVERY = 30;
+
+function distSq(a: Vector3, b: Vector3): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return dx * dx + dz * dz;
+}
 
 function isPositionFree(
   pos: Vector3,
@@ -46,13 +52,14 @@ function isPositionFree(
   selfId: string
 ): boolean {
   for (const obs of obstacles) {
-    if (pos.distanceTo(obs.position) < obs.radius + MIN_DIST_OBSTACLE) {
+    const minD = obs.radius + MIN_DIST_OBSTACLE;
+    if (distSq(pos, obs.position) < minD * minD) {
       return false;
     }
   }
   for (const [id, otherPos] of others) {
     if (id === selfId) continue;
-    if (pos.distanceTo(otherPos) < MIN_DIST_AVATAR) {
+    if (distSq(pos, otherPos) < MIN_DIST_AVATAR * MIN_DIST_AVATAR) {
       return false;
     }
   }
@@ -192,7 +199,7 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
       } else {
         isWalking.current = false;
         const bounds = pr.officeBounds;
-        for (let attempt = 0; attempt < 20; attempt++) {
+        for (let attempt = 0; attempt < 8; attempt++) {
           const cx = rand(bounds.minX + 1.5, bounds.maxX - 1.5);
           const cz = rand(bounds.minZ + 1.5, bounds.maxZ - 1.5);
           scratchNext.current.set(cx, 0, cz);

@@ -1,4 +1,10 @@
 import { useState, useCallback } from 'react';
+import { IconTrash } from '../../components/Icons';
+
+interface BoundAgent {
+  readonly agentId: string;
+  readonly modelOverride?: string;
+}
 
 export interface ChannelConfigDialogProps {
   readonly channelId: string;
@@ -6,6 +12,7 @@ export interface ChannelConfigDialogProps {
   readonly initialEnabled?: boolean | undefined;
   readonly initialDmPolicy?: string | undefined;
   readonly initialGroupPolicy?: string | undefined;
+  readonly boundAgents: readonly BoundAgent[];
   readonly agentOptions: readonly { id: string; name: string }[];
   readonly modelOptions: readonly { id: string; name: string }[];
   readonly onSubmit: (data: {
@@ -15,6 +22,7 @@ export interface ChannelConfigDialogProps {
     modelOverride?: string;
   }) => void;
   readonly onBind: (agentId: string, modelOverride?: string) => void;
+  readonly onUnbind: (agentId: string) => void;
   readonly onClose: () => void;
 }
 
@@ -125,6 +133,52 @@ export function ChannelConfigDialog(props: ChannelConfigDialogProps): JSX.Elemen
         </form>
 
         <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
+          <h4 style={{ marginBottom: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            Bound Agents
+          </h4>
+          {props.boundAgents.length === 0 ? (
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 12px' }}>
+              No agents bound to this channel yet.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+              {props.boundAgents.map((ba) => {
+                const agentLabel =
+                  props.agentOptions.find((a) => a.id === ba.agentId)?.name ?? ba.agentId;
+                return (
+                  <div
+                    key={ba.agentId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 10px',
+                      background: 'var(--bg-surface, rgba(255,255,255,0.03))',
+                      borderRadius: 'var(--radius-sm, 4px)',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    <span style={{ flex: 1, fontWeight: 500 }}>{agentLabel}</span>
+                    {ba.modelOverride ? (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        model: {ba.modelOverride}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="card-action-btn card-action-danger"
+                      style={{ padding: '3px 6px', fontSize: '0.72rem' }}
+                      onClick={() => props.onUnbind(ba.agentId)}
+                      title={`Unbind ${agentLabel}`}
+                    >
+                      <IconTrash width={11} height={11} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <h4 style={{ marginBottom: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             Add Binding
           </h4>
