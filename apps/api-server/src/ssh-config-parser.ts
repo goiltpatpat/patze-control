@@ -30,10 +30,10 @@ function normalizeHostToken(token: string): string {
 }
 
 function expandHome(value: string): string {
-  if (!value.startsWith('~')) {
+  if (!value.startsWith('~/') && value !== '~') {
     return value;
   }
-  return path.resolve(os.homedir(), value.slice(1));
+  return path.join(os.homedir(), value.slice(1));
 }
 
 function parseConfig(content: string): ParsedHostBlock[] {

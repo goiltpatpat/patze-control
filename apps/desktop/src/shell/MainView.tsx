@@ -28,6 +28,7 @@ import { TunnelsView, type TunnelEndpointRow } from '../views/TunnelsView';
 import { WorkspaceView } from '../views/WorkspaceView';
 import { ModelsView } from '../views/ModelsView';
 import { RecipesView } from '../views/RecipesView';
+import { FileManagerView } from '../views/files/FileManagerView';
 import type { AppRoute, RouteFilter, RouteState } from './routes';
 
 export interface MainViewProps {
@@ -174,6 +175,14 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           token={props.token}
           connected={props.status === 'connected' || props.status === 'degraded'}
           targetId={props.openclawTargets.entries[0]?.target.id ?? null}
+        />
+      );
+    case 'files':
+      return (
+        <FileManagerView
+          baseUrl={props.baseUrl}
+          token={props.token}
+          connected={props.status === 'connected' || props.status === 'degraded'}
         />
       );
     case 'office':

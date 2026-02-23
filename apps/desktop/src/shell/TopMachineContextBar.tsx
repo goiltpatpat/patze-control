@@ -46,7 +46,7 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
   return (
     <header className="context-bar">
       <div className="context-brand">
-        <div className="brand-icon">PC</div>
+        <img className="brand-icon" src="/Patzeclaw.svg" alt="Patze Control" />
         <h1>Patze Control</h1>
       </div>
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FilterTabs, type FilterTab } from '../../components/FilterTabs';
 import { IconClock } from '../../components/Icons';
+import { emitConfigChanged } from '../../utils/openclaw-events';
 import { TaskTimeline, type TimelineTask } from '../../components/TaskTimeline';
 import { AddTargetForm } from './AddTargetForm';
 import { CreateTaskForm } from './CreateTaskForm';
@@ -81,9 +82,9 @@ export function TasksView(props: TasksViewProps): JSX.Element {
     try {
       const res = await fetch(`${props.baseUrl}/tasks`, { headers, signal: controller.signal });
       if (!res.ok || controller.signal.aborted) return;
-      const data = (await res.json()) as ScheduledTask[];
+      const data = (await res.json()) as ScheduledTask[] | undefined;
       if (!controller.signal.aborted && requestVersion === fetchVersionsRef.current.tasks) {
-        setTasks(data);
+        setTasks(Array.isArray(data) ? data : []);
       }
     } catch {
       /* connection lost */
@@ -107,9 +108,9 @@ export function TasksView(props: TasksViewProps): JSX.Element {
         signal: controller.signal,
       });
       if (!res.ok || controller.signal.aborted) return;
-      const data = (await res.json()) as TaskRunRecord[];
+      const data = (await res.json()) as TaskRunRecord[] | undefined;
       if (!controller.signal.aborted && requestVersion === fetchVersionsRef.current.history) {
-        setHistory(data);
+        setHistory(Array.isArray(data) ? data : []);
       }
     } catch {
       /* connection lost */
@@ -139,7 +140,7 @@ export function TasksView(props: TasksViewProps): JSX.Element {
         syncStatus?: OpenClawSyncStatus;
       };
       if (!controller.signal.aborted && requestVersion === fetchVersionsRef.current.openclawJobs) {
-        setOpenclawJobs(data.jobs);
+        setOpenclawJobs(data.jobs ?? []);
         setOpenclawSyncStatus(data.syncStatus ?? null);
       }
     } catch {
@@ -180,7 +181,10 @@ export function TasksView(props: TasksViewProps): JSX.Element {
         headers,
         signal: AbortSignal.timeout(10_000),
       });
-      if (res.ok) setSnapshots((await res.json()) as TaskSnapshot[]);
+      if (res.ok) {
+        const data = (await res.json()) as TaskSnapshot[] | undefined;
+        setSnapshots(Array.isArray(data) ? data : []);
+      }
     } catch {
       /* connection lost */
     }
@@ -243,6 +247,9 @@ export function TasksView(props: TasksViewProps): JSX.Element {
               if (eventType === 'task') {
                 if (fetchTasksRef.current) void fetchTasksRef.current();
                 if (fetchHistoryRef.current) void fetchHistoryRef.current();
+              } else if (eventType === 'config-changed') {
+                emitConfigChanged();
+                void fetchOpenClawJobsRef.current?.();
               } else if (eventType === 'openclaw-sync' && eventData) {
                 try {
                   const nextStatus = JSON.parse(eventData) as OpenClawSyncStatus;

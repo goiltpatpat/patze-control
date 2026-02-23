@@ -290,6 +290,19 @@ export class BridgeSetupManager {
     return bridge ? this.toState(bridge) : null;
   }
 
+  getSshClient(id: string): Client | null {
+    const bridge = this.bridges.get(id);
+    if (
+      !bridge ||
+      bridge.closing ||
+      bridge.status === 'disconnected' ||
+      bridge.status === 'error'
+    ) {
+      return null;
+    }
+    return bridge.client;
+  }
+
   async closeAll(): Promise<void> {
     for (const bridge of this.bridges.values()) {
       this.cleanupBridge(bridge);

@@ -22,8 +22,8 @@ function ConfigHistorySection(props: {
         headers: { Authorization: `Bearer ${props.token}` },
       });
       if (res.ok) {
-        const data = (await res.json()) as { snapshots: OpenClawConfigSnapshot[] };
-        setSnapshots(data.snapshots);
+        const data = (await res.json()) as { snapshots?: OpenClawConfigSnapshot[] };
+        setSnapshots(data.snapshots ?? []);
       }
     } catch {
       /* ignore */

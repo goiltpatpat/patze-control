@@ -58,10 +58,18 @@ export interface OpenClawCommandQueueState {
   readonly totalCount: number;
 }
 
+export interface OpenClawConfigDiffCommand {
+  readonly description: string;
+  readonly cli: string;
+}
+
 export interface OpenClawConfigDiff {
   readonly before: string;
   readonly after: string;
   readonly commandCount: number;
+  readonly commands?: readonly OpenClawConfigDiffCommand[] | undefined;
+  readonly simulated?: boolean | undefined;
+  readonly simulationError?: string | undefined;
 }
 
 export interface OpenClawConfigSnapshot {

@@ -81,8 +81,8 @@ export function TerminalView(props: TerminalViewProps): JSX.Element {
           signal: AbortSignal.timeout(5_000),
         });
         if (!res.ok) return;
-        const data = (await res.json()) as { allowed: string[] };
-        if (mountedRef.current) setAllowlist(data.allowed);
+        const data = (await res.json()) as { allowed?: string[] };
+        if (mountedRef.current) setAllowlist(data.allowed ?? []);
       } catch {
         /* silent */
       }
@@ -100,8 +100,8 @@ export function TerminalView(props: TerminalViewProps): JSX.Element {
           signal: AbortSignal.timeout(5_000),
         });
         if (!res.ok) return '';
-        const data = (await res.json()) as { stdout: string };
-        return data.stdout.trim();
+        const data = (await res.json()) as { stdout?: string };
+        return (data.stdout ?? '').trim();
       } catch {
         return '';
       }
@@ -134,10 +134,10 @@ export function TerminalView(props: TerminalViewProps): JSX.Element {
           signal: AbortSignal.timeout(20_000),
         });
         const data = (await res.json()) as {
-          command: string;
-          exitCode: number;
-          stdout: string;
-          stderr: string;
+          command?: string;
+          exitCode?: number;
+          stdout?: string;
+          stderr?: string;
         };
         if (mountedRef.current) {
           entryIdCounter += 1;
@@ -145,10 +145,10 @@ export function TerminalView(props: TerminalViewProps): JSX.Element {
             ...prev,
             {
               id: entryIdCounter,
-              command: data.command,
-              stdout: data.stdout,
-              stderr: data.stderr,
-              exitCode: data.exitCode,
+              command: data.command ?? command,
+              stdout: data.stdout ?? '',
+              stderr: data.stderr ?? '',
+              exitCode: data.exitCode ?? 0,
               timestamp: new Date().toLocaleTimeString(),
             },
           ]);
@@ -264,8 +264,8 @@ export function TerminalView(props: TerminalViewProps): JSX.Element {
                   {entry.exitCode === 0 ? '\u2713' : `exit ${entry.exitCode}`}
                 </span>
               </div>
-              {entry.stdout.length > 0 ? <pre className="term-stdout">{entry.stdout}</pre> : null}
-              {entry.stderr.length > 0 ? <pre className="term-stderr">{entry.stderr}</pre> : null}
+              {entry.stdout ? <pre className="term-stdout">{entry.stdout}</pre> : null}
+              {entry.stderr ? <pre className="term-stderr">{entry.stderr}</pre> : null}
             </div>
           ))}
           {running ? (

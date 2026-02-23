@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IconMessage } from '../components/Icons';
 import type { TargetSyncStatusEntry } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus } from '../types';
+import { onConfigChanged } from '../utils/openclaw-events';
 import { formatRelativeTime } from '../utils/time';
 import type { OpenClawAgent, OpenClawModelProfile } from '@patze/telemetry-core';
 import { ChannelConfigDialog } from './channels/ChannelConfigDialog';
+
+interface OpenClawChannelBoundAgent {
+  readonly agentId: string;
+  readonly modelOverride?: string;
+}
 
 interface OpenClawChannel {
   readonly id: string;
@@ -25,6 +31,7 @@ interface OpenClawChannel {
     readonly connected: number;
     readonly runtimeKnown: number;
   };
+  readonly boundAgents: readonly OpenClawChannelBoundAgent[];
   readonly lastMessageAt?: string;
   readonly messageCount?: number;
 }
@@ -196,6 +203,11 @@ function ChannelCard(props: {
               <span className={`ch-dm-dot ${dmBadgeTone(channel.dmPolicy)}`} />
               DM: {channel.dmPolicy}
             </span>
+            {(channel.boundAgents ?? []).length > 0 ? (
+              <span className="ch-bound-badge">
+                {channel.boundAgents.length} agent{channel.boundAgents.length !== 1 ? 's' : ''}
+              </span>
+            ) : null}
           </div>
         </div>
         <span
@@ -236,6 +248,14 @@ function ChannelCard(props: {
               <span className="ch-detail-value">{channel.messageCount ?? 0}</span>
             </div>
           </div>
+          {(channel.boundAgents ?? []).length > 0 ? (
+            <div className="ch-detail-item" style={{ gridColumn: '1 / -1' }}>
+              <span className="ch-detail-label">Agents</span>
+              <span className="ch-detail-value">
+                {channel.boundAgents.map((ba) => ba.agentId).join(', ')}
+              </span>
+            </div>
+          ) : null}
           {recommendation ? <p className="channel-recommendation">{recommendation}</p> : null}
           <div className="ch-card-actions">
             <button
@@ -324,7 +344,19 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
         return;
       }
       const data = (await res.json()) as OpenClawChannelsResponse;
-      setChannels([...data.channels]);
+      const safeChannels = (data.channels ?? []).map((ch) => ({
+        ...ch,
+        boundAgents: ch.boundAgents ?? [],
+        allowFrom: ch.allowFrom ?? [],
+        accountSummary: ch.accountSummary ?? {
+          total: 0,
+          enabled: 0,
+          configured: 0,
+          connected: 0,
+          runtimeKnown: 0,
+        },
+      }));
+      setChannels(safeChannels);
       setConfigPath(data.configPath ?? null);
       setConfigStatus(data.configStatus ?? 'missing');
       setConfigCandidates(data.configCandidates ?? []);
@@ -347,6 +379,13 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
     };
   }, [isConnected, fetchChannels]);
 
+  const fetchChannelsRef = useRef(fetchChannels);
+  fetchChannelsRef.current = fetchChannels;
+
+  useEffect(() => {
+    return onConfigChanged(() => void fetchChannelsRef.current());
+  }, []);
+
   const openConfigDialog = useCallback(
     async (channel: OpenClawChannel) => {
       setConfigDialogChannel(channel);
@@ -363,12 +402,14 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
           ),
         ]);
         if (agRes.ok) {
-          const data = (await agRes.json()) as { agents: OpenClawAgent[] };
-          setAgentOptions(data.agents.map((a) => ({ id: a.id, name: a.name || a.id })));
+          const data = (await agRes.json()) as { agents?: OpenClawAgent[] };
+          setAgentOptions((data.agents ?? []).map((a) => ({ id: a.id, name: a.name || a.id })));
         }
         if (modRes.ok) {
-          const data = (await modRes.json()) as { models: OpenClawModelProfile[] };
-          setModelOptionsForDialog(data.models.map((m) => ({ id: m.id, name: m.name || m.id })));
+          const data = (await modRes.json()) as { models?: OpenClawModelProfile[] };
+          setModelOptionsForDialog(
+            (data.models ?? []).map((m) => ({ id: m.id, name: m.name || m.id }))
+          );
         }
       } catch {
         /* ignore */
@@ -456,6 +497,21 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
       });
     },
     [configDialogChannel, selectedTargetId, props.baseUrl, headers]
+  );
+
+  const handleChannelUnbind = useCallback(
+    (channelId: string, agentId: string) => {
+      if (!selectedTargetId) return;
+      void fetch(
+        `${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/channels/${encodeURIComponent(channelId)}/unbind`,
+        {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId }),
+        }
+      );
+    },
+    [selectedTargetId, props.baseUrl, headers]
   );
 
   const summary = useMemo(() => {
@@ -766,10 +822,12 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
               ? configDialogChannel.groupPolicy
               : undefined
           }
+          boundAgents={configDialogChannel.boundAgents ?? []}
           agentOptions={agentOptions}
           modelOptions={modelOptionsForDialog}
           onSubmit={handleChannelConfig}
           onBind={handleChannelBind}
+          onUnbind={(agentId) => handleChannelUnbind(configDialogChannel.id, agentId)}
           onClose={() => setConfigDialogChannel(null)}
         />
       ) : null}

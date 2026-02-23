@@ -145,6 +145,7 @@ export type {
   OpenClawQueuedCommand,
   OpenClawCommandQueueState,
   OpenClawConfigDiff,
+  OpenClawConfigDiffCommand,
   OpenClawConfigSnapshot,
   RecipeDefinition,
   RecipeParam,

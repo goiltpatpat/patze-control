@@ -10,6 +10,7 @@ import {
   IconDollar,
   IconFolder,
   IconGrid,
+  IconHardDrive,
   IconLayers,
   IconMessage,
   IconServer,
@@ -62,6 +63,7 @@ const NAV_TOP: readonly NavElement[] = [
   { type: 'item', route: 'terminal', label: 'Terminal', icon: IconConsole },
   { type: 'item', route: 'tasks', label: 'Tasks', icon: IconClock, shortcut: '9' },
   { type: 'item', route: 'costs', label: 'Costs', icon: IconDollar },
+  { type: 'item', route: 'files', label: 'Files', icon: IconHardDrive },
   { type: 'item', route: 'office', label: 'Office', icon: IconBuilding },
 ];
 

@@ -16,6 +16,7 @@ export type AppRoute =
   | 'terminal'
   | 'costs'
   | 'office'
+  | 'files'
   | 'settings';
 
 const VALID_ROUTES: readonly AppRoute[] = [
@@ -36,6 +37,7 @@ const VALID_ROUTES: readonly AppRoute[] = [
   'terminal',
   'costs',
   'office',
+  'files',
   'settings',
 ];
 

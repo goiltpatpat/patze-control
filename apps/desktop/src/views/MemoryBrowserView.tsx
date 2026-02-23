@@ -95,15 +95,16 @@ export function MemoryBrowserView(props: MemoryBrowserViewProps): JSX.Element {
       if (!res.ok || !mountedRef.current) {
         return;
       }
-      const data = (await res.json()) as { agents: MemoryAgentEntry[] };
+      const data = (await res.json()) as { agents?: MemoryAgentEntry[] };
       if (!mountedRef.current) {
         return;
       }
-      setAgents(data.agents);
-      if (data.agents.length > 0) {
-        const firstAgent = data.agents[0]!;
+      const safeAgents = data.agents ?? [];
+      setAgents(safeAgents);
+      if (safeAgents.length > 0) {
+        const firstAgent = safeAgents[0]!;
         setSelectedAgentId(firstAgent.agentId);
-        if (firstAgent.files.length > 0) {
+        if ((firstAgent.files ?? []).length > 0) {
           setSelectedFilePath(firstAgent.files[0]!.path);
         }
       } else {
