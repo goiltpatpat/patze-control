@@ -10,14 +10,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/goiltpatpat/patze-control/actions/workflows/ci.yml"><img src="https://github.com/goiltpatpat/patze-control/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/goiltpatpat/patze-control/actions/workflows/desktop-ci.yml"><img src="https://github.com/goiltpatpat/patze-control/actions/workflows/desktop-ci.yml/badge.svg" alt="Desktop CI" /></a>
-  <a href="https://github.com/goiltpatpat/patze-control/actions/workflows/workflow-lint.yml"><img src="https://github.com/goiltpatpat/patze-control/actions/workflows/workflow-lint.yml/badge.svg" alt="Workflow Lint" /></a>
+  <a href="https://github.com/goiltpatpat/patze-control/actions/workflows/ci.yml"><img src="https://github.com/goiltpatpat/patze-control/actions/workflows/ci.yml/badge.svg?branch=main" alt="repo-ci" /></a>
+  <a href="https://github.com/goiltpatpat/patze-control/actions/workflows/desktop-ci.yml"><img src="https://github.com/goiltpatpat/patze-control/actions/workflows/desktop-ci.yml/badge.svg?branch=main" alt="desktop-ci" /></a>
   <br/>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT" /></a>
   <img src="https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Tauri-2-ffc131.svg" alt="Tauri" />
-  <img src="https://img.shields.io/badge/React-18-61dafb.svg" alt="React" />
+  <img src="https://img.shields.io/badge/React-19-61dafb.svg" alt="React" />
   <img src="https://img.shields.io/badge/Fastify-5-000.svg" alt="Fastify" />
 </p>
 

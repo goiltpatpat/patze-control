@@ -240,7 +240,19 @@ export class BridgeSetupManager {
     const client = new Client();
     try {
       const privateKey = await this.loadSshKey(effective.keyPath);
-      await this.connectClient(client, effective, privateKey);
+      try {
+        await this.connectClient(client, effective, privateKey, false);
+      } catch (connErr) {
+        const msg = connErr instanceof Error ? connErr.message : String(connErr);
+        if (msg.includes('Handshake failed') || msg.includes('KEY_EXCHANGE')) {
+          throw new Error(
+            `Unknown SSH host key for ${effective.host}:${effective.port}. ` +
+              `Add the host to ~/.ssh/known_hosts first (e.g. ssh-keyscan -p ${effective.port} ${effective.host} >> ~/.ssh/known_hosts), ` +
+              `or use full bridge setup which accepts keys on first use.`
+          );
+        }
+        throw connErr;
+      }
 
       const result = await this.remoteExec(client, 'echo ok');
       if (result.exitCode !== 0 || result.stdout !== 'ok\n') {
@@ -330,11 +342,11 @@ export class BridgeSetupManager {
       `Connecting SSH to ${effective.user}@${effective.host}:${effective.port}...`
     );
     const privateKey = await this.loadSshKey(effective.keyPath);
-    const acceptedNewKey = await this.connectClient(client, effective, privateKey);
+    const acceptedNewKey = await this.connectClient(client, effective, privateKey, true);
     if (acceptedNewKey) {
       this.addLog(
         bridge,
-        'WARNING: Unknown SSH host key auto-accepted (TOFU). Verify host fingerprint manually for production use.'
+        'WARNING: Unknown SSH host key accepted on first use (TOFU). Verify host fingerprint for production use.'
       );
     }
 
@@ -467,7 +479,8 @@ export class BridgeSetupManager {
   private async connectClient(
     client: Client,
     effective: EffectiveSshConfig,
-    privateKey: string
+    privateKey: string,
+    trustOnFirstUse = false
   ): Promise<boolean> {
     const knownHostsPath = path.join(os.homedir(), '.ssh', 'known_hosts');
     const expectedKeys = await loadKnownHostKeys(effective.host, effective.port, knownHostsPath);
@@ -498,8 +511,11 @@ export class BridgeSetupManager {
         hostVerifier: (key: Buffer): boolean => {
           const presented = key.toString('base64');
           if (expectedKeys.size === 0) {
-            acceptedNewKey = true;
-            return true;
+            if (trustOnFirstUse) {
+              acceptedNewKey = true;
+              return true;
+            }
+            return false;
           }
           return expectedKeys.has(presented);
         },

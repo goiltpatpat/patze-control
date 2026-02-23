@@ -3088,18 +3088,82 @@ const TERMINAL_BLOCKED_COMMANDS: ReadonlySet<string> = new Set([
 const TERMINAL_MAX_OUTPUT_BYTES = 64 * 1024;
 const TERMINAL_TIMEOUT_MS = 15_000;
 
+const SENSITIVE_PATH_PREFIXES: readonly string[] = [
+  '/etc/shadow',
+  '/etc/passwd',
+  '/etc/sudoers',
+  '/root/',
+  '/proc/self/',
+];
+
+const SENSITIVE_PATH_PATTERNS: readonly RegExp[] = [
+  /\.ssh\//,
+  /\.env/,
+  /id_rsa/,
+  /id_ed25519/,
+  /authorized_keys/,
+  /known_hosts/,
+  /credentials/,
+  /\.pem$/,
+  /\.key$/,
+  /private.*key/i,
+  /secret/i,
+  /token/i,
+  /auth\.json/,
+  /patze-control\/auth/,
+];
+
+const FILE_READING_COMMANDS: ReadonlySet<string> = new Set(['cat', 'head', 'tail']);
+
+const SYSTEMCTL_SAFE_SUBCOMMANDS: ReadonlySet<string> = new Set([
+  'status',
+  'is-active',
+  'is-enabled',
+  'is-failed',
+  'list-units',
+  'list-unit-files',
+  'show',
+]);
+
+const GIT_SAFE_SUBCOMMANDS: ReadonlySet<string> = new Set([
+  'status',
+  'log',
+  'diff',
+  'branch',
+  'remote',
+  'show',
+  'tag',
+  'stash',
+  'rev-parse',
+  'describe',
+  'shortlog',
+]);
+
 function parseCommandBase(command: string): string | null {
   const trimmed = command.trim();
   if (trimmed.length === 0) return null;
   const parts = trimmed.split(/\s+/);
   const base = parts[0];
   if (!base) return null;
-  return path.basename(base);
+  if (base.includes('/')) {
+    return null;
+  }
+  return base;
+}
+
+function containsSensitivePath(args: string): boolean {
+  for (const prefix of SENSITIVE_PATH_PREFIXES) {
+    if (args.includes(prefix)) return true;
+  }
+  for (const pattern of SENSITIVE_PATH_PATTERNS) {
+    if (pattern.test(args)) return true;
+  }
+  return false;
 }
 
 function isCommandAllowed(command: string): { ok: true } | { ok: false; reason: string } {
   const base = parseCommandBase(command);
-  if (!base) return { ok: false, reason: 'Empty command' };
+  if (!base) return { ok: false, reason: 'Invalid command (empty or contains path separators)' };
   if (TERMINAL_BLOCKED_COMMANDS.has(base)) {
     return { ok: false, reason: `Command "${base}" is blocked for security` };
   }
@@ -3115,6 +3179,32 @@ function isCommandAllowed(command: string): { ok: true } | { ok: false; reason: 
   ) {
     return { ok: false, reason: 'Pipes, chaining, and subshells are not allowed' };
   }
+
+  const argsStr = command.trim().slice(base.length);
+
+  if (FILE_READING_COMMANDS.has(base) && containsSensitivePath(argsStr)) {
+    return { ok: false, reason: `Reading sensitive files is not allowed` };
+  }
+
+  if (base === 'systemctl') {
+    const parts = command.trim().split(/\s+/);
+    const sub = parts[1];
+    if (!sub || !SYSTEMCTL_SAFE_SUBCOMMANDS.has(sub)) {
+      return { ok: false, reason: `systemctl subcommand "${sub ?? ''}" is not allowed` };
+    }
+  }
+
+  if (base === 'git') {
+    const parts = command.trim().split(/\s+/);
+    const sub = parts[1];
+    if (!sub || !GIT_SAFE_SUBCOMMANDS.has(sub)) {
+      return {
+        ok: false,
+        reason: `git subcommand "${sub ?? ''}" is not allowed (read-only ops only)`,
+      };
+    }
+  }
+
   return { ok: true };
 }
 
@@ -3801,7 +3891,17 @@ app.post(
 
 function validateAbsolutePath(p: string): boolean {
   if (!p || !p.startsWith('/')) return false;
-  if (p.includes('/../') || p.endsWith('/..') || p === '..') return false;
+  const normalized = path.posix.normalize(p);
+  if (normalized !== p && normalized !== p.replace(/\/+$/, '')) {
+    return false;
+  }
+  if (normalized.includes('/../') || normalized.endsWith('/..') || normalized === '/..') {
+    return false;
+  }
+  const segments = normalized.split('/');
+  for (const seg of segments) {
+    if (seg === '..') return false;
+  }
   return true;
 }
 
@@ -3823,6 +3923,9 @@ app.post(
     const { label, host, port: sshPort, user, keyPath } = request.body;
     if (!host || !user || !keyPath) {
       return reply.code(400).send({ error: 'host, user, and keyPath are required' });
+    }
+    if (!isPathUnderSshDir(keyPath)) {
+      return reply.code(403).send({ error: 'SSH key path must be under ~/.ssh/' });
     }
     const conn = await sftpSessionManager.addCustomConnection({
       label: label || `${user}@${host}`,
@@ -4009,7 +4112,11 @@ app.post(
           continue;
         }
         if (part.type === 'file') {
-          const destPath = path.posix.join(remotePath, part.filename);
+          const safeName = path.posix.basename(part.filename);
+          if (!safeName || safeName === '.' || safeName === '..') {
+            return reply.code(400).send({ error: 'Invalid filename' });
+          }
+          const destPath = path.posix.join(remotePath, safeName);
           await new Promise<void>((resolve, reject) => {
             const writeStream = sftp.createWriteStream(destPath);
             part.file.pipe(writeStream);
