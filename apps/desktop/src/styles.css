@@ -6238,3 +6238,517 @@ span.tone-muted:not(.badge) {
     min-height: 360px;
   }
 }
+
+/* ─── Pending Changes Bar ───────────────────────────────────────── */
+
+.pending-changes-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--surface-raised, #1a1f2e);
+  border-top: 2px solid var(--color-accent, #7c5cfc);
+  font-size: 0.82rem;
+}
+
+.pending-changes-count {
+  color: var(--color-accent, #7c5cfc);
+  font-weight: 600;
+}
+
+.pending-changes-error {
+  color: var(--color-error, #e44);
+  font-size: 0.75rem;
+}
+
+.pending-changes-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.pending-changes-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.pending-changes-btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.05));
+}
+
+.pending-changes-apply {
+  background: var(--color-accent, #7c5cfc);
+  color: #fff;
+  border-color: var(--color-accent, #7c5cfc);
+}
+
+.pending-changes-apply:hover {
+  opacity: 0.9;
+}
+
+.pending-changes-discard {
+  color: var(--color-error, #e44);
+  border-color: var(--color-error, #e44);
+}
+
+.pending-changes-preview-panel {
+  background: var(--surface, #0e1117);
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.pending-changes-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.pending-changes-preview-header button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.pending-changes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.pending-changes-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  font-size: 0.78rem;
+}
+
+.pending-changes-item code {
+  font-family: var(--font-mono);
+  color: var(--color-accent, #7c5cfc);
+  font-size: 0.72rem;
+}
+
+.pending-changes-desc {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+/* ─── Dialog / Form Styles ──────────────────────────────────────── */
+
+.dialog-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.dialog-form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.dialog-form-input,
+.dialog-form-select,
+.dialog-form-textarea {
+  padding: 8px 10px;
+  background: var(--surface, #0e1117);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-family: inherit;
+}
+
+.dialog-form-input:focus,
+.dialog-form-select:focus,
+.dialog-form-textarea:focus {
+  outline: none;
+  border-color: var(--color-accent, #7c5cfc);
+  box-shadow: 0 0 0 2px rgba(124, 92, 252, 0.2);
+}
+
+.dialog-form-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.dialog-form-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-form-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.dialog-form-error {
+  padding: 8px 12px;
+  background: rgba(238, 68, 68, 0.1);
+  border: 1px solid rgba(238, 68, 68, 0.3);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-error, #e44);
+  font-size: 0.78rem;
+}
+
+.dialog-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.dialog-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: var(--color-accent, #7c5cfc);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.dialog-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.dialog-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-btn-secondary {
+  padding: 6px 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.dialog-btn-secondary:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.05));
+}
+
+.dialog-btn-danger {
+  padding: 6px 16px;
+  background: transparent;
+  color: var(--color-error, #e44);
+  border: 1px solid var(--color-error, #e44);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.dialog-btn-danger:hover {
+  background: rgba(238, 68, 68, 0.1);
+}
+
+/* ─── Card Edit Button ──────────────────────────────────────────── */
+
+.card-edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--surface-raised, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-muted);
+  padding: 4px 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.machine-card:hover .card-edit-btn {
+  opacity: 1;
+}
+
+.card-edit-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.machine-card {
+  position: relative;
+}
+
+/* ─── Model Card ────────────────────────────────────────────────── */
+
+.model-provider-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.model-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.card-action-btn {
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+
+.card-action-btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.05));
+}
+
+.card-action-danger {
+  color: var(--color-error, #e44);
+  border-color: rgba(238, 68, 68, 0.3);
+}
+
+.card-action-danger:hover {
+  background: rgba(238, 68, 68, 0.1);
+}
+
+/* ─── Recipes ───────────────────────────────────────────────────── */
+
+.recipes-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.recipes-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.recipe-tag-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+
+.recipe-tag-btn.active {
+  background: var(--color-accent, #7c5cfc);
+  color: #fff;
+  border-color: var(--color-accent, #7c5cfc);
+}
+
+.recipe-description {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  margin: 6px 0;
+  line-height: 1.4;
+}
+
+.recipe-tags-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.recipe-tag {
+  padding: 1px 8px;
+  background: rgba(124, 92, 252, 0.12);
+  color: var(--color-accent, #7c5cfc);
+  border-radius: 8px;
+  font-size: 0.68rem;
+}
+
+/* ─── Wizard ────────────────────────────────────────────────────── */
+
+.wizard-steps-indicator {
+  display: flex;
+  gap: 16px;
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.wizard-step-dot {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+}
+
+.wizard-step-dot.active {
+  color: var(--color-accent, #7c5cfc);
+  border-bottom: 2px solid var(--color-accent, #7c5cfc);
+}
+
+.wizard-review {
+  padding: 16px;
+}
+
+.wizard-done {
+  padding: 32px 16px;
+}
+
+/* ─── Diff Viewer ───────────────────────────────────────────────── */
+
+.diff-viewer {
+  background: var(--surface, #0e1117);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  overflow: hidden;
+}
+
+.diff-viewer-title {
+  padding: 8px 12px;
+  background: var(--surface-raised, rgba(255, 255, 255, 0.03));
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.diff-viewer-content {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.diff-line {
+  display: flex;
+  padding: 0 8px;
+}
+
+.diff-line-added {
+  background: rgba(68, 187, 119, 0.1);
+}
+
+.diff-line-removed {
+  background: rgba(238, 68, 68, 0.1);
+}
+
+.diff-line-num {
+  width: 32px;
+  text-align: right;
+  color: var(--text-muted);
+  user-select: none;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.diff-line-prefix {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.diff-line-added .diff-line-prefix {
+  color: var(--color-ok, #44bb77);
+}
+
+.diff-line-removed .diff-line-prefix {
+  color: var(--color-error, #e44);
+}
+
+.diff-line-text {
+  flex: 1;
+  white-space: pre;
+}
+
+/* ─── Section Subtitle ──────────────────────────────────────────── */
+
+.section-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.config-agents-section {
+  margin-bottom: 16px;
+}
+
+/* ─── Config History ────────────────────────────────────────────── */
+
+.config-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.config-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--surface-raised, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-sm, 4px);
+}
+
+.config-history-meta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.config-history-source {
+  padding: 1px 8px;
+  background: rgba(124, 92, 252, 0.12);
+  color: var(--color-accent, #7c5cfc);
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.config-history-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.config-history-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.config-history-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}

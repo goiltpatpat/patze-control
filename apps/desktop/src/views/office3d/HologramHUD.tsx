@@ -57,7 +57,14 @@ export function HologramHUD(props: HologramHUDProps): JSX.Element {
     if (dataRef.current) {
       const targetOpacity = status === 'offline' ? 0.15 : 0.85;
       const current = dataRef.current.userData.opacity ?? 0.85;
-      dataRef.current.userData.opacity = current + (targetOpacity - current) * 0.05;
+      const next = current + (targetOpacity - current) * 0.05;
+      dataRef.current.userData.opacity = next;
+      dataRef.current.traverse((child) => {
+        const mesh = child as import('three').Mesh;
+        if (mesh.material && 'opacity' in mesh.material) {
+          (mesh.material as import('three').MeshBasicMaterial).opacity = next;
+        }
+      });
     }
   });
 

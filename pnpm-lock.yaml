@@ -60,6 +60,9 @@ importers:
       '@patze/control-client':
         specifier: workspace:*
         version: link:../../packages/control-client
+      '@patze/telemetry-core':
+        specifier: workspace:*
+        version: link:../../packages/telemetry-core
       '@react-three/drei':
         specifier: ^9.122.0
         version: 9.122.0(@react-three/fiber@8.18.0(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.183.1))(@types/react@18.3.28)(@types/three@0.183.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.183.1)(use-sync-external-store@1.6.0(react@18.3.1))

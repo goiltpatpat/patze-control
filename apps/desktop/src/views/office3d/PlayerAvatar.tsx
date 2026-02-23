@@ -42,7 +42,6 @@ export function PlayerAvatar(props: PlayerAvatarProps): JSX.Element {
   const headRef = useRef<Group>(null);
 
   const position = useRef(new Vector3(0, 0, 6));
-  const velocity = useRef(new Vector3());
   const facing = useRef(0);
   const isMoving = useRef(false);
   const keys = useRef(new Set<string>());
@@ -130,8 +129,6 @@ export function PlayerAvatar(props: PlayerAvatarProps): JSX.Element {
         }
       }
     }
-
-    velocity.current.set(moving ? dir.x * speed : 0, 0, moving ? dir.z * speed : 0);
 
     if (groupRef.current) {
       groupRef.current.position.set(position.current.x, 0, position.current.z);

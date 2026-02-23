@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, type MutableRefObject } from 'react';
+import { useRef, useEffect, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Vector3 } from 'three';
 import type { Group } from 'three';
@@ -100,7 +100,8 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
   const startX = props.deskPosition[0];
   const startZ = props.deskPosition[2] + 2.0;
 
-  const [targetPos, setTargetPos] = useState(() => new Vector3(startX, 0, startZ));
+  const targetPos = useRef(new Vector3(startX, 0, startZ));
+  const scratchCandidate = useRef(new Vector3());
 
   useEffect(() => {
     function pickNewTarget(): void {
@@ -121,9 +122,11 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
           cz = rand(bounds.minZ + 1.5, bounds.maxZ - 1.5);
         }
 
-        const candidate = new Vector3(cx, 0, cz);
-        if (isPositionFree(candidate, pr.obstacles, pr.otherAvatarPositions, pr.id)) {
-          setTargetPos(candidate);
+        scratchCandidate.current.set(cx, 0, cz);
+        if (
+          isPositionFree(scratchCandidate.current, pr.obstacles, pr.otherAvatarPositions, pr.id)
+        ) {
+          targetPos.current.set(cx, 0, cz);
           return;
         }
       }
@@ -132,15 +135,20 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
     pickNewTarget();
 
     const [minMs, maxMs] = getMoveInterval(props.status);
-    const id = window.setInterval(
-      () => {
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+    const scheduleNext = (): void => {
+      if (cancelled) return;
+      timerId = setTimeout(() => {
         pickNewTarget();
-      },
-      rand(minMs, maxMs)
-    );
+        scheduleNext();
+      }, rand(minMs, maxMs));
+    };
+    scheduleNext();
 
     return () => {
-      window.clearInterval(id);
+      cancelled = true;
+      if (timerId != null) clearTimeout(timerId);
     };
   }, [props.status]);
 
@@ -154,7 +162,7 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
     const dt = Math.min(rawDelta, 0.05);
     const speed = getSpeed(pr.status);
 
-    scratchDir.current.subVectors(targetPos, currentPos.current);
+    scratchDir.current.subVectors(targetPos.current, currentPos.current);
     scratchDir.current.y = 0;
     const dist = scratchDir.current.length();
 
@@ -186,7 +194,7 @@ export function MovingAvatar(props: MovingAvatarProps): JSX.Element {
           const cz = rand(bounds.minZ + 1.5, bounds.maxZ - 1.5);
           scratchNext.current.set(cx, 0, cz);
           if (isPositionFree(scratchNext.current, pr.obstacles, pr.otherAvatarPositions, pr.id)) {
-            setTargetPos(new Vector3(cx, 0, cz));
+            targetPos.current.set(cx, 0, cz);
             break;
           }
         }

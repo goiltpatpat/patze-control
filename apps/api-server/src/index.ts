@@ -30,6 +30,14 @@ import { BridgeSetupManager, type BridgeSetupInput } from './bridge-setup-manage
 import { SshTunnelRuntime } from './ssh-tunnel-runtime.js';
 import { createTaskExecutor } from './task-executor.js';
 import { listSshConfigAliases } from './ssh-config-parser.js';
+import {
+  readFullConfig,
+  readAgents,
+  readModels,
+  readBindings,
+  readRawConfigString,
+} from './openclaw-config-reader.js';
+import { OpenClawCommandQueue } from './openclaw-command-queue.js';
 
 const INGEST_BODY_LIMIT_BYTES = 1024 * 1024;
 const CRON_SYNC_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
@@ -334,7 +342,7 @@ function isJsonContentType(request: FastifyRequest): boolean {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 const BLOCKED_DIR_PREFIXES = [
@@ -369,10 +377,15 @@ function isOpenClawDirSafe(resolvedDir: string): boolean {
     resolvedDir.startsWith(path.join(homeDir, '.ssh') + path.sep) ||
     resolvedDir === path.join(homeDir, '.ssh');
   if (isUnderSshDir) return false;
-  return (
-    safePrefixes.some((p) => resolvedDir === p || resolvedDir.startsWith(p + path.sep)) ||
-    isUnderHome
-  );
+  const isUnderGnupg =
+    resolvedDir.startsWith(path.join(homeDir, '.gnupg') + path.sep) ||
+    resolvedDir === path.join(homeDir, '.gnupg');
+  if (isUnderGnupg) return false;
+  const isUnderConfig =
+    resolvedDir.startsWith(path.join(homeDir, '.config') + path.sep) ||
+    resolvedDir === path.join(homeDir, '.config');
+  if (isUnderConfig) return false;
+  return safePrefixes.some((p) => resolvedDir === p || resolvedDir.startsWith(p + path.sep));
 }
 
 function parseBatchBody(body: unknown): readonly unknown[] | null {
@@ -408,6 +421,11 @@ function isBodySizeWithinLimit(request: FastifyRequest, limitBytes: number): boo
 
 function sanitizePathSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+const SAFE_ENTITY_ID_RE = /^[a-zA-Z0-9_-]+$/;
+function isValidEntityId(id: string): boolean {
+  return SAFE_ENTITY_ID_RE.test(id) && id.length > 0 && id.length <= 128;
 }
 
 function sanitizeRunFilename(jobId: string): string {
@@ -641,7 +659,7 @@ app.get('/events', async (request: FastifyRequest, reply: FastifyReply) => {
 
   const response = reply.raw;
   const origin = request.headers.origin;
-  if (origin) {
+  if (origin && ALLOWED_ORIGINS.some((pattern) => pattern.test(origin))) {
     response.setHeader('Access-Control-Allow-Origin', origin);
     response.setHeader('Vary', 'Origin');
   }
@@ -649,7 +667,6 @@ app.get('/events', async (request: FastifyRequest, reply: FastifyReply) => {
   response.setHeader('Cache-Control', 'no-cache, no-transform');
   response.setHeader('Connection', 'keep-alive');
   response.setHeader('X-Accel-Buffering', 'no');
-  // TODO: support Last-Event-ID resume semantics once replay buffer is introduced.
   response.flushHeaders();
 
   const sse = createSseWriter(response);
@@ -1644,6 +1661,19 @@ const taskExecutor = createTaskExecutor({ orchestrator, telemetryAggregator, app
 const taskEventListeners = new Set<(event: TaskEvent) => void>();
 const openclawSyncStatusListeners = new Set<(status: OpenClawSyncStatus) => void>();
 
+type GenericSseEvent = { kind: string; payload: Readonly<unknown> };
+const genericSseListeners = new Set<(event: GenericSseEvent) => void>();
+
+function broadcastSse(event: GenericSseEvent): void {
+  for (const listener of genericSseListeners) {
+    try {
+      listener(event);
+    } catch {
+      /* ok */
+    }
+  }
+}
+
 const cronService = new CronService({
   storeDir: cronStoreDir,
   executor: taskExecutor,
@@ -1702,6 +1732,8 @@ const targetStatusListeners = new Set<(targetId: string, status: OpenClawSyncSta
 
 openclawSyncManager.startAll();
 app.log.info({ targets: openclawTargetStore.list().length }, 'OpenClaw sync manager started');
+
+const commandQueue = new OpenClawCommandQueue(cronStoreDir);
 
 const openclawSync = (() => {
   const defaultTarget = openclawTargetStore.list()[0];
@@ -2006,7 +2038,7 @@ app.get('/tasks/events', async (request: FastifyRequest, reply: FastifyReply) =>
   reply.hijack();
   const response = reply.raw;
   const origin = request.headers.origin;
-  if (origin) {
+  if (origin && ALLOWED_ORIGINS.some((pattern) => pattern.test(origin))) {
     response.setHeader('Access-Control-Allow-Origin', origin);
     response.setHeader('Vary', 'Origin');
   }
@@ -2031,6 +2063,12 @@ app.get('/tasks/events', async (request: FastifyRequest, reply: FastifyReply) =>
   };
   openclawSyncStatusListeners.add(syncListener);
 
+  const genericListener = (event: GenericSseEvent): void => {
+    const chunk = writeSseNamedEventChunk(event.kind, event.payload);
+    sse.enqueue(chunk);
+  };
+  genericSseListeners.add(genericListener);
+
   const heartbeat = setInterval(() => {
     sse.enqueue(writeSseCommentChunk('heartbeat'));
   }, SSE_HEARTBEAT_MS);
@@ -2039,6 +2077,7 @@ app.get('/tasks/events', async (request: FastifyRequest, reply: FastifyReply) =>
     clearInterval(heartbeat);
     taskEventListeners.delete(listener);
     openclawSyncStatusListeners.delete(syncListener);
+    genericSseListeners.delete(genericListener);
     sse.close();
     if (!response.writableEnded && !response.destroyed) {
       response.end();
@@ -3046,6 +3085,576 @@ app.get('/terminal/allowlist', async (request: FastifyRequest, reply: FastifyRep
     blocked: [...TERMINAL_BLOCKED_COMMANDS].sort(),
   });
 });
+
+// ── Config Reader + Command Queue Endpoints ──────────────────────────
+
+app.get(
+  '/openclaw/targets/:targetId/config',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    const config = readFullConfig(target.openclawDir);
+    if (!config) return reply.code(200).send({ available: false, config: null });
+    return reply.code(200).send({ available: true, config });
+  }
+);
+
+app.get(
+  '/openclaw/targets/:targetId/agents',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    return reply.code(200).send({ agents: readAgents(target.openclawDir) });
+  }
+);
+
+app.get(
+  '/openclaw/targets/:targetId/models',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    return reply.code(200).send({ models: readModels(target.openclawDir) });
+  }
+);
+
+app.get(
+  '/openclaw/targets/:targetId/bindings',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    return reply.code(200).send({ bindings: readBindings(target.openclawDir) });
+  }
+);
+
+app.get(
+  '/openclaw/targets/:targetId/config-raw',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    const raw = readRawConfigString(target.openclawDir);
+    return reply.code(200).send({ raw: raw ?? null });
+  }
+);
+
+// ── Command Queue ──
+
+app.post('/openclaw/queue', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+  if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+  const targetId = typeof request.body.targetId === 'string' ? request.body.targetId : '';
+  if (!targetId) return reply.code(400).send({ error: 'targetId is required' });
+
+  const target = openclawTargetStore.get(targetId);
+  if (!target) return reply.code(404).send({ error: 'target_not_found' });
+
+  const ALLOWED_COMMANDS = new Set(['openclaw']);
+  const commands = Array.isArray(request.body.commands) ? request.body.commands : [];
+  const parsed: { command: string; args: readonly string[]; description: string }[] = [];
+  for (const cmd of commands) {
+    if (!isRecord(cmd)) continue;
+    const command = typeof cmd.command === 'string' ? cmd.command : 'openclaw';
+    if (!ALLOWED_COMMANDS.has(command)) {
+      return reply.code(400).send({ error: `Disallowed command: ${command}` });
+    }
+    const args = Array.isArray(cmd.args) ? cmd.args.filter((a: unknown): a is string => typeof a === 'string') : [];
+    parsed.push({ command, args, description: typeof cmd.description === 'string' ? cmd.description : '' });
+  }
+  if (parsed.length === 0) return reply.code(400).send({ error: 'No valid commands' });
+
+  const state = commandQueue.queue(targetId, target.openclawDir, parsed);
+  return reply.code(200).send(state);
+});
+
+app.get(
+  '/openclaw/queue/:targetId',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    return reply.code(200).send(commandQueue.getState(request.params.targetId));
+  }
+);
+
+app.post(
+  '/openclaw/queue/:targetId/preview',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const diff = await commandQueue.preview(request.params.targetId);
+    if (!diff) return reply.code(200).send({ available: false, diff: null });
+    return reply.code(200).send({ available: true, diff });
+  }
+);
+
+app.post(
+  '/openclaw/queue/:targetId/apply',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const source = isRecord(request.body) && typeof request.body.source === 'string'
+      ? request.body.source
+      : 'manual';
+    const result = await commandQueue.apply(request.params.targetId, source);
+    if (!result.ok) return reply.code(422).send(result);
+    broadcastSse({ kind: 'config-changed', payload: { targetId: request.params.targetId } });
+    return reply.code(200).send(result);
+  }
+);
+
+app.delete(
+  '/openclaw/queue/:targetId',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    commandQueue.discard(request.params.targetId);
+    return reply.code(200).send({ ok: true });
+  }
+);
+
+// ── Agent CRUD (queue CLI commands) ──
+
+app.post(
+  '/openclaw/targets/:targetId/agents',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+    const agentId = typeof request.body.id === 'string' ? request.body.id.trim() : '';
+    if (!agentId || !/^[a-zA-Z0-9_-]+$/.test(agentId)) {
+      return reply.code(400).send({ error: 'Invalid agent id (alphanumeric, _, -)' });
+    }
+
+    const cmds: { command: string; args: string[]; description: string }[] = [];
+    cmds.push({
+      command: 'openclaw',
+      args: ['agents', 'add', agentId, '--non-interactive'],
+      description: `Create agent "${agentId}"`,
+    });
+
+    const name = typeof request.body.name === 'string' ? request.body.name : '';
+    if (name) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `agents.${agentId}.name`, name],
+        description: `Set agent "${agentId}" name to "${name}"`,
+      });
+    }
+    const emoji = typeof request.body.emoji === 'string' ? request.body.emoji : '';
+    if (emoji) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `agents.${agentId}.emoji`, emoji],
+        description: `Set agent "${agentId}" emoji`,
+      });
+    }
+    const systemPrompt = typeof request.body.systemPrompt === 'string' ? request.body.systemPrompt : '';
+    if (systemPrompt) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `agents.${agentId}.systemPrompt`, systemPrompt],
+        description: `Set agent "${agentId}" system prompt`,
+      });
+    }
+    const modelPrimary =
+      isRecord(request.body.model) && typeof request.body.model.primary === 'string'
+        ? request.body.model.primary
+        : '';
+    if (modelPrimary) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `agents.${agentId}.model.primary`, modelPrimary],
+        description: `Set agent "${agentId}" primary model`,
+      });
+    }
+    if (request.body.enabled === false) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `agents.${agentId}.enabled`, 'false'],
+        description: `Disable agent "${agentId}"`,
+      });
+    }
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, cmds);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
+app.patch(
+  '/openclaw/targets/:targetId/agents/:agentId',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; agentId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+    const agentId = request.params.agentId;
+    if (!isValidEntityId(agentId)) return reply.code(400).send({ error: 'Invalid agent id' });
+    const cmds: { command: string; args: string[]; description: string }[] = [];
+    const fieldMap: Record<string, string> = {};
+
+    if (typeof request.body.name === 'string') fieldMap.name = request.body.name;
+    if (typeof request.body.emoji === 'string') fieldMap.emoji = request.body.emoji;
+    if (typeof request.body.systemPrompt === 'string') fieldMap.systemPrompt = request.body.systemPrompt;
+    if (typeof request.body.enabled === 'boolean') fieldMap.enabled = String(request.body.enabled);
+
+    for (const [field, value] of Object.entries(fieldMap)) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `agents.${agentId}.${field}`, value],
+        description: `Update agent "${agentId}" ${field}`,
+      });
+    }
+
+    if (isRecord(request.body.model)) {
+      if (typeof request.body.model.primary === 'string') {
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${agentId}.model.primary`, request.body.model.primary],
+          description: `Update agent "${agentId}" primary model`,
+        });
+      }
+      if (typeof request.body.model.fallback === 'string') {
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `agents.${agentId}.model.fallback`, request.body.model.fallback],
+          description: `Update agent "${agentId}" fallback model`,
+        });
+      }
+    }
+
+    if (cmds.length === 0) return reply.code(400).send({ error: 'No changes' });
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, cmds);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
+app.delete(
+  '/openclaw/targets/:targetId/agents/:agentId',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; agentId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    if (!isValidEntityId(request.params.agentId)) return reply.code(400).send({ error: 'Invalid agent id' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, [
+      {
+        command: 'openclaw',
+        args: ['agents', 'remove', request.params.agentId],
+        description: `Remove agent "${request.params.agentId}"`,
+      },
+    ]);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
+// ── Model Profiles CRUD ──
+
+app.post(
+  '/openclaw/targets/:targetId/models',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+    const modelId = typeof request.body.id === 'string' ? request.body.id.trim() : '';
+    if (!modelId || !/^[a-zA-Z0-9_-]+$/.test(modelId)) {
+      return reply.code(400).send({ error: 'Invalid model id' });
+    }
+
+    const cmds: { command: string; args: string[]; description: string }[] = [];
+    const fields: Record<string, string> = {};
+    if (typeof request.body.name === 'string') fields.name = request.body.name;
+    if (typeof request.body.provider === 'string') fields.provider = request.body.provider;
+    if (typeof request.body.model === 'string') fields.model = request.body.model;
+    if (typeof request.body.apiKey === 'string') fields.apiKey = request.body.apiKey;
+    if (typeof request.body.baseUrl === 'string') fields.baseUrl = request.body.baseUrl;
+    if (typeof request.body.enabled === 'boolean') fields.enabled = String(request.body.enabled);
+
+    for (const [field, value] of Object.entries(fields)) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `models.${modelId}.${field}`, value],
+        description: `Set model "${modelId}" ${field}`,
+      });
+    }
+
+    if (cmds.length === 0) return reply.code(400).send({ error: 'No fields provided' });
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, cmds);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
+app.patch(
+  '/openclaw/targets/:targetId/models/:modelId',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; modelId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+    const modelId = request.params.modelId;
+    if (!isValidEntityId(modelId)) return reply.code(400).send({ error: 'Invalid model id' });
+    const cmds: { command: string; args: string[]; description: string }[] = [];
+    const fields: Record<string, string> = {};
+    if (typeof request.body.name === 'string') fields.name = request.body.name;
+    if (typeof request.body.provider === 'string') fields.provider = request.body.provider;
+    if (typeof request.body.model === 'string') fields.model = request.body.model;
+    if (typeof request.body.apiKey === 'string') fields.apiKey = request.body.apiKey;
+    if (typeof request.body.baseUrl === 'string') fields.baseUrl = request.body.baseUrl;
+    if (typeof request.body.enabled === 'boolean') fields.enabled = String(request.body.enabled);
+
+    for (const [field, value] of Object.entries(fields)) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `models.${modelId}.${field}`, value],
+        description: `Update model "${modelId}" ${field}`,
+      });
+    }
+
+    if (cmds.length === 0) return reply.code(400).send({ error: 'No changes' });
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, cmds);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
+app.delete(
+  '/openclaw/targets/:targetId/models/:modelId',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; modelId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    if (!isValidEntityId(request.params.modelId)) return reply.code(400).send({ error: 'Invalid model id' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, [
+      {
+        command: 'openclaw',
+        args: ['config', 'unset', `models.${request.params.modelId}`],
+        description: `Remove model "${request.params.modelId}"`,
+      },
+    ]);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
+// ── Channel Config CRUD ──
+
+app.patch(
+  '/openclaw/targets/:targetId/channels/:channelId',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; channelId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+    const channelId = request.params.channelId;
+    if (!isValidEntityId(channelId)) return reply.code(400).send({ error: 'Invalid channel id' });
+    const cmds: { command: string; args: string[]; description: string }[] = [];
+
+    if (typeof request.body.enabled === 'boolean') {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `channels.${channelId}.enabled`, String(request.body.enabled)],
+        description: `${request.body.enabled ? 'Enable' : 'Disable'} channel "${channelId}"`,
+      });
+    }
+    if (typeof request.body.dmPolicy === 'string') {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `channels.${channelId}.dmPolicy`, request.body.dmPolicy],
+        description: `Set channel "${channelId}" DM policy`,
+      });
+    }
+    if (typeof request.body.groupPolicy === 'string') {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `channels.${channelId}.groupPolicy`, request.body.groupPolicy],
+        description: `Set channel "${channelId}" group policy`,
+      });
+    }
+    if (typeof request.body.modelOverride === 'string') {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `channels.${channelId}.model`, request.body.modelOverride],
+        description: `Set channel "${channelId}" model override`,
+      });
+    }
+
+    if (cmds.length === 0) return reply.code(400).send({ error: 'No changes' });
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, cmds);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
+app.post(
+  '/openclaw/targets/:targetId/channels/:channelId/bind',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; channelId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+    if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+    const agentId = typeof request.body.agentId === 'string' ? request.body.agentId : '';
+    if (!agentId) return reply.code(400).send({ error: 'agentId is required' });
+    if (!isValidEntityId(agentId)) return reply.code(400).send({ error: 'Invalid agent id' });
+
+    const channelId = request.params.channelId;
+    if (!isValidEntityId(channelId)) return reply.code(400).send({ error: 'Invalid channel id' });
+    const cmds: { command: string; args: string[]; description: string }[] = [
+      {
+        command: 'openclaw',
+        args: ['config', 'set', `channels.${channelId}.agents.+`, agentId],
+        description: `Bind agent "${agentId}" to channel "${channelId}"`,
+      },
+    ];
+
+    const modelOverride = typeof request.body.modelOverride === 'string' ? request.body.modelOverride : '';
+    if (modelOverride) {
+      cmds.push({
+        command: 'openclaw',
+        args: ['config', 'set', `channels.${channelId}.model`, modelOverride],
+        description: `Set model override for binding on "${channelId}"`,
+      });
+    }
+
+    const state = commandQueue.queue(request.params.targetId, target.openclawDir, cmds);
+    return reply.code(200).send({ queued: true, state });
+  }
+);
+
+// ── Config Snapshots ──
+
+app.get(
+  '/openclaw/targets/:targetId/config-snapshots',
+  async (request: FastifyRequest<{ Params: { targetId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const snapshots = commandQueue.listSnapshots(request.params.targetId);
+    return reply.code(200).send({ snapshots });
+  }
+);
+
+app.get(
+  '/openclaw/targets/:targetId/config-snapshots/:snapId',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; snapId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const snap = commandQueue.getSnapshot(request.params.targetId, request.params.snapId);
+    if (!snap) return reply.code(404).send({ error: 'snapshot_not_found' });
+    return reply.code(200).send({ snapshot: snap });
+  }
+);
+
+app.post(
+  '/openclaw/targets/:targetId/config-snapshots/:snapId/rollback',
+  async (
+    request: FastifyRequest<{ Params: { targetId: string; snapId: string } }>,
+    reply: FastifyReply
+  ) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const target = openclawTargetStore.get(request.params.targetId);
+    if (!target) return reply.code(404).send({ error: 'target_not_found' });
+
+    const beforeConfig = readRawConfigString(target.openclawDir);
+    if (beforeConfig) {
+      await commandQueue.createSnapshot(
+        request.params.targetId,
+        beforeConfig,
+        'rollback',
+        `Before rollback to ${request.params.snapId}`
+      );
+    }
+
+    const result = await commandQueue.rollbackToSnapshot(request.params.snapId, target.openclawDir);
+    if (result.ok) {
+      broadcastSse({ kind: 'config-changed', payload: { targetId: request.params.targetId } });
+    }
+    return reply.code(result.ok ? 200 : 422).send(result);
+  }
+);
+
+// ── Recipes ──
+
+import { BUILT_IN_RECIPES } from './recipes/built-in.js';
+
+app.get('/recipes', async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+  return reply.code(200).send({ recipes: BUILT_IN_RECIPES });
+});
+
+app.get(
+  '/recipes/:recipeId',
+  async (request: FastifyRequest<{ Params: { recipeId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const recipe = BUILT_IN_RECIPES.find((r) => r.id === request.params.recipeId);
+    if (!recipe) return reply.code(404).send({ error: 'recipe_not_found' });
+    return reply.code(200).send({ recipe });
+  }
+);
+
+app.post(
+  '/recipes/:recipeId/resolve',
+  async (request: FastifyRequest<{ Params: { recipeId: string } }>, reply: FastifyReply) => {
+    if (!isAuthorized(request)) return reply.code(401).send({ error: 'unauthorized' });
+    const recipe = BUILT_IN_RECIPES.find((r) => r.id === request.params.recipeId);
+    if (!recipe) return reply.code(404).send({ error: 'recipe_not_found' });
+    if (!isRecord(request.body)) return reply.code(400).send({ error: 'invalid_body' });
+
+    const SAFE_PARAM_RE = /^[a-zA-Z0-9_.@:/ -]*$/;
+    const params = isRecord(request.body.params) ? request.body.params : {};
+    for (const [key, value] of Object.entries(params)) {
+      const strValue = String(value);
+      if (!SAFE_PARAM_RE.test(strValue)) {
+        return reply.code(400).send({ error: `Invalid characters in param "${key}"` });
+      }
+    }
+    const resolvedSteps = recipe.steps.map((step) => {
+      const resolvedArgs: Record<string, string> = {};
+      for (const [key, template] of Object.entries(step.args)) {
+        let resolved = template;
+        for (const [paramId, paramValue] of Object.entries(params)) {
+          resolved = resolved.replaceAll(`{{${paramId}}}`, String(paramValue));
+        }
+        resolvedArgs[key] = resolved;
+      }
+      return { ...step, args: resolvedArgs };
+    });
+
+    const commands = resolvedSteps.map((step) => ({
+      command: 'openclaw',
+      args: Object.values(step.args),
+      description: step.label,
+    }));
+
+    return reply.code(200).send({ steps: resolvedSteps, commands });
+  }
+);
 
 // ── Shutdown ────────────────────────────────────────────────────────
 

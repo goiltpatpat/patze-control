@@ -13,6 +13,7 @@ import { useOpenClawTargets } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus } from '../types';
 import type { TunnelEndpointRow } from '../views/TunnelsView';
 import { MainView } from './MainView';
+import { PendingChangesBar } from '../components/PendingChangesBar';
 import { navigate, type AppRoute } from './routes';
 import { SidebarNav } from './SidebarNav';
 import { StatusStrip } from './StatusStrip';
@@ -219,6 +220,12 @@ export function AppShell(props: AppShellProps): JSX.Element {
           />
         </section>
       </div>
+      <PendingChangesBar
+        baseUrl={props.baseUrl}
+        token={props.token}
+        connected={props.status === 'connected' || props.status === 'degraded'}
+        targetId={openclawTargets.entries[0]?.target.id ?? null}
+      />
       <StatusStrip
         state={props.monitorState}
         bridgeCount={props.bridgeConnections.length}

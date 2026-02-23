@@ -1,7 +1,7 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Box, Text } from '@react-three/drei';
-import type { Group } from 'three';
+import type { Group, Mesh } from 'three';
 import { VoxelChair } from './VoxelChair';
 import { VoxelKeyboard } from './VoxelKeyboard';
 import { VoxelMonitor } from './VoxelMonitor';
@@ -23,7 +23,8 @@ interface AgentDeskProps {
 
 export function AgentDesk(props: AgentDeskProps): JSX.Element {
   const groupRef = useRef<Group>(null);
-  const [hovered, setHovered] = useState(false);
+  const hoverGlowRef = useRef<Mesh>(null);
+  const hoveredRef = useRef(false);
   const [px, py, pz] = props.position;
 
   useEffect(() => {
@@ -34,9 +35,15 @@ export function AgentDesk(props: AgentDeskProps): JSX.Element {
 
   useFrame(() => {
     if (groupRef.current == null) return;
-    const targetScale = hovered ? 1.03 : 1;
+    const targetScale = hoveredRef.current ? 1.03 : 1;
     const s = groupRef.current.scale.x;
     groupRef.current.scale.setScalar(s + (targetScale - s) * 0.1);
+
+    if (hoverGlowRef.current) {
+      const mat = hoverGlowRef.current.material as import('three').MeshBasicMaterial;
+      const targetOp = hoveredRef.current ? 0.15 : 0;
+      mat.opacity += (targetOp - mat.opacity) * 0.15;
+    }
   });
 
   const statusText = props.activeRuns > 0 ? `${props.activeRuns} active` : props.status;
@@ -50,11 +57,11 @@ export function AgentDesk(props: AgentDeskProps): JSX.Element {
         props.onClick();
       }}
       onPointerOver={() => {
-        setHovered(true);
+        hoveredRef.current = true;
         document.body.style.cursor = 'pointer';
       }}
       onPointerOut={() => {
-        setHovered(false);
+        hoveredRef.current = false;
         document.body.style.cursor = 'auto';
       }}
     >
@@ -127,11 +134,11 @@ export function AgentDesk(props: AgentDeskProps): JSX.Element {
         </mesh>
       ) : null}
 
-      {/* Hover glow */}
-      {hovered && !props.isSelected ? (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+      {/* Hover glow — opacity driven imperatively in useFrame */}
+      {!props.isSelected ? (
+        <mesh ref={hoverGlowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
           <ringGeometry args={[1.2, 1.3, 32]} />
-          <meshBasicMaterial color="#ffffff" transparent opacity={0.15} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0} />
         </mesh>
       ) : null}
     </group>

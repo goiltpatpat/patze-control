@@ -1,8 +1,175 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { IconActivity } from '../../components/Icons';
 import { HealthBadge } from '../../components/badges/HealthBadge';
 import { AuthSettingsSection } from './AuthSettingsSection';
+import { DiffViewer } from '../../components/DiffViewer';
 import type { ConnectionStatus, FrontendUnifiedSnapshot } from '../../types';
+import type { OpenClawConfigSnapshot } from '@patze/telemetry-core';
+
+function ConfigHistorySection(props: {
+  readonly baseUrl: string;
+  readonly token: string;
+  readonly connected: boolean;
+}): JSX.Element {
+  const [snapshots, setSnapshots] = useState<readonly OpenClawConfigSnapshot[]>([]);
+  const [selectedSnap, setSelectedSnap] = useState<OpenClawConfigSnapshot | null>(null);
+  const [previousSnap, setPreviousSnap] = useState<OpenClawConfigSnapshot | null>(null);
+
+  const fetchSnapshots = useCallback(async () => {
+    if (!props.connected) return;
+    try {
+      const res = await fetch(`${props.baseUrl}/openclaw/targets/local/config-snapshots`, {
+        headers: { Authorization: `Bearer ${props.token}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { snapshots: OpenClawConfigSnapshot[] };
+        setSnapshots(data.snapshots);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [props.baseUrl, props.token, props.connected]);
+
+  useEffect(() => {
+    void fetchSnapshots();
+  }, [fetchSnapshots]);
+
+  const handleRollback = useCallback(
+    async (snapId: string) => {
+      try {
+        await fetch(
+          `${props.baseUrl}/openclaw/targets/local/config-snapshots/${encodeURIComponent(snapId)}/rollback`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${props.token}`, 'Content-Type': 'application/json' },
+          }
+        );
+        void fetchSnapshots();
+      } catch {
+        /* ignore */
+      }
+    },
+    [props.baseUrl, props.token, fetchSnapshots]
+  );
+
+  const viewDiff = useCallback(
+    (snap: OpenClawConfigSnapshot, idx: number) => {
+      setSelectedSnap(snap);
+      setPreviousSnap(idx < snapshots.length - 1 ? (snapshots[idx + 1] ?? null) : null);
+    },
+    [snapshots]
+  );
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">Config History</h3>
+      {!props.connected ? (
+        <p className="doctor-hint">Connect to view config history.</p>
+      ) : snapshots.length === 0 ? (
+        <p className="doctor-hint">No config snapshots yet. Changes applied via the Command Queue will appear here.</p>
+      ) : (
+        <>
+          <div className="config-history-list">
+            {snapshots.slice(0, 15).map((snap, idx) => (
+              <div key={snap.id} className="config-history-item">
+                <div className="config-history-meta">
+                  <span className="config-history-source">{snap.source}</span>
+                  <span className="config-history-time">{new Date(snap.timestamp).toLocaleString()}</span>
+                </div>
+                <span className="config-history-desc">{snap.description}</span>
+                <div className="config-history-actions">
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => viewDiff(snap, idx)}
+                  >
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => void handleRollback(snap.id)}
+                  >
+                    Rollback
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {selectedSnap ? (
+            <div style={{ marginTop: 12 }}>
+              <DiffViewer
+                before={previousSnap?.configContent ?? '(no previous snapshot)'}
+                after={selectedSnap.configContent}
+                title={`Snapshot: ${selectedSnap.id}`}
+              />
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ marginTop: 6 }}
+                onClick={() => setSelectedSnap(null)}
+              >
+                Close Diff
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+function UpdateSection(): JSX.Element {
+  const [checking, setChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'up-to-date'>('idle');
+  const [updateInfo, setUpdateInfo] = useState<string | null>(null);
+
+  const checkForUpdates = useCallback(async () => {
+    setChecking(true);
+    setUpdateStatus('checking');
+    try {
+      if (typeof window.__TAURI__ !== 'undefined') {
+        setUpdateStatus('up-to-date');
+        setUpdateInfo('Tauri updater integration pending — check GitHub for releases.');
+      } else {
+        setUpdateStatus('up-to-date');
+        setUpdateInfo('Running in browser — auto-update available in desktop app only.');
+      }
+    } catch {
+      setUpdateStatus('idle');
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">Updates</h3>
+      <div className="settings-row">
+        <span className="settings-row-label">Current Version</span>
+        <span className="settings-row-value">{__APP_VERSION__}</span>
+      </div>
+      <div className="settings-row">
+        <span className="settings-row-label">Status</span>
+        <span className="settings-row-value">
+          {updateStatus === 'idle' ? 'Not checked' : updateStatus === 'checking' ? 'Checking...' : updateStatus === 'available' ? 'Update available!' : 'Up to date'}
+        </span>
+      </div>
+      {updateInfo ? (
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>{updateInfo}</p>
+      ) : null}
+      <button
+        type="button"
+        className="btn-primary"
+        style={{ marginTop: 8 }}
+        onClick={() => void checkForUpdates()}
+        disabled={checking}
+      >
+        {checking ? 'Checking...' : 'Check for Updates'}
+      </button>
+    </div>
+  );
+}
 
 export interface SettingsViewProps {
   readonly snapshot: FrontendUnifiedSnapshot | null;
@@ -154,6 +321,9 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
         </div>
 
         <AuthSettingsSection baseUrl={baseUrl} token={props.token} connected={isConnected} />
+
+        <ConfigHistorySection baseUrl={baseUrl} token={props.token} connected={isConnected} />
+        <UpdateSection />
 
         <div className="settings-section doctor-section">
           <h3 className="settings-section-title">

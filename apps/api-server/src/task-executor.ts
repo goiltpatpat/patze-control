@@ -225,7 +225,7 @@ async function executeCustomWebhook(task: ScheduledTask): Promise<{ ok: boolean;
   }
 
   try {
-    const timeoutMs = Math.min(task.timeoutMs, 600_000);
+    const timeoutMs = Math.min(task.timeoutMs ?? 60_000, 600_000);
     const methodRaw = ((task.action.params?.method as string) ?? 'POST').toUpperCase();
     const allowedMethods = new Set(['GET', 'POST', 'PUT', 'PATCH']);
     if (!allowedMethods.has(methodRaw)) {
@@ -271,7 +271,7 @@ async function executeOpenClawCronRun(
   }
 
   try {
-    const timeoutMs = Math.min(task.timeoutMs, 600_000);
+    const timeoutMs = Math.min(task.timeoutMs ?? 60_000, 600_000);
     const { stdout, stderr } = await execFileAsync(openclawBin, ['cron', 'run', jobId], {
       timeout: timeoutMs,
       maxBuffer: 10 * 1024 * 1024,

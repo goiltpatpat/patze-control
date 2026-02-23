@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useRef, useState, useCallback } from 'react';
+import { Suspense, useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment } from '@react-three/drei';
 import { Vector3 } from 'three';
@@ -39,7 +39,7 @@ export interface OfficeSceneDesk {
 
 export type CameraMode = 'orbit' | 'fps' | 'player';
 
-type InteractionModal = 'memory' | 'roadmap' | 'coffee' | null;
+type InteractionModal = 'memory' | 'roadmap' | 'coffee' | 'dinosaur' | null;
 
 interface OfficeScene3DProps {
   readonly desks: readonly OfficeSceneDesk[];
@@ -120,6 +120,12 @@ function SceneContent(props: {
         position: new Vector3(9, 0, -5),
         radius: 1.2,
       },
+      {
+        id: 'furniture:dinosaur',
+        type: 'furniture' as const,
+        position: new Vector3(10, 0, 7),
+        radius: 1.5,
+      },
     ],
     []
   );
@@ -144,7 +150,12 @@ function SceneContent(props: {
         props.onDeskClick(deskId);
       } else {
         const furnitureId = objectId.replace('furniture:', '');
-        if (furnitureId === 'memory' || furnitureId === 'roadmap' || furnitureId === 'coffee') {
+        if (
+          furnitureId === 'memory' ||
+          furnitureId === 'roadmap' ||
+          furnitureId === 'coffee' ||
+          furnitureId === 'dinosaur'
+        ) {
           props.onInteraction(furnitureId);
         }
       }
@@ -279,8 +290,14 @@ function SceneContent(props: {
       <PlantPot position={[-10.5, 0, 7]} size="small" />
       <PlantPot position={[10.5, 0, 0]} size="small" />
 
-      {/* Dinosaur mascot */}
-      <VoxelDinosaur position={[10, 0, 7]} rotation={[0, -Math.PI * 0.7, 0]} />
+      {/* Dinosaur mascot — interactive */}
+      <VoxelDinosaur
+        position={[10, 0, 7]}
+        rotation={[0, -Math.PI * 0.7, 0]}
+        onClick={() => {
+          props.onInteraction('dinosaur');
+        }}
+      />
 
       <WallClock position={[8.5, 3.5, -9.75]} />
 
@@ -313,47 +330,190 @@ function SceneContent(props: {
   );
 }
 
+const DINO_QUOTES = [
+  "RAWR! That means 'your agents are doing great' in dinosaur.",
+  "I've been guarding this office for 65 million milliseconds.",
+  'Even a T-Rex knows: small arms, big deployments.',
+  'Fun fact: I can monitor your fleet while juggling asteroids.',
+  'They said AI would replace me. I said I AM the mascot.',
+  'Patze-Dinosaw tip: always commit before extinction events.',
+  "My obstacle avoidance is better than your agents'. Just saying.",
+  'I was containerized before Docker was cool. Literally — in amber.',
+];
+
+const DINO_REACTIONS = [
+  { quote: '...wait, you actually clicked that?', btn: 'Okay try again' },
+  { quote: 'RAWR! Stop poking me!', btn: 'Poke again' },
+  { quote: '*wiggles tiny arms aggressively*', btn: "I'm sorry" },
+  { quote: "You're not sorry. I can tell.", btn: 'Feed a cookie 🍪' },
+  { quote: '*nom nom* ...okay we cool now.', btn: 'Pat on head' },
+  { quote: '*purrs like a 3-ton kitten*', btn: 'One more pat' },
+  { quote: "That's enough. I have a reputation to maintain.", btn: 'Hug 🫂' },
+  { quote: '...fine. ONE hug. Tell no one.', btn: '🤫' },
+  { quote: '*hugs back with tiny arms*\nBest. Human. Ever.', btn: 'Again!' },
+  { quote: 'Security! We have a hugger!', btn: 'Run away 🏃' },
+];
+
 function InteractionModalOverlay(props: {
   readonly modal: InteractionModal;
   readonly onClose: () => void;
 }): JSX.Element | null {
+  const [dinoClicks, setDinoClicks] = useState(0);
+  const [shaking, setShaking] = useState(false);
+  const shakeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (props.modal === 'dinosaur') {
+      setDinoClicks(0);
+    }
+  }, [props.modal]);
+
+  useEffect(() => {
+    return () => {
+      if (shakeTimer.current != null) clearTimeout(shakeTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (props.modal == null) return;
+    const handleEsc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') props.onClose();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, [props.modal, props.onClose]);
+
   if (props.modal == null) return null;
 
   const titles: Record<NonNullable<InteractionModal>, string> = {
     memory: 'Memory Browser',
     roadmap: 'Roadmap',
     coffee: 'Coffee Break',
+    dinosaur: 'Patze-Dinosaw',
   };
+
+  const baseQuote = DINO_QUOTES[Math.floor(Date.now() / 60000) % DINO_QUOTES.length]!;
 
   const descriptions: Record<NonNullable<InteractionModal>, string> = {
     memory: 'Browse and search agent memory files, workspace documents, and configuration.',
     roadmap: 'View the project roadmap, milestones, and upcoming features.',
     coffee: 'Take a break. Your agents are working hard for you.',
+    dinosaur:
+      dinoClicks === 0
+        ? baseQuote
+        : DINO_REACTIONS[Math.min(dinoClicks - 1, DINO_REACTIONS.length - 1)]!.quote,
   };
 
   const actions: Record<NonNullable<InteractionModal>, { label: string; route: string } | null> = {
     memory: { label: 'Open Memory View', route: 'memory' },
     roadmap: { label: 'Open Workspace', route: 'workspace' },
     coffee: null,
+    dinosaur: null,
   };
 
   const action = actions[props.modal];
 
+  const icons: Record<NonNullable<InteractionModal>, string> = {
+    memory: '🧠',
+    roadmap: '🗺️',
+    coffee: '☕',
+    dinosaur: '🦖',
+  };
+
+  const isDino = props.modal === 'dinosaur';
+
+  const dinoReaction =
+    dinoClicks === 0 ? null : DINO_REACTIONS[Math.min(dinoClicks - 1, DINO_REACTIONS.length - 1)]!;
+
+  const dinoBtnLabel = dinoClicks === 0 ? 'Pet the dinosaur 🦖' : (dinoReaction?.btn ?? 'Again!');
+
+  const handleDinoClick = () => {
+    setDinoClicks((c) => c + 1);
+    setShaking(true);
+    if (shakeTimer.current != null) clearTimeout(shakeTimer.current);
+    shakeTimer.current = setTimeout(() => {
+      setShaking(false);
+      shakeTimer.current = null;
+    }, 400);
+  };
+
+  const dinoModalStyle: React.CSSProperties = {
+    borderColor: '#44bb77',
+    boxShadow: `0 0 ${12 + dinoClicks * 4}px rgba(68,187,119,${0.25 + dinoClicks * 0.05})`,
+    transition: 'box-shadow 0.3s ease, transform 0.1s ease',
+    ...(shaking ? { animation: 'dino-shake 0.4s ease' } : {}),
+  };
+
   return (
-    <div className="office-interaction-overlay" onClick={props.onClose}>
+    <div
+      className="office-interaction-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={titles[props.modal]}
+      onClick={props.onClose}
+    >
       <div
         className="office-interaction-modal"
+        style={isDino ? dinoModalStyle : undefined}
         onClick={(e) => {
           e.stopPropagation();
         }}
       >
         <div className="office-interaction-modal-header">
-          <h3>{titles[props.modal]}</h3>
-          <button type="button" className="office-agent-panel-close" onClick={props.onClose}>
+          <h3>
+            {icons[props.modal]} {titles[props.modal]}
+            {isDino && dinoClicks > 5 ? ' 💚' : ''}
+          </h3>
+          <button
+            type="button"
+            className="office-agent-panel-close"
+            aria-label="Close"
+            onClick={props.onClose}
+          >
             &times;
           </button>
         </div>
-        <p className="office-interaction-modal-desc">{descriptions[props.modal]}</p>
+        <p
+          className="office-interaction-modal-desc"
+          style={
+            isDino
+              ? {
+                  fontStyle: 'italic',
+                  color: '#88ddaa',
+                  fontSize: '0.95rem',
+                  whiteSpace: 'pre-line',
+                  transition: 'all 0.3s ease',
+                }
+              : undefined
+          }
+        >
+          {descriptions[props.modal]}
+        </p>
+        {isDino ? (
+          <p
+            className="office-interaction-modal-desc"
+            style={{ marginTop: '0.5rem', opacity: 0.6, fontSize: '0.75rem' }}
+          >
+            {dinoClicks === 0
+              ? 'Office mascot since deployment #1'
+              : `Interaction count: ${dinoClicks} — ${dinoClicks >= 8 ? 'best friends now' : dinoClicks >= 5 ? 'getting attached...' : dinoClicks >= 3 ? 'warming up to you' : 'suspicious of you'}`}
+          </p>
+        ) : null}
+        {isDino ? (
+          <button
+            type="button"
+            className="office-agent-panel-action-btn office-agent-panel-action-primary"
+            style={{
+              background: `hsl(${150 + dinoClicks * 5}, 60%, ${40 + dinoClicks * 2}%)`,
+              transition: 'background 0.3s ease',
+            }}
+            onClick={handleDinoClick}
+          >
+            {dinoBtnLabel}
+          </button>
+        ) : null}
         {action != null ? (
           <button
             type="button"
@@ -367,6 +527,17 @@ function InteractionModalOverlay(props: {
           </button>
         ) : null}
       </div>
+      {isDino ? (
+        <style>{`
+          @keyframes dino-shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-6px) rotate(-1deg); }
+            40% { transform: translateX(6px) rotate(1deg); }
+            60% { transform: translateX(-4px) rotate(-0.5deg); }
+            80% { transform: translateX(4px) rotate(0.5deg); }
+          }
+        `}</style>
+      ) : null}
     </div>
   );
 }
@@ -414,7 +585,12 @@ export function OfficeScene3D(props: OfficeScene3DProps): JSX.Element {
       <div
         className={`office-3d-canvas office-3d-canvas-full${selectedDesk != null ? ' office-3d-canvas-with-panel' : ''}`}
       >
-        <Canvas camera={{ position: [0, cameraY, cameraZ], fov: 50 }} shadows dpr={[1, 1.5]}>
+        <Canvas
+          camera={{ position: [0, cameraY, cameraZ], fov: 50 }}
+          shadows
+          dpr={[1, 1.5]}
+          aria-label="3D Office — interactive agent workspace"
+        >
           <color attach="background" args={['#0b1320']} />
           <fog attach="fog" args={['#0b1320', 20, 45]} />
           <Suspense fallback={null}>

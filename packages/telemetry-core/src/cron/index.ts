@@ -61,3 +61,20 @@ export {
   type TargetSyncStatusEntry,
   type OpenClawSyncManagerOptions,
 } from './openclaw-target.js';
+
+export type {
+  OpenClawAgent,
+  OpenClawAgentModel,
+  OpenClawModelProfile,
+  OpenClawChannelBinding,
+  OpenClawFullConfig,
+  OpenClawDefaults,
+  OpenClawQueuedCommand,
+  OpenClawCommandQueueState,
+  OpenClawConfigDiff,
+  OpenClawConfigSnapshot,
+  RecipeDefinition,
+  RecipeParam,
+  RecipeOption,
+  RecipeStep,
+} from './openclaw-config.js';

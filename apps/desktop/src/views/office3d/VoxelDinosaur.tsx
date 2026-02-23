@@ -1,18 +1,29 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Box, Text } from '@react-three/drei';
-import type { Group } from 'three';
+import type { Group, Mesh } from 'three';
 
 interface VoxelDinosaurProps {
   readonly position: [number, number, number];
   readonly rotation?: [number, number, number];
   readonly color?: string;
+  readonly onClick?: () => void;
 }
 
 export function VoxelDinosaur(props: VoxelDinosaurProps): JSX.Element {
   const [px, py, pz] = props.position;
   const [rx, ry, rz] = props.rotation ?? [0, 0, 0];
   const color = props.color ?? '#44bb77';
+  const hoveredRef = useRef(false);
+  const glowRef = useRef<Mesh>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hintRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = 'auto';
+    };
+  }, []);
   const belly = '#6edd99';
   const dark = '#2a8855';
 
@@ -44,15 +55,52 @@ export function VoxelDinosaur(props: VoxelDinosaurProps): JSX.Element {
     }
 
     if (leftArmRef.current) {
-      leftArmRef.current.rotation.x = Math.sin(t * 2) * 0.25;
+      const armSpeed = hoveredRef.current ? 5 : 2;
+      const armAngle = hoveredRef.current ? 0.5 : 0.25;
+      leftArmRef.current.rotation.x = Math.sin(t * armSpeed) * armAngle;
     }
     if (rightArmRef.current) {
-      rightArmRef.current.rotation.x = Math.sin(t * 2 + Math.PI) * 0.25;
+      const armSpeed = hoveredRef.current ? 5 : 2;
+      const armAngle = hoveredRef.current ? 0.5 : 0.25;
+      rightArmRef.current.rotation.x = Math.sin(t * armSpeed + Math.PI) * armAngle;
+    }
+
+    if (glowRef.current) {
+      const mat = glowRef.current.material as import('three').MeshBasicMaterial;
+      const target = hoveredRef.current ? 0.6 : 0.15;
+      mat.opacity += (target - mat.opacity) * 0.1;
+    }
+
+    if (hintRef.current) {
+      const targetOpacity = hoveredRef.current ? 1 : 0;
+      const current = hintRef.current.fillOpacity ?? 0;
+      hintRef.current.fillOpacity = current + (targetOpacity - current) * 0.15;
     }
   });
 
+  const clickHandler = props.onClick;
+
   return (
-    <group position={[px, py, pz]} rotation={[rx, ry, rz]}>
+    <group
+      position={[px, py, pz]}
+      rotation={[rx, ry, rz]}
+      {...(clickHandler
+        ? {
+            onClick: (e: import('@react-three/fiber').ThreeEvent<MouseEvent>) => {
+              e.stopPropagation();
+              clickHandler();
+            },
+          }
+        : {})}
+      onPointerOver={() => {
+        hoveredRef.current = true;
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        hoveredRef.current = false;
+        document.body.style.cursor = 'auto';
+      }}
+    >
       <group ref={bodyRef}>
         {/* BODY - main torso */}
         <Box args={[0.5, 0.55, 0.4]} position={[0, 0.7, 0]}>
@@ -236,16 +284,36 @@ export function VoxelDinosaur(props: VoxelDinosaurProps): JSX.Element {
 
         {/* Nameplate */}
         <Text
-          position={[0, 1.45, 0.2]}
-          fontSize={0.09}
+          position={[0, 1.55, 0.2]}
+          fontSize={0.07}
           color="#88ddaa"
           anchorX="center"
           anchorY="middle"
           outlineWidth={0.004}
           outlineColor="#05070e"
         >
-          {'🦖 Rex'}
+          {'🦖 Patze-Dinosaw'}
         </Text>
+
+        <Text
+          ref={hintRef}
+          position={[0, 1.42, 0.2]}
+          fontSize={0.05}
+          color="#aaddcc"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.003}
+          outlineColor="#05070e"
+          fillOpacity={0}
+        >
+          Click me!
+        </Text>
+
+        {/* Ground glow ring */}
+        <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <ringGeometry args={[0.5, 0.7, 24]} />
+          <meshBasicMaterial color="#44ffaa" transparent opacity={0.15} />
+        </mesh>
       </group>
     </group>
   );

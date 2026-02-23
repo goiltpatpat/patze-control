@@ -3,6 +3,8 @@ import { IconMessage } from '../components/Icons';
 import type { TargetSyncStatusEntry } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus } from '../types';
 import { formatRelativeTime } from '../utils/time';
+import type { OpenClawAgent, OpenClawModelProfile } from '@patze/telemetry-core';
+import { ChannelConfigDialog } from './channels/ChannelConfigDialog';
 
 interface OpenClawChannel {
   readonly id: string;
@@ -156,6 +158,7 @@ function ChannelCard(props: {
   readonly onToggle: () => void;
   readonly copiedKey: string | null;
   readonly onCopy: (value: string, key: string) => void;
+  readonly onConfigure?: (() => void) | undefined;
 }): JSX.Element {
   const { channel, expanded, onToggle, copiedKey, onCopy } = props;
   const priority = channelPriority(channel);
@@ -250,6 +253,19 @@ function ChannelCard(props: {
                 Last msg {formatRelativeTime(channel.lastMessageAt)}
               </span>
             ) : null}
+            {props.onConfigure ? (
+              <button
+                className="dialog-btn-primary"
+                type="button"
+                style={{ fontSize: '0.72rem', padding: '3px 10px' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onConfigure?.();
+                }}
+              >
+                Configure
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -277,6 +293,9 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [configHintOpen, setConfigHintOpen] = useState(false);
+  const [configDialogChannel, setConfigDialogChannel] = useState<OpenClawChannel | null>(null);
+  const [agentOptions, setAgentOptions] = useState<readonly { id: string; name: string }[]>([]);
+  const [modelOptionsForDialog, setModelOptionsForDialog] = useState<readonly { id: string; name: string }[]>([]);
 
   const isConnected = props.status === 'connected' || props.status === 'degraded';
   const headers = useMemo(() => authHeaders(props.token), [props.token]);
@@ -325,6 +344,72 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
       clearInterval(interval);
     };
   }, [isConnected, fetchChannels]);
+
+  const openConfigDialog = useCallback(
+    async (channel: OpenClawChannel) => {
+      setConfigDialogChannel(channel);
+      if (!selectedTargetId) return;
+      try {
+        const [agRes, modRes] = await Promise.all([
+          fetch(`${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/agents`, { headers }),
+          fetch(`${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/models`, { headers }),
+        ]);
+        if (agRes.ok) {
+          const data = (await agRes.json()) as { agents: OpenClawAgent[] };
+          setAgentOptions(data.agents.map((a) => ({ id: a.id, name: a.name || a.id })));
+        }
+        if (modRes.ok) {
+          const data = (await modRes.json()) as { models: OpenClawModelProfile[] };
+          setModelOptionsForDialog(data.models.map((m) => ({ id: m.id, name: m.name || m.id })));
+        }
+      } catch {
+        /* ignore */
+      }
+    },
+    [props.baseUrl, headers, selectedTargetId]
+  );
+
+  const handleChannelConfig = useCallback(
+    (data: { enabled?: boolean; dmPolicy?: string; groupPolicy?: string; modelOverride?: string }) => {
+      if (!configDialogChannel || !selectedTargetId) return;
+      const cmds: { command: string; args: string[]; description: string }[] = [];
+      if (data.enabled !== undefined)
+        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.enabled`, String(data.enabled)], description: `Toggle channel` });
+      if (data.dmPolicy)
+        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.dmPolicy`, data.dmPolicy], description: `Set DM policy` });
+      if (data.groupPolicy)
+        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.groupPolicy`, data.groupPolicy], description: `Set group policy` });
+      if (data.modelOverride)
+        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.model`, data.modelOverride], description: `Set model override` });
+      if (cmds.length > 0) {
+        void fetch(`${props.baseUrl}/openclaw/queue`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId: selectedTargetId, commands: cmds }),
+        });
+      }
+      setConfigDialogChannel(null);
+    },
+    [configDialogChannel, selectedTargetId, props.baseUrl, headers]
+  );
+
+  const handleChannelBind = useCallback(
+    (agentId: string, modelOverride?: string) => {
+      if (!configDialogChannel || !selectedTargetId) return;
+      const cmds: { command: string; args: string[]; description: string }[] = [
+        { command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.agents.+`, agentId], description: `Bind agent` },
+      ];
+      if (modelOverride) {
+        cmds.push({ command: 'openclaw', args: ['config', 'set', `channels.${configDialogChannel.id}.model`, modelOverride], description: `Set model override` });
+      }
+      void fetch(`${props.baseUrl}/openclaw/queue`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId: selectedTargetId, commands: cmds }),
+      });
+    },
+    [configDialogChannel, selectedTargetId, props.baseUrl, headers]
+  );
 
   const summary = useMemo(() => {
     const configured = channels.filter((c) => c.configured).length;
@@ -588,6 +673,7 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                     }}
                     copiedKey={copiedKey}
                     onCopy={handleCopy}
+                    onConfigure={() => void openConfigDialog(channel)}
                   />
                 ))}
               </div>
@@ -611,6 +697,7 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                     }}
                     copiedKey={copiedKey}
                     onCopy={handleCopy}
+                    onConfigure={() => void openConfigDialog(channel)}
                   />
                 ))}
               </div>
@@ -618,6 +705,21 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
           ) : null}
         </>
       )}
+
+      {configDialogChannel ? (
+        <ChannelConfigDialog
+          channelId={configDialogChannel.id}
+          channelName={configDialogChannel.name}
+          initialEnabled={configDialogChannel.configured}
+          initialDmPolicy={configDialogChannel.dmPolicy !== 'unknown' ? configDialogChannel.dmPolicy : undefined}
+          initialGroupPolicy={configDialogChannel.groupPolicy !== 'unknown' ? configDialogChannel.groupPolicy : undefined}
+          agentOptions={agentOptions}
+          modelOptions={modelOptionsForDialog}
+          onSubmit={handleChannelConfig}
+          onBind={handleChannelBind}
+          onClose={() => setConfigDialogChannel(null)}
+        />
+      ) : null}
     </section>
   );
 }

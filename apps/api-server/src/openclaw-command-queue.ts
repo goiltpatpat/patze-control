@@ -1,0 +1,216 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import type {
+  OpenClawQueuedCommand,
+  OpenClawCommandQueueState,
+  OpenClawConfigDiff,
+  OpenClawConfigSnapshot,
+} from '@patze/telemetry-core';
+import { readRawConfigString, getConfigPath } from './openclaw-config-reader.js';
+
+const execFileAsync = promisify(execFile);
+
+const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
+function sanitizeId(id: string): string {
+  if (!SAFE_ID_RE.test(id)) throw new Error(`Invalid id: ${id}`);
+  return id;
+}
+
+function generateId(): string {
+  return `cmd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function hashConfig(content: string): string {
+  return crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
+}
+
+interface TargetQueue {
+  targetId: string;
+  openclawDir: string;
+  commands: OpenClawQueuedCommand[];
+}
+
+export class OpenClawCommandQueue {
+  private readonly queues = new Map<string, TargetQueue>();
+  private readonly snapshotDir: string;
+
+  public constructor(dataDir: string) {
+    this.snapshotDir = path.join(dataDir, 'config-snapshots');
+  }
+
+  public queue(
+    targetId: string,
+    openclawDir: string,
+    commands: readonly { command: string; args: readonly string[]; description: string }[]
+  ): OpenClawCommandQueueState {
+    let tq = this.queues.get(targetId);
+    if (!tq) {
+      tq = { targetId, openclawDir, commands: [] };
+      this.queues.set(targetId, tq);
+    }
+    for (const cmd of commands) {
+      tq.commands.push({
+        id: generateId(),
+        targetId,
+        command: cmd.command,
+        args: cmd.args,
+        description: cmd.description,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return this.getState(targetId);
+  }
+
+  public getState(targetId: string): OpenClawCommandQueueState {
+    const tq = this.queues.get(targetId);
+    return {
+      targetId,
+      commands: tq?.commands ?? [],
+      totalCount: tq?.commands.length ?? 0,
+    };
+  }
+
+  public discard(targetId: string): void {
+    this.queues.delete(targetId);
+  }
+
+  public async preview(targetId: string): Promise<OpenClawConfigDiff | null> {
+    const tq = this.queues.get(targetId);
+    if (!tq || tq.commands.length === 0) return null;
+
+    const before = readRawConfigString(tq.openclawDir) ?? '{}';
+    return {
+      before,
+      after: before,
+      commandCount: tq.commands.length,
+    };
+  }
+
+  public async apply(
+    targetId: string,
+    source: string
+  ): Promise<{ ok: boolean; error?: string | undefined; snapshotId?: string | undefined }> {
+    const tq = this.queues.get(targetId);
+    if (!tq || tq.commands.length === 0) {
+      return { ok: false, error: 'No pending commands' };
+    }
+
+    const beforeConfig = readRawConfigString(tq.openclawDir);
+    const snapshotId = await this.createSnapshot(
+      targetId,
+      beforeConfig ?? '{}',
+      source,
+      `Before applying ${tq.commands.length} command(s)`
+    );
+
+    const errors: string[] = [];
+    for (const cmd of tq.commands) {
+      try {
+        await execFileAsync(cmd.command, [...cmd.args], {
+          timeout: 30_000,
+          maxBuffer: 5 * 1024 * 1024,
+          cwd: tq.openclawDir,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push(`${cmd.description}: ${message}`);
+        await this.rollbackToSnapshot(snapshotId, tq.openclawDir);
+        this.queues.delete(targetId);
+        return { ok: false, error: errors.join('; '), snapshotId };
+      }
+    }
+
+    this.queues.delete(targetId);
+    return { ok: true, snapshotId };
+  }
+
+  public async createSnapshot(
+    targetId: string,
+    configContent: string,
+    source: string,
+    description: string
+  ): Promise<string> {
+    const id = `snap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const snapshot: OpenClawConfigSnapshot = {
+      id,
+      targetId,
+      timestamp: new Date().toISOString(),
+      source,
+      description,
+      configContent,
+      configHash: hashConfig(configContent),
+    };
+
+    const targetDir = path.join(this.snapshotDir, sanitizeId(targetId));
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true, mode: 0o700 });
+    }
+    const snapshotPath = path.join(targetDir, `${id}.json`);
+    fs.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), 'utf-8');
+    return id;
+  }
+
+  public listSnapshots(targetId: string, limit = 20): readonly OpenClawConfigSnapshot[] {
+    const targetDir = path.join(this.snapshotDir, sanitizeId(targetId));
+    if (!fs.existsSync(targetDir)) return [];
+    try {
+      const files = fs.readdirSync(targetDir).filter((f) => f.endsWith('.json'));
+      files.sort().reverse();
+      const result: OpenClawConfigSnapshot[] = [];
+      for (const file of files.slice(0, limit)) {
+        try {
+          const raw = fs.readFileSync(path.join(targetDir, file), 'utf-8');
+          result.push(JSON.parse(raw) as OpenClawConfigSnapshot);
+        } catch {
+          /* skip corrupt files */
+        }
+      }
+      return result;
+    } catch {
+      return [];
+    }
+  }
+
+  public getSnapshot(targetId: string, snapshotId: string): OpenClawConfigSnapshot | null {
+    const snapshotPath = path.join(this.snapshotDir, sanitizeId(targetId), `${sanitizeId(snapshotId)}.json`);
+    if (!fs.existsSync(snapshotPath)) return null;
+    try {
+      const raw = fs.readFileSync(snapshotPath, 'utf-8');
+      return JSON.parse(raw) as OpenClawConfigSnapshot;
+    } catch {
+      return null;
+    }
+  }
+
+  public async rollbackToSnapshot(
+    snapshotId: string,
+    openclawDir: string
+  ): Promise<{ ok: boolean; error?: string | undefined }> {
+    const configPath = getConfigPath(openclawDir);
+    if (!configPath) return { ok: false, error: 'Config file not found' };
+
+    const targetDirs = fs.existsSync(this.snapshotDir)
+      ? fs.readdirSync(this.snapshotDir)
+      : [];
+    const safeSnapshotId = sanitizeId(snapshotId);
+    for (const dir of targetDirs) {
+      const snapshotPath = path.join(this.snapshotDir, dir, `${safeSnapshotId}.json`);
+      if (fs.existsSync(snapshotPath)) {
+        try {
+          const raw = fs.readFileSync(snapshotPath, 'utf-8');
+          const snapshot = JSON.parse(raw) as OpenClawConfigSnapshot;
+          const tmpPath = `${configPath}.tmp`;
+          fs.writeFileSync(tmpPath, snapshot.configContent, 'utf-8');
+          fs.renameSync(tmpPath, configPath);
+          return { ok: true };
+        } catch (err: unknown) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+        }
+      }
+    }
+    return { ok: false, error: 'Snapshot not found' };
+  }
+}

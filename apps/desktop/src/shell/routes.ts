@@ -8,6 +8,8 @@ export type AppRoute =
   | 'logs'
   | 'tasks'
   | 'channels'
+  | 'models'
+  | 'recipes'
   | 'monitor'
   | 'workspace'
   | 'memory'
@@ -26,6 +28,8 @@ const VALID_ROUTES: readonly AppRoute[] = [
   'logs',
   'tasks',
   'channels',
+  'models',
+  'recipes',
   'monitor',
   'workspace',
   'memory',
@@ -106,6 +110,11 @@ export function navigate(route: AppRoute, filter?: RouteFilter): void {
 
 export function hasActiveFilter(filter: RouteFilter): boolean {
   return Boolean(
-    filter.machineId ?? filter.sessionId ?? filter.agentId ?? filter.taskView ?? filter.openFile
+    filter.machineId ??
+    filter.sessionId ??
+    filter.agentId ??
+    filter.taskView ??
+    filter.openFile ??
+    filter.line
   );
 }

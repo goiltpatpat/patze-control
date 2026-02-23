@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Box, Text } from '@react-three/drei';
 import type { Mesh } from 'three';
@@ -33,11 +33,13 @@ export function FleetWallScreen(props: FleetWallScreenProps): JSX.Element {
   const scanLineRef = useRef<Mesh>(null);
   const [px, py, pz] = props.position;
 
-  const counts = { active: 0, idle: 0, error: 0, offline: 0 };
-  for (const d of props.desks) {
-    counts[d.status] += 1;
-  }
-  const total = props.desks.length;
+  const { counts, total } = useMemo(() => {
+    const c = { active: 0, idle: 0, error: 0, offline: 0 };
+    for (const d of props.desks) {
+      c[d.status] += 1;
+    }
+    return { counts: c, total: props.desks.length };
+  }, [props.desks]);
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;

@@ -29,19 +29,21 @@ export function AmbientParticles(props: AmbientParticlesProps): JSX.Element {
     const geo = pointsRef.current.geometry;
     const posAttr = geo.getAttribute('position');
     if (!posAttr) return;
-    const arr = posAttr.array as Float32Array;
+    const buf = positions;
     const t = state.clock.elapsedTime;
 
     for (let i = 0; i < count; i++) {
-      const speed = speeds[i]!;
-      arr[i * 3 + 1]! += speed * 0.002;
-      arr[i * 3]! += Math.sin(t * 0.5 + i) * 0.001;
-      arr[i * 3 + 2]! += Math.cos(t * 0.3 + i * 0.7) * 0.001;
+      const idx = i * 3;
+      const speed = speeds[i] ?? 0.2;
+      // Indices are guaranteed in-bounds (idx < count * 3)
+      buf[idx + 1]! += speed * 0.002;
+      buf[idx]! += Math.sin(t * 0.5 + i) * 0.001;
+      buf[idx + 2]! += Math.cos(t * 0.3 + i * 0.7) * 0.001;
 
-      if (arr[i * 3 + 1]! > areaY + 0.5) {
-        arr[i * 3 + 1] = 0.5;
-        arr[i * 3] = (Math.random() - 0.5) * areaX;
-        arr[i * 3 + 2] = (Math.random() - 0.5) * areaZ;
+      if (buf[idx + 1]! > areaY + 0.5) {
+        buf[idx + 1] = 0.5;
+        buf[idx] = (Math.random() - 0.5) * areaX;
+        buf[idx + 2] = (Math.random() - 0.5) * areaZ;
       }
     }
     posAttr.needsUpdate = true;
