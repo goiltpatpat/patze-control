@@ -61,27 +61,27 @@ patze-control/
 
 ## Views
 
-| View | Description |
-| ---- | ----------- |
-| **Overview** | Fleet KPIs, cost summary, health posture, activity heatmap, quick nav |
-| **Agents** | Agent profiles with CRUD, model assignment, cost/token tracking |
-| **Models** | Model profile management — provider, API key, base URL per target |
-| **Channels** | Channel config, DM/group policies, agent binding, account summaries |
-| **Runs** | Filterable run timeline with session/agent/machine drill-down |
-| **Sessions** | Session lifecycle by origin (WhatsApp, Telegram, Slack, Discord, cron) |
-| **Machines** | Machine-level gauges (CPU, memory, disk) with health badges |
-| **System Monitor** | Fleet-wide resource monitoring with per-machine network rate |
-| **Logs** | Centralized searchable logs with level filtering |
-| **Tasks** | Scheduler (`at`/`every`/`cron`), run history, snapshots, rollback |
-| **Tunnels** | VPS bridge lifecycle, SSH setup, credential management, log panel |
-| **Costs** | Cost analytics by agent, model, and timeline with token breakdown |
-| **File Manager** | SFTP remote file browser with upload, download, rename, mkdir |
-| **Workspace** | Multi-root file explorer with editor, syntax highlighting, search |
-| **Memory Browser** | Per-agent memory files (MEMORY.md, SOUL.md, TASKS.md, etc.) |
-| **Terminal** | Safe terminal with allowlisted commands and quick-action buttons |
-| **Recipes** | Built-in recipe catalog with parameterized CookWizard execution |
-| **Settings** | Auth, diagnostics, config history with diff viewer and rollback |
-| **Office 3D** | Interactive voxel office — agent desks, avatars, minimap, camera modes |
+| View               | Description                                                            |
+| ------------------ | ---------------------------------------------------------------------- |
+| **Overview**       | Fleet KPIs, cost summary, health posture, activity heatmap, quick nav  |
+| **Agents**         | Agent profiles with CRUD, model assignment, cost/token tracking        |
+| **Models**         | Model profile management — provider, API key, base URL per target      |
+| **Channels**       | Channel config, DM/group policies, agent binding, account summaries    |
+| **Runs**           | Filterable run timeline with session/agent/machine drill-down          |
+| **Sessions**       | Session lifecycle by origin (WhatsApp, Telegram, Slack, Discord, cron) |
+| **Machines**       | Machine-level gauges (CPU, memory, disk) with health badges            |
+| **System Monitor** | Fleet-wide resource monitoring with per-machine network rate           |
+| **Logs**           | Centralized searchable logs with level filtering                       |
+| **Tasks**          | Scheduler (`at`/`every`/`cron`), run history, snapshots, rollback      |
+| **Tunnels**        | VPS bridge lifecycle, SSH setup, credential management, log panel      |
+| **Costs**          | Cost analytics by agent, model, and timeline with token breakdown      |
+| **File Manager**   | SFTP remote file browser with upload, download, rename, mkdir          |
+| **Workspace**      | Multi-root file explorer with editor, syntax highlighting, search      |
+| **Memory Browser** | Per-agent memory files (MEMORY.md, SOUL.md, TASKS.md, etc.)            |
+| **Terminal**       | Safe terminal with allowlisted commands and quick-action buttons       |
+| **Recipes**        | Built-in recipe catalog with parameterized CookWizard execution        |
+| **Settings**       | Auth, diagnostics, config history with diff viewer and rollback        |
+| **Office 3D**      | Interactive voxel office — agent desks, avatars, minimap, camera modes |
 
 ## Data Flow
 
@@ -112,6 +112,7 @@ patze-control/
 ```
 
 **Guarantees:**
+
 - At-least-once delivery with idempotent dedup across ingest and client layers
 - Single merged view from local + remote telemetry streams
 - Backpressure-friendly sync using timeout loops + exponential backoff
@@ -140,29 +141,29 @@ Open `http://localhost:1420` in your browser, or run `pnpm dev:desktop:tauri` fo
 
 ### Dev Targets
 
-| Command | What it runs |
-| ------- | ------------ |
-| `pnpm dev` | API + desktop concurrently |
-| `pnpm dev:all` | API + bridge + desktop concurrently |
-| `pnpm dev:api-server` | API server only |
-| `pnpm dev:desktop` | Desktop (Vite) only |
-| `pnpm dev:desktop:tauri` | Desktop with native Tauri shell |
-| `pnpm dev:openclaw-bridge` | OpenClaw bridge only |
+| Command                    | What it runs                        |
+| -------------------------- | ----------------------------------- |
+| `pnpm dev`                 | API + desktop concurrently          |
+| `pnpm dev:all`             | API + bridge + desktop concurrently |
+| `pnpm dev:api-server`      | API server only                     |
+| `pnpm dev:desktop`         | Desktop (Vite) only                 |
+| `pnpm dev:desktop:tauri`   | Desktop with native Tauri shell     |
+| `pnpm dev:openclaw-bridge` | OpenClaw bridge only                |
 
 ### Build & Quality
 
-| Command | Description |
-| ------- | ----------- |
-| `pnpm build` | Build all workspace packages |
+| Command              | Description                        |
+| -------------------- | ---------------------------------- |
+| `pnpm build`         | Build all workspace packages       |
 | `pnpm build:sidecar` | Build API sidecar binary for Tauri |
-| `pnpm build:app` | Sidecar + native desktop bundle |
-| `pnpm lint` | Lint all packages |
-| `pnpm typecheck` | Type-check all packages |
-| `pnpm test` | Run telemetry-core tests |
-| `pnpm format` | Check formatting (Prettier) |
-| `pnpm format:write` | Auto-fix formatting |
-| `pnpm ci:verify` | Typecheck + lint + format + test |
-| `pnpm ci:build` | Full build pipeline |
+| `pnpm build:app`     | Sidecar + native desktop bundle    |
+| `pnpm lint`          | Lint all packages                  |
+| `pnpm typecheck`     | Type-check all packages            |
+| `pnpm test`          | Run telemetry-core tests           |
+| `pnpm format`        | Check formatting (Prettier)        |
+| `pnpm format:write`  | Auto-fix formatting                |
+| `pnpm ci:verify`     | Typecheck + lint + format + test   |
+| `pnpm ci:build`      | Full build pipeline                |
 
 ## Configuration
 
@@ -173,27 +174,27 @@ cp packages/openclaw-bridge/.env.example packages/openclaw-bridge/.env
 
 ### API Server
 
-| Variable | Default | Description |
-| -------- | ------- | ----------- |
-| `PORT` | `9700` | API port |
-| `HOST` | `0.0.0.0` | Bind address |
-| `TELEMETRY_AUTH_MODE` | `none` | `none` or `token` |
-| `TELEMETRY_AUTH_TOKEN` | — | Required when mode is `token` |
-| `PATZE_SETTINGS_DIR` | `~/.patze-control` | Runtime settings directory |
-| `HEARTBEAT_TIMEOUT_MS` | `120000` | Offline threshold |
+| Variable               | Default            | Description                   |
+| ---------------------- | ------------------ | ----------------------------- |
+| `PORT`                 | `9700`             | API port                      |
+| `HOST`                 | `0.0.0.0`          | Bind address                  |
+| `TELEMETRY_AUTH_MODE`  | `none`             | `none` or `token`             |
+| `TELEMETRY_AUTH_TOKEN` | —                  | Required when mode is `token` |
+| `PATZE_SETTINGS_DIR`   | `~/.patze-control` | Runtime settings directory    |
+| `HEARTBEAT_TIMEOUT_MS` | `120000`           | Offline threshold             |
 
 Auth mode and token can also be changed at runtime from **Settings > Authentication** in the desktop UI.
 
 ### OpenClaw Bridge
 
-| Variable | Default | Description |
-| -------- | ------- | ----------- |
-| `CONTROL_PLANE_BASE_URL` | `http://127.0.0.1:9700` | Control plane URL |
-| `CONTROL_PLANE_TOKEN` | — | Bearer token |
-| `MACHINE_ID` | auto | Stable machine ID |
-| `MACHINE_KIND` | `local` | `local` or `vps` |
-| `OPENCLAW_BRIDGE_SOURCE` | `files` | `files` or `cli` |
-| `HEARTBEAT_INTERVAL_MS` | `5000` | Poll/heartbeat cadence |
+| Variable                 | Default                 | Description            |
+| ------------------------ | ----------------------- | ---------------------- |
+| `CONTROL_PLANE_BASE_URL` | `http://127.0.0.1:9700` | Control plane URL      |
+| `CONTROL_PLANE_TOKEN`    | —                       | Bearer token           |
+| `MACHINE_ID`             | auto                    | Stable machine ID      |
+| `MACHINE_KIND`           | `local`                 | `local` or `vps`       |
+| `OPENCLAW_BRIDGE_SOURCE` | `files`                 | `files` or `cli`       |
+| `HEARTBEAT_INTERVAL_MS`  | `5000`                  | Poll/heartbeat cadence |
 
 ## Connecting to a VPS
 
@@ -223,12 +224,14 @@ Auth mode and token can also be changed at runtime from **Settings > Authenticat
 Patze Control provides a full visual interface for managing OpenClaw configurations:
 
 **Command Queue workflow:**
+
 1. Changes (add agent, update model, bind channel) are queued as CLI commands
 2. **Preview** shows a diff of what will change in `openclaw.json`
 3. **Apply** executes the queued commands on the target
 4. **Rollback** restores a previous config snapshot if needed
 
 Supported operations:
+
 - **Agents** — create, edit, delete agent profiles
 - **Models** — create, edit, delete model profiles (provider, API key, base URL)
 - **Channels** — edit DM/group policies, bind/unbind agents
@@ -240,22 +243,22 @@ Supported operations:
 <details>
 <summary><strong>Core Telemetry</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `GET` | `/health` | Health check |
-| `POST` | `/ingest` | Single event ingestion |
-| `POST` | `/ingest/batch` | Batch event ingestion |
-| `GET` | `/snapshot` | Current telemetry snapshot |
-| `GET` | `/events` | SSE event stream |
+| Method | Path            | Description                |
+| ------ | --------------- | -------------------------- |
+| `GET`  | `/health`       | Health check               |
+| `POST` | `/ingest`       | Single event ingestion     |
+| `POST` | `/ingest/batch` | Batch event ingestion      |
+| `GET`  | `/snapshot`     | Current telemetry snapshot |
+| `GET`  | `/events`       | SSE event stream           |
 
 </details>
 
 <details>
 <summary><strong>Settings</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `GET` | `/settings/auth` | Get auth config |
+| Method | Path             | Description            |
+| ------ | ---------------- | ---------------------- |
+| `GET`  | `/settings/auth` | Get auth config        |
 | `POST` | `/settings/auth` | Update auth mode/token |
 
 </details>
@@ -263,146 +266,146 @@ Supported operations:
 <details>
 <summary><strong>Remote & Tunnels</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `POST` | `/remote/attach` | Attach remote node |
-| `POST` | `/remote/detach` | Detach remote node |
-| `GET` | `/remote/attachments` | List remote attachments |
-| `GET` | `/tunnels` | List SSH tunnels |
-| `GET` | `/ssh/config-hosts` | List SSH config host aliases |
+| Method | Path                  | Description                  |
+| ------ | --------------------- | ---------------------------- |
+| `POST` | `/remote/attach`      | Attach remote node           |
+| `POST` | `/remote/detach`      | Detach remote node           |
+| `GET`  | `/remote/attachments` | List remote attachments      |
+| `GET`  | `/tunnels`            | List SSH tunnels             |
+| `GET`  | `/ssh/config-hosts`   | List SSH config host aliases |
 
 </details>
 
 <details>
 <summary><strong>Bridge Management</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `POST` | `/bridge/preflight` | SSH connectivity check |
-| `POST` | `/bridge/setup` | Setup new bridge |
-| `GET` | `/bridge/managed` | List managed bridges |
-| `GET` | `/bridge/managed/:id` | Bridge detail |
-| `POST` | `/bridge/managed/:id/disconnect` | Disconnect bridge |
-| `DELETE` | `/bridge/managed/:id` | Remove bridge |
-| `GET` | `/bridge/connections` | List bridge connections |
-| `POST` | `/openclaw/bridge/cron-sync` | Bridge cron sync |
+| Method   | Path                             | Description             |
+| -------- | -------------------------------- | ----------------------- |
+| `POST`   | `/bridge/preflight`              | SSH connectivity check  |
+| `POST`   | `/bridge/setup`                  | Setup new bridge        |
+| `GET`    | `/bridge/managed`                | List managed bridges    |
+| `GET`    | `/bridge/managed/:id`            | Bridge detail           |
+| `POST`   | `/bridge/managed/:id/disconnect` | Disconnect bridge       |
+| `DELETE` | `/bridge/managed/:id`            | Remove bridge           |
+| `GET`    | `/bridge/connections`            | List bridge connections |
+| `POST`   | `/openclaw/bridge/cron-sync`     | Bridge cron sync        |
 
 </details>
 
 <details>
 <summary><strong>Tasks & Scheduler</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `GET` | `/tasks` | List scheduled tasks |
-| `POST` | `/tasks` | Create task |
-| `PATCH` | `/tasks/:taskId` | Update task |
-| `DELETE` | `/tasks/:taskId` | Delete task |
-| `POST` | `/tasks/:taskId/run` | Trigger manual run |
-| `GET` | `/tasks/history` | Task run history |
-| `GET` | `/tasks/snapshots` | Task config snapshots |
-| `POST` | `/tasks/rollback/:snapshotId` | Rollback to snapshot |
-| `GET` | `/tasks/events` | SSE task event stream |
+| Method   | Path                          | Description           |
+| -------- | ----------------------------- | --------------------- |
+| `GET`    | `/tasks`                      | List scheduled tasks  |
+| `POST`   | `/tasks`                      | Create task           |
+| `PATCH`  | `/tasks/:taskId`              | Update task           |
+| `DELETE` | `/tasks/:taskId`              | Delete task           |
+| `POST`   | `/tasks/:taskId/run`          | Trigger manual run    |
+| `GET`    | `/tasks/history`              | Task run history      |
+| `GET`    | `/tasks/snapshots`            | Task config snapshots |
+| `POST`   | `/tasks/rollback/:snapshotId` | Rollback to snapshot  |
+| `GET`    | `/tasks/events`               | SSE task event stream |
 
 </details>
 
 <details>
 <summary><strong>OpenClaw Targets</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `GET` | `/openclaw/targets` | List targets with sync status |
-| `POST` | `/openclaw/targets` | Add target |
-| `PATCH` | `/openclaw/targets/:targetId` | Update target |
-| `DELETE` | `/openclaw/targets/:targetId` | Remove target |
-| `GET` | `/openclaw/targets/:targetId/jobs` | Target cron jobs |
-| `GET` | `/openclaw/targets/:targetId/runs/:jobId` | Job run history |
-| `GET` | `/openclaw/targets/:targetId/health` | Target health check |
+| Method   | Path                                      | Description                   |
+| -------- | ----------------------------------------- | ----------------------------- |
+| `GET`    | `/openclaw/targets`                       | List targets with sync status |
+| `POST`   | `/openclaw/targets`                       | Add target                    |
+| `PATCH`  | `/openclaw/targets/:targetId`             | Update target                 |
+| `DELETE` | `/openclaw/targets/:targetId`             | Remove target                 |
+| `GET`    | `/openclaw/targets/:targetId/jobs`        | Target cron jobs              |
+| `GET`    | `/openclaw/targets/:targetId/runs/:jobId` | Job run history               |
+| `GET`    | `/openclaw/targets/:targetId/health`      | Target health check           |
 
 </details>
 
 <details>
 <summary><strong>OpenClaw Config (Agents, Models, Channels)</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `GET` | `/openclaw/targets/:targetId/config` | Parsed config |
-| `GET` | `/openclaw/targets/:targetId/config-raw` | Raw config string |
-| `GET` | `/openclaw/targets/:targetId/agents` | List agents |
-| `POST` | `/openclaw/targets/:targetId/agents` | Create agent |
-| `PATCH` | `/openclaw/targets/:targetId/agents/:agentId` | Update agent |
-| `DELETE` | `/openclaw/targets/:targetId/agents/:agentId` | Delete agent |
-| `GET` | `/openclaw/targets/:targetId/models` | List model profiles |
-| `POST` | `/openclaw/targets/:targetId/models` | Create model profile |
-| `PATCH` | `/openclaw/targets/:targetId/models/:modelId` | Update model profile |
-| `DELETE` | `/openclaw/targets/:targetId/models/:modelId` | Delete model profile |
-| `GET` | `/openclaw/targets/:targetId/bindings` | List bindings |
-| `GET` | `/openclaw/channels` | List channels |
-| `PATCH` | `/openclaw/targets/:targetId/channels/:channelId` | Update channel config |
-| `POST` | `/openclaw/targets/:targetId/channels/:channelId/bind` | Bind agent |
-| `POST` | `/openclaw/targets/:targetId/channels/:channelId/unbind` | Unbind agent |
+| Method   | Path                                                     | Description           |
+| -------- | -------------------------------------------------------- | --------------------- |
+| `GET`    | `/openclaw/targets/:targetId/config`                     | Parsed config         |
+| `GET`    | `/openclaw/targets/:targetId/config-raw`                 | Raw config string     |
+| `GET`    | `/openclaw/targets/:targetId/agents`                     | List agents           |
+| `POST`   | `/openclaw/targets/:targetId/agents`                     | Create agent          |
+| `PATCH`  | `/openclaw/targets/:targetId/agents/:agentId`            | Update agent          |
+| `DELETE` | `/openclaw/targets/:targetId/agents/:agentId`            | Delete agent          |
+| `GET`    | `/openclaw/targets/:targetId/models`                     | List model profiles   |
+| `POST`   | `/openclaw/targets/:targetId/models`                     | Create model profile  |
+| `PATCH`  | `/openclaw/targets/:targetId/models/:modelId`            | Update model profile  |
+| `DELETE` | `/openclaw/targets/:targetId/models/:modelId`            | Delete model profile  |
+| `GET`    | `/openclaw/targets/:targetId/bindings`                   | List bindings         |
+| `GET`    | `/openclaw/channels`                                     | List channels         |
+| `PATCH`  | `/openclaw/targets/:targetId/channels/:channelId`        | Update channel config |
+| `POST`   | `/openclaw/targets/:targetId/channels/:channelId/bind`   | Bind agent            |
+| `POST`   | `/openclaw/targets/:targetId/channels/:channelId/unbind` | Unbind agent          |
 
 </details>
 
 <details>
 <summary><strong>Command Queue & Config Snapshots</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `POST` | `/openclaw/queue` | Queue commands |
-| `GET` | `/openclaw/queue/:targetId` | Queue state |
-| `POST` | `/openclaw/queue/:targetId/preview` | Preview diff |
-| `POST` | `/openclaw/queue/:targetId/apply` | Apply commands |
-| `DELETE` | `/openclaw/queue/:targetId` | Discard queue |
-| `GET` | `/openclaw/targets/:targetId/config-snapshots` | List snapshots |
-| `GET` | `/openclaw/targets/:targetId/config-snapshots/:snapId` | Snapshot detail |
-| `POST` | `/openclaw/targets/:targetId/config-snapshots/:snapId/rollback` | Rollback |
+| Method   | Path                                                            | Description     |
+| -------- | --------------------------------------------------------------- | --------------- |
+| `POST`   | `/openclaw/queue`                                               | Queue commands  |
+| `GET`    | `/openclaw/queue/:targetId`                                     | Queue state     |
+| `POST`   | `/openclaw/queue/:targetId/preview`                             | Preview diff    |
+| `POST`   | `/openclaw/queue/:targetId/apply`                               | Apply commands  |
+| `DELETE` | `/openclaw/queue/:targetId`                                     | Discard queue   |
+| `GET`    | `/openclaw/targets/:targetId/config-snapshots`                  | List snapshots  |
+| `GET`    | `/openclaw/targets/:targetId/config-snapshots/:snapId`          | Snapshot detail |
+| `POST`   | `/openclaw/targets/:targetId/config-snapshots/:snapId/rollback` | Rollback        |
 
 </details>
 
 <details>
 <summary><strong>Workspace & Memory</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `GET` | `/workspace/roots` | List workspace roots |
-| `GET` | `/workspace/tree` | Directory listing |
-| `GET` | `/workspace/file` | Read file |
-| `PUT` | `/workspace/file` | Write file |
-| `GET` | `/workspace/search` | Full-text search |
-| `GET` | `/workspace/memory-files` | Agent memory files |
-| `PUT` | `/workspace/memory-file` | Write memory file |
+| Method | Path                      | Description          |
+| ------ | ------------------------- | -------------------- |
+| `GET`  | `/workspace/roots`        | List workspace roots |
+| `GET`  | `/workspace/tree`         | Directory listing    |
+| `GET`  | `/workspace/file`         | Read file            |
+| `PUT`  | `/workspace/file`         | Write file           |
+| `GET`  | `/workspace/search`       | Full-text search     |
+| `GET`  | `/workspace/memory-files` | Agent memory files   |
+| `PUT`  | `/workspace/memory-file`  | Write memory file    |
 
 </details>
 
 <details>
 <summary><strong>File Manager (SFTP)</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `GET` | `/files/connections` | List SFTP connections |
-| `POST` | `/files/connections` | Add SSH connection |
-| `DELETE` | `/files/connections/:id` | Remove connection |
-| `GET` | `/files/:connId/ls` | List remote directory |
-| `GET` | `/files/:connId/stat` | Stat remote path |
-| `GET` | `/files/:connId/download` | Download file |
-| `POST` | `/files/:connId/upload` | Upload file (multipart) |
-| `POST` | `/files/:connId/mkdir` | Create directory |
-| `POST` | `/files/:connId/rename` | Rename file/dir |
-| `DELETE` | `/files/:connId/rm` | Remove file/dir |
+| Method   | Path                      | Description             |
+| -------- | ------------------------- | ----------------------- |
+| `GET`    | `/files/connections`      | List SFTP connections   |
+| `POST`   | `/files/connections`      | Add SSH connection      |
+| `DELETE` | `/files/connections/:id`  | Remove connection       |
+| `GET`    | `/files/:connId/ls`       | List remote directory   |
+| `GET`    | `/files/:connId/stat`     | Stat remote path        |
+| `GET`    | `/files/:connId/download` | Download file           |
+| `POST`   | `/files/:connId/upload`   | Upload file (multipart) |
+| `POST`   | `/files/:connId/mkdir`    | Create directory        |
+| `POST`   | `/files/:connId/rename`   | Rename file/dir         |
+| `DELETE` | `/files/:connId/rm`       | Remove file/dir         |
 
 </details>
 
 <details>
 <summary><strong>Terminal & Recipes</strong></summary>
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `POST` | `/terminal/exec` | Execute allowlisted command |
-| `GET` | `/terminal/allowlist` | List allowed commands |
-| `GET` | `/recipes` | List recipes |
-| `GET` | `/recipes/:recipeId` | Recipe detail |
-| `POST` | `/recipes/:recipeId/resolve` | Resolve recipe params |
+| Method | Path                         | Description                 |
+| ------ | ---------------------------- | --------------------------- |
+| `POST` | `/terminal/exec`             | Execute allowlisted command |
+| `GET`  | `/terminal/allowlist`        | List allowed commands       |
+| `GET`  | `/recipes`                   | List recipes                |
+| `GET`  | `/recipes/:recipeId`         | Recipe detail               |
+| `POST` | `/recipes/:recipeId/resolve` | Resolve recipe params       |
 
 </details>
 
