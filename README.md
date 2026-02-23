@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/goiltpatpat/patze-control/actions/workflows/ci.yml"><img src="https://github.com/goiltpatpat/patze-control/actions/workflows/ci.yml/badge.svg?branch=main" alt="repo-ci" /></a>
   <a href="https://github.com/goiltpatpat/patze-control/actions/workflows/desktop-ci.yml"><img src="https://github.com/goiltpatpat/patze-control/actions/workflows/desktop-ci.yml/badge.svg?branch=main" alt="desktop-ci" /></a>
+  <a href="https://github.com/goiltpatpat/patze-control/actions/workflows/workflow-lint.yml"><img src="https://github.com/goiltpatpat/patze-control/actions/workflows/workflow-lint.yml/badge.svg?branch=main" alt="workflow-lint" /></a>
   <br/>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT" /></a>
   <img src="https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg" alt="TypeScript" />
