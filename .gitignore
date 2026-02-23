@@ -6,6 +6,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Build output — Vite
+.vite/
+
 # Build output — Rust / Tauri
 **/src-tauri/target/
 **/src-tauri/gen/
@@ -16,15 +19,29 @@ dist/
 .env.*
 !.env.example
 
+# Secrets & credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+
 # OS files
 .DS_Store
 Thumbs.db
+Desktop.ini
+._*
 
 # Coverage & test output
 coverage/
+test-results/
 
 # Logs
 *.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Turbo
 .turbo/
@@ -33,6 +50,16 @@ coverage/
 .idea/
 .vscode/
 *.sw[po]
+*.code-workspace
 
 # Caches
 .eslintcache
+.prettiercache
+.cache/
+
+# Runtime data
+*.pid
+*.seed
+
+# Memory Bank (project-local AI context — optional: remove if you want to track)
+# memory-bank/

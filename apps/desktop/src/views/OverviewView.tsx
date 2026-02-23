@@ -162,17 +162,19 @@ function MetricCard(props: MetricCardProps): JSX.Element {
       className={`ov-metric${props.pulse ? ' ov-metric-pulse' : ''}`}
       style={{ '--metric-accent': accentVar } as React.CSSProperties}
     >
-      <div className="ov-metric-header">
-        <span className="ov-metric-label">{props.label}</span>
-        <span className="ov-metric-icon">{props.icon}</span>
-      </div>
-      <div className="ov-metric-row">
-        <span className={`ov-metric-value${props.danger ? ' ov-metric-danger' : ''}`}>
-          {props.value}
-        </span>
+      <div className="ov-metric-glow" />
+      <div className="ov-metric-inner">
+        <div className="ov-metric-icon-ring">{props.icon}</div>
+        <div className="ov-metric-data">
+          <span className={`ov-metric-value${props.danger ? ' ov-metric-danger' : ''}`}>
+            {props.value}
+          </span>
+          <span className="ov-metric-label">{props.label}</span>
+        </div>
         {hasTrend ? (
           <span className={`ov-metric-trend ${trend > 0 ? 'ov-trend-up' : 'ov-trend-down'}`}>
-            {trend > 0 ? '↑' : '↓'} {Math.abs(trend).toFixed(0)}%
+            {trend > 0 ? '+' : ''}
+            {trend.toFixed(0)}%
           </span>
         ) : null}
       </div>
@@ -335,9 +337,9 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
   const uptime = computeUptime(snapshot);
 
   return (
-    <section className="view-panel">
-      {/* Header with inline health + clock + last updated */}
-      <div className="view-header">
+    <section className="ov-dashboard">
+      {/* Row 1: Header */}
+      <div className="view-header" style={{ marginBottom: 0 }}>
         <h2 className="view-title">Overview</h2>
         <div className="ov-header-right">
           <HealthBadge health={overallHealth} />
@@ -352,28 +354,27 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
         </div>
       </div>
 
-      {/* Hero: Metrics + System Status */}
+      {/* Row 2: Metrics strip (4 inline) + Status sidebar */}
       <div className="ov-hero">
-        {/* Primary metrics 2×2 */}
-        <div className="ov-metrics">
+        <div className="ov-metrics-strip">
           <MetricCard
             label="Machines"
             value={machineCount}
             accent="accent"
-            icon={<IconServer width={16} height={16} />}
+            icon={<IconServer width={14} height={14} />}
             trend={trends.machines}
           />
           <MetricCard
             label="Sessions"
             value={sessionCount}
             accent="blue"
-            icon={<IconLayers width={16} height={16} />}
+            icon={<IconLayers width={14} height={14} />}
             trend={trends.sessions}
           />
           <MetricCard
             label="Total Runs"
             value={totalRuns}
-            icon={<IconActivity width={16} height={16} />}
+            icon={<IconActivity width={14} height={14} />}
             trend={trends.runs}
           />
           <MetricCard
@@ -381,14 +382,12 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
             value={activeRuns}
             accent="green"
             pulse={activeRuns > 0}
-            icon={<IconZap width={16} height={16} />}
+            icon={<IconZap width={14} height={14} />}
             trend={trends.active}
           />
         </div>
 
-        {/* System status panel */}
         <div className="ov-status-panel">
-          {/* Fleet health gauges */}
           <div className="ov-status-section">
             <span className="ov-status-title">Fleet Resources</span>
             {fleetResource ? (
@@ -407,7 +406,6 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
             )}
           </div>
 
-          {/* Alerts */}
           {failedRuns > 0 || errorLogs > 0 ? (
             <div className="ov-status-section">
               <span className="ov-status-title">Alerts</span>
@@ -438,7 +436,6 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
             </div>
           ) : null}
 
-          {/* Integrations */}
           {oc.count > 0 || (props.bridgeCount ?? 0) > 0 ? (
             <div className="ov-status-section">
               <span className="ov-status-title">Integrations</span>
@@ -476,72 +473,46 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
         </div>
       </div>
 
-      {/* Cost summary (compact inline) */}
-      {cost && cost.runsWithUsage > 0 ? (
-        <div className="ov-cost-bar">
-          <div className="ov-cost-item">
-            <span className="ov-cost-label">Total Cost</span>
-            <span className="ov-cost-value">{formatCost(cost.totalCostUsd)}</span>
-          </div>
-          <span className="ov-cost-sep" />
-          <div className="ov-cost-item">
-            <span className="ov-cost-label">Tokens</span>
-            <span className="ov-cost-value">{formatTokenCount(cost.totalTokens)}</span>
-          </div>
-          <span className="ov-cost-sep" />
-          <div className="ov-cost-item">
-            <span className="ov-cost-label">Avg / Run</span>
-            <span className="ov-cost-value">{formatCost(cost.avgCostPerRun)}</span>
-          </div>
-          <span className="ov-cost-sep" />
-          <div className="ov-cost-item">
-            <span className="ov-cost-label">Runs w/ Usage</span>
-            <span className="ov-cost-value">{cost.runsWithUsage}</span>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Success Rate Bar */}
-      {totalRuns > 0 ? <SuccessRateBar total={totalRuns} failed={failedRuns} /> : null}
-
-      {/* Quick Links */}
-      <div>
-        <div className="ov-section-header">
-          <span className="accent-line" />
-          <span className="ov-section-header-label">Quick Links</span>
-        </div>
-        <div className="ov-quick-links">
+      {/* Row 3: Quick links strip + optional cost/success bars */}
+      <div className="ov-toolbar">
+        <div className="ov-nav-chips">
           {QUICK_LINKS.map((link) => {
             const LinkIcon = link.icon;
             return (
               <button
                 key={link.route}
-                className="ov-quick-link"
+                className="ov-nav-chip"
                 onClick={() => {
                   navigate(link.route);
                 }}
                 title={`${link.label} (${link.shortcut})`}
               >
-                <div className="ov-quick-link-icon" style={{ background: link.iconBg }}>
-                  <LinkIcon width={16} height={16} />
-                </div>
-                <div className="ov-quick-link-body">
-                  <span className="ov-quick-link-label">{link.label}</span>
-                </div>
-                <span className="ov-quick-link-shortcut">{link.shortcut}</span>
+                <LinkIcon width={13} height={13} />
+                <span>{link.label}</span>
               </button>
             );
           })}
         </div>
+        {cost && cost.runsWithUsage > 0 ? (
+          <div className="ov-cost-bar">
+            <div className="ov-cost-item">
+              <span className="ov-cost-label">Cost</span>
+              <span className="ov-cost-value">{formatCost(cost.totalCostUsd)}</span>
+            </div>
+            <span className="ov-cost-sep" />
+            <div className="ov-cost-item">
+              <span className="ov-cost-label">Tokens</span>
+              <span className="ov-cost-value">{formatTokenCount(cost.totalTokens)}</span>
+            </div>
+          </div>
+        ) : null}
+        {totalRuns > 0 ? <SuccessRateBar total={totalRuns} failed={failedRuns} /> : null}
       </div>
 
-      {/* Notepad */}
-      <Notepad />
-
-      {/* Two-column data panels */}
-      <div className="ov-panels">
-        {/* Machines */}
-        <div className="panel ov-panel-half">
+      {/* Row 4: Main content area — fills remaining space */}
+      <div className="ov-grid-body">
+        {/* Left: Machines */}
+        <div className="panel ov-grid-panel">
           <div className="panel-header">
             <div className="ov-section-header" style={{ marginBottom: 0 }}>
               <span className="accent-line" />
@@ -558,49 +529,53 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
               </button>
             ) : null}
           </div>
-          {snapshot.machines.length === 0 ? (
-            <div className="ov-empty-compact">
-              <IconServer width={20} height={20} />
-              <span>No machines registered</span>
-            </div>
-          ) : (
-            <div className="table-scroll" style={{ maxHeight: 220 }}>
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Status</th>
-                    <th>CPU</th>
-                    <th>Mem</th>
-                    <th>Seen</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.machines.map((machine) => (
-                    <tr key={machine.machineId}>
-                      <td className="mono">{machine.name ?? machine.machineId.slice(0, 8)}</td>
-                      <td>
-                        <StateBadge value={machine.status} />
-                      </td>
-                      <td className="mono">
-                        {machine.lastResource ? `${machine.lastResource.cpuPct.toFixed(0)}%` : '—'}
-                      </td>
-                      <td className="mono">
-                        {machine.lastResource
-                          ? `${machine.lastResource.memoryPct.toFixed(0)}%`
-                          : '—'}
-                      </td>
-                      <td>{formatRelativeTime(machine.lastSeenAt)}</td>
+          <div className="ov-grid-panel-body">
+            {snapshot.machines.length === 0 ? (
+              <div className="ov-empty-compact">
+                <IconServer width={20} height={20} />
+                <span>No machines registered</span>
+              </div>
+            ) : (
+              <div className="table-scroll">
+                <table className="data-table compact">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Status</th>
+                      <th>CPU</th>
+                      <th>Mem</th>
+                      <th>Seen</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {snapshot.machines.map((machine) => (
+                      <tr key={machine.machineId}>
+                        <td className="mono">{machine.name ?? machine.machineId.slice(0, 8)}</td>
+                        <td>
+                          <StateBadge value={machine.status} />
+                        </td>
+                        <td className="mono">
+                          {machine.lastResource
+                            ? `${machine.lastResource.cpuPct.toFixed(0)}%`
+                            : '—'}
+                        </td>
+                        <td className="mono">
+                          {machine.lastResource
+                            ? `${machine.lastResource.memoryPct.toFixed(0)}%`
+                            : '—'}
+                        </td>
+                        <td>{formatRelativeTime(machine.lastSeenAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Active Runs */}
-        <div className="panel ov-panel-half">
+        {/* Middle: Active Runs */}
+        <div className="panel ov-grid-panel">
           <div className="panel-header">
             <div className="ov-section-header" style={{ marginBottom: 0 }}>
               <span className="accent-line" />
@@ -617,50 +592,63 @@ export function OverviewView(props: OverviewViewProps): JSX.Element {
               </button>
             ) : null}
           </div>
-          {snapshot.activeRuns.length === 0 ? (
-            <div className="ov-empty-compact">
-              <IconActivity width={20} height={20} />
-              <span>No active runs</span>
-            </div>
-          ) : (
-            <div className="table-scroll" style={{ maxHeight: 220 }}>
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Run</th>
-                    <th>Machine</th>
-                    <th>State</th>
-                    <th>Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.activeRuns.map((run) => (
-                    <tr key={run.runId} data-active="true">
-                      <td className="mono">{run.runId.slice(0, 8)}</td>
-                      <td className="mono">{run.machineId.slice(0, 8)}</td>
-                      <td>
-                        <StateBadge value={run.state} />
-                        <span className="inline-loading">
-                          <span className="mini-spinner" />
-                        </span>
-                      </td>
-                      <td>{formatRelativeTime(run.updatedAt)}</td>
+          <div className="ov-grid-panel-body">
+            {snapshot.activeRuns.length === 0 ? (
+              <div className="ov-empty-compact">
+                <IconActivity width={20} height={20} />
+                <span>No active runs</span>
+              </div>
+            ) : (
+              <div className="table-scroll">
+                <table className="data-table compact">
+                  <thead>
+                    <tr>
+                      <th>Run</th>
+                      <th>Machine</th>
+                      <th>State</th>
+                      <th>Updated</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {snapshot.activeRuns.map((run) => (
+                      <tr key={run.runId} data-active="true">
+                        <td className="mono">{run.runId.slice(0, 8)}</td>
+                        <td className="mono">{run.machineId.slice(0, 8)}</td>
+                        <td>
+                          <StateBadge value={run.state} />
+                          <span className="inline-loading">
+                            <span className="mini-spinner" />
+                          </span>
+                        </td>
+                        <td>{formatRelativeTime(run.updatedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Activity + Notes */}
+        <div className="panel ov-grid-panel">
+          <div className="panel-header">
+            <div className="ov-section-header" style={{ marginBottom: 0 }}>
+              <span className="accent-line" />
+              <h3 className="panel-title">Activity</h3>
             </div>
-          )}
+          </div>
+          <div className="ov-grid-panel-body">
+            {snapshot.recentEvents.length > 0 ? (
+              <ActivityHeatmap
+                events={snapshot.recentEvents.map((e) => ({ ts: e.ts, type: e.type }))}
+              />
+            ) : null}
+            <ActivityFeed snapshot={snapshot} />
+            <Notepad />
+          </div>
         </div>
       </div>
-
-      {/* Activity Heatmap */}
-      {snapshot.recentEvents.length > 0 ? (
-        <ActivityHeatmap events={snapshot.recentEvents.map((e) => ({ ts: e.ts, type: e.type }))} />
-      ) : null}
-
-      {/* Activity Feed */}
-      <ActivityFeed snapshot={snapshot} />
     </section>
   );
 }
