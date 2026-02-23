@@ -31,6 +31,12 @@ _Last updated: 2026-02-22_
 - **Enhanced Overview Dashboard**: Quick links grid, section headers with accent line, success rate bar
 - **StatusStrip Enhancements**: CPU/RAM mini gauges, uptime counter, separator dividers
 - **Design System Polish**: Soft color variables, accent line utility, enhanced badges, global scrollbar, panel transitions
+- **System Monitor v2**: Dedicated monitor view with Disk% and network throughput (`delta/dt`) across fleet and per-machine cards
+- **Workspace Full-text Search**: Backend `/workspace/search` + command palette integration (debounce, cancel, compact context results)
+- **Memory Browser**: Dedicated memory UI + secure memory write endpoint with allowlist and path safety
+- **Office View (Hybrid 3D + Classic)**: Agent-centric OpenClaw desk visualization with new 3D scene mode (Three.js via React Three Fiber) and Classic fallback mode
+- **Office 3D Robustness Pass**: Dynamic camera/scene fitting for small or large desk counts, tenacitOS-inspired lighting/status labels, and WebGL capability fallback to Classic mode
+- **Route Expansion**: New routes wired (`monitor`, `memory`, `office`) in sidebar + shell
 
 ## What's Left
 
@@ -41,6 +47,8 @@ _Last updated: 2026-02-22_
 - [ ] Target edit dialog (rename, change settings in-place)
 - [ ] OpenClaw CLI execution delegation for remote targets
 - [ ] Multi-target dashboard overview (aggregated health across targets)
+- [ ] Add richer Office interactions (desk detail drawer + per-target drill-down)
+- [ ] Add optional indexing strategy for very large workspace search (beyond LRU cache)
 
 ## Verification
 

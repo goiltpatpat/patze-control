@@ -3,6 +3,8 @@ import { IconMessage } from '../components/Icons';
 import type { TargetSyncStatusEntry } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus } from '../types';
 import { formatRelativeTime } from '../utils/time';
+import type { OpenClawAgent, OpenClawModelProfile } from '@patze/telemetry-core';
+import { ChannelConfigDialog } from './channels/ChannelConfigDialog';
 
 interface OpenClawChannel {
   readonly id: string;
@@ -44,15 +46,38 @@ export interface ChannelsViewProps {
   readonly openclawTargets: readonly TargetSyncStatusEntry[];
 }
 
+const PROVIDER_THEME: Readonly<Record<string, { letter: string; color: string; bg: string }>> = {
+  discord: { letter: 'D', color: '#5865F2', bg: 'rgba(88,101,242,0.15)' },
+  telegram: { letter: 'T', color: '#26A5E4', bg: 'rgba(38,165,228,0.15)' },
+  whatsapp: { letter: 'W', color: '#25D366', bg: 'rgba(37,211,102,0.15)' },
+  slack: { letter: 'S', color: '#E01E5A', bg: 'rgba(224,30,90,0.15)' },
+  signal: { letter: 'Si', color: '#3A76F0', bg: 'rgba(58,118,240,0.15)' },
+  imessage: { letter: 'iM', color: '#34C759', bg: 'rgba(52,199,89,0.15)' },
+  teams: { letter: 'Te', color: '#6264A7', bg: 'rgba(98,100,167,0.15)' },
+  matrix: { letter: 'M', color: '#0DBD8B', bg: 'rgba(13,189,139,0.15)' },
+  irc: { letter: 'IR', color: '#8B8B8B', bg: 'rgba(139,139,139,0.15)' },
+  line: { letter: 'L', color: '#06C755', bg: 'rgba(6,199,85,0.15)' },
+};
+
+function getProviderTheme(id: string): { letter: string; color: string; bg: string } {
+  const key = id.toLowerCase();
+  if (PROVIDER_THEME[key]) return PROVIDER_THEME[key];
+  return {
+    letter: id.charAt(0).toUpperCase(),
+    color: 'var(--text-muted)',
+    bg: 'var(--bg-elevated)',
+  };
+}
+
 function authHeaders(token: string): Record<string, string> {
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
 }
 
-function channelBadgeTone(channel: OpenClawChannel): string {
-  if (!channel.configured) return 'tone-muted';
-  if (channel.connected) return 'tone-good';
-  return 'tone-warn';
+function statusDotClass(channel: OpenClawChannel): string {
+  if (!channel.configured) return 'ch-dot-off';
+  if (channel.connected) return 'ch-dot-on';
+  return 'ch-dot-warn';
 }
 
 function dmBadgeTone(dmPolicy: OpenClawChannel['dmPolicy']): string {
@@ -82,34 +107,170 @@ function channelPriority(channel: OpenClawChannel): ChannelPriority {
   return 'low';
 }
 
-function channelPriorityTone(priority: ChannelPriority): string {
-  switch (priority) {
-    case 'high':
-      return 'tone-warn';
-    case 'medium':
-      return 'tone-neutral';
-    case 'low':
-      return 'tone-good';
-    default: {
-      const _exhaustive: never = priority;
-      return _exhaustive;
-    }
-  }
-}
-
 function channelRecommendation(channel: OpenClawChannel): string {
   if (!channel.configured) return 'Add channel config in openclaw.json to enable this provider.';
   if (!channel.connected && channel.runtimeState === 'disconnected')
     return 'Check credentials/session and reconnect this provider.';
   if (channel.runtimeState === 'unknown')
-    return 'Runtime connectivity is unknown in config-only mode. Verify with OpenClaw channels status.';
+    return 'Runtime connectivity unknown. Verify with OpenClaw channels status.';
   if (channel.dmPolicy === 'open' && channel.allowFromHasWildcard)
-    return 'DM policy is open with wildcard allowFrom. Consider pairing/allowlist for safer operation.';
-  if (channel.dmPolicy === 'disabled')
-    return 'DM policy is disabled. Enable only if this is intentional for this provider.';
-  if (channel.dmPolicy === 'allowlist')
-    return 'Allowlist mode active. Keep allowFrom list updated for trusted senders.';
-  return 'Channel is healthy and ready.';
+    return 'DM open with wildcard allowFrom. Consider pairing/allowlist.';
+  if (channel.dmPolicy === 'disabled') return 'DM disabled. Enable only if intentional.';
+  if (channel.dmPolicy === 'allowlist') return 'Allowlist active. Keep allowFrom updated.';
+  return '';
+}
+
+function statusLabel(channel: OpenClawChannel): string {
+  if (!channel.configured) return 'Not Configured';
+  if (channel.connected) return 'Connected';
+  return 'Disconnected';
+}
+
+function SummaryGauge(props: {
+  readonly label: string;
+  readonly value: number;
+  readonly total: number;
+  readonly color: string;
+}): JSX.Element {
+  const pct = props.total > 0 ? (props.value / props.total) * 100 : 0;
+  return (
+    <div className="ch-summary-gauge">
+      <div className="ch-summary-gauge-head">
+        <span className="ch-summary-gauge-label">{props.label}</span>
+        <span className="ch-summary-gauge-value">
+          {props.value}
+          <span className="ch-summary-gauge-total">/{props.total}</span>
+        </span>
+      </div>
+      <div className="ch-summary-gauge-track">
+        <div
+          className="ch-summary-gauge-fill"
+          style={{ width: `${String(Math.min(100, pct))}%`, background: props.color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ChannelCard(props: {
+  readonly channel: OpenClawChannel;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+  readonly copiedKey: string | null;
+  readonly onCopy: (value: string, key: string) => void;
+  readonly onConfigure?: (() => void) | undefined;
+}): JSX.Element {
+  const { channel, expanded, onToggle, copiedKey, onCopy } = props;
+  const priority = channelPriority(channel);
+  const theme = getProviderTheme(channel.id);
+  const recommendation = channelRecommendation(channel);
+
+  return (
+    <article
+      className={`channel-card channel-card-v2 channel-priority-${priority}${expanded ? ' channel-card-expanded' : ''}`}
+      onClick={onToggle}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+    >
+      <header className="channel-card-head-v2">
+        <div className="ch-provider-icon" style={{ background: theme.bg, color: theme.color }}>
+          {theme.letter}
+        </div>
+        <div className="ch-card-title-col">
+          <div className="ch-card-name-row">
+            <strong className="channel-card-title">{channel.name}</strong>
+            <span
+              className={`ch-status-dot ${statusDotClass(channel)}`}
+              title={statusLabel(channel)}
+            />
+          </div>
+          <div className="ch-card-sub-row">
+            <span className="ch-card-status-text">{statusLabel(channel)}</span>
+            <span className="ch-card-dm-pill">
+              <span className={`ch-dm-dot ${dmBadgeTone(channel.dmPolicy)}`} />
+              DM: {channel.dmPolicy}
+            </span>
+          </div>
+        </div>
+        <span
+          className={`ch-expand-chevron${expanded ? ' ch-expand-open' : ''}`}
+          aria-hidden="true"
+        >
+          &#x25BE;
+        </span>
+      </header>
+
+      {expanded ? (
+        <div className="ch-card-details">
+          <div className="ch-detail-grid">
+            <div className="ch-detail-item">
+              <span className="ch-detail-label">AllowFrom</span>
+              <span className="ch-detail-value">
+                {channel.allowFromCount}
+                {channel.allowFromHasWildcard ? ' (wildcard)' : ''}
+              </span>
+            </div>
+            <div className="ch-detail-item">
+              <span className="ch-detail-label">Groups</span>
+              <span className="ch-detail-value">
+                {channel.groupPolicy}
+                {channel.hasGroups ? ' (active)' : ''}
+              </span>
+            </div>
+            {channel.accountSummary.total > 0 ? (
+              <div className="ch-detail-item">
+                <span className="ch-detail-label">Accounts</span>
+                <span className="ch-detail-value">
+                  {channel.accountSummary.connected}/{channel.accountSummary.total} connected
+                </span>
+              </div>
+            ) : null}
+            <div className="ch-detail-item">
+              <span className="ch-detail-label">Messages</span>
+              <span className="ch-detail-value">{channel.messageCount ?? 0}</span>
+            </div>
+          </div>
+          {recommendation ? <p className="channel-recommendation">{recommendation}</p> : null}
+          <div className="ch-card-actions">
+            <button
+              className="btn-ghost"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy(`channels.${channel.id}`, `key-${channel.id}`);
+              }}
+            >
+              {copiedKey === `key-${channel.id}` ? 'Copied' : 'Copy Key'}
+            </button>
+            {channel.lastMessageAt ? (
+              <span className="ch-card-last-msg">
+                Last msg {formatRelativeTime(channel.lastMessageAt)}
+              </span>
+            ) : null}
+            {props.onConfigure ? (
+              <button
+                className="dialog-btn-primary"
+                type="button"
+                style={{ fontSize: '0.72rem', padding: '3px 10px' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onConfigure?.();
+                }}
+              >
+                Configure
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
 }
 
 export function ChannelsView(props: ChannelsViewProps): JSX.Element {
@@ -130,6 +291,13 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
   const [showOnlyAttention, setShowOnlyAttention] = useState(false);
   const [showOnlyConfigured, setShowOnlyConfigured] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [configHintOpen, setConfigHintOpen] = useState(false);
+  const [configDialogChannel, setConfigDialogChannel] = useState<OpenClawChannel | null>(null);
+  const [agentOptions, setAgentOptions] = useState<readonly { id: string; name: string }[]>([]);
+  const [modelOptionsForDialog, setModelOptionsForDialog] = useState<
+    readonly { id: string; name: string }[]
+  >([]);
 
   const isConnected = props.status === 'connected' || props.status === 'degraded';
   const headers = useMemo(() => authHeaders(props.token), [props.token]);
@@ -172,19 +340,129 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
     if (!isConnected) return;
     void fetchChannels();
     const interval = setInterval(() => {
-      void fetchChannels();
+      if (!document.hidden) void fetchChannels();
     }, 30_000);
     return () => {
       clearInterval(interval);
     };
   }, [isConnected, fetchChannels]);
 
+  const openConfigDialog = useCallback(
+    async (channel: OpenClawChannel) => {
+      setConfigDialogChannel(channel);
+      if (!selectedTargetId) return;
+      try {
+        const [agRes, modRes] = await Promise.all([
+          fetch(
+            `${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/agents`,
+            { headers }
+          ),
+          fetch(
+            `${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/models`,
+            { headers }
+          ),
+        ]);
+        if (agRes.ok) {
+          const data = (await agRes.json()) as { agents: OpenClawAgent[] };
+          setAgentOptions(data.agents.map((a) => ({ id: a.id, name: a.name || a.id })));
+        }
+        if (modRes.ok) {
+          const data = (await modRes.json()) as { models: OpenClawModelProfile[] };
+          setModelOptionsForDialog(data.models.map((m) => ({ id: m.id, name: m.name || m.id })));
+        }
+      } catch {
+        /* ignore */
+      }
+    },
+    [props.baseUrl, headers, selectedTargetId]
+  );
+
+  const handleChannelConfig = useCallback(
+    (data: {
+      enabled?: boolean;
+      dmPolicy?: string;
+      groupPolicy?: string;
+      modelOverride?: string;
+    }) => {
+      if (!configDialogChannel || !selectedTargetId) return;
+      const cmds: { command: string; args: string[]; description: string }[] = [];
+      if (data.enabled !== undefined)
+        cmds.push({
+          command: 'openclaw',
+          args: [
+            'config',
+            'set',
+            `channels.${configDialogChannel.id}.enabled`,
+            String(data.enabled),
+          ],
+          description: `Toggle channel`,
+        });
+      if (data.dmPolicy)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `channels.${configDialogChannel.id}.dmPolicy`, data.dmPolicy],
+          description: `Set DM policy`,
+        });
+      if (data.groupPolicy)
+        cmds.push({
+          command: 'openclaw',
+          args: [
+            'config',
+            'set',
+            `channels.${configDialogChannel.id}.groupPolicy`,
+            data.groupPolicy,
+          ],
+          description: `Set group policy`,
+        });
+      if (data.modelOverride)
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `channels.${configDialogChannel.id}.model`, data.modelOverride],
+          description: `Set model override`,
+        });
+      if (cmds.length > 0) {
+        void fetch(`${props.baseUrl}/openclaw/queue`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId: selectedTargetId, commands: cmds }),
+        });
+      }
+      setConfigDialogChannel(null);
+    },
+    [configDialogChannel, selectedTargetId, props.baseUrl, headers]
+  );
+
+  const handleChannelBind = useCallback(
+    (agentId: string, modelOverride?: string) => {
+      if (!configDialogChannel || !selectedTargetId) return;
+      const cmds: { command: string; args: string[]; description: string }[] = [
+        {
+          command: 'openclaw',
+          args: ['config', 'set', `channels.${configDialogChannel.id}.agents.+`, agentId],
+          description: `Bind agent`,
+        },
+      ];
+      if (modelOverride) {
+        cmds.push({
+          command: 'openclaw',
+          args: ['config', 'set', `channels.${configDialogChannel.id}.model`, modelOverride],
+          description: `Set model override`,
+        });
+      }
+      void fetch(`${props.baseUrl}/openclaw/queue`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId: selectedTargetId, commands: cmds }),
+      });
+    },
+    [configDialogChannel, selectedTargetId, props.baseUrl, headers]
+  );
+
   const summary = useMemo(() => {
     const configured = channels.filter((c) => c.configured).length;
     const connected = channels.filter((c) => c.connected).length;
-    const dmOpen = channels.filter((c) => c.dmPolicy === 'open').length;
     const riskyDm = channels.filter((c) => c.dmPolicy === 'open' && c.allowFromHasWildcard).length;
-    return { total: channels.length, configured, connected, dmOpen, riskyDm };
+    return { total: channels.length, configured, connected, riskyDm };
   }, [channels]);
 
   const sortedChannels = useMemo(() => {
@@ -223,6 +501,10 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
       .catch(() => undefined);
   };
 
+  const toggleCard = (id: string): void => {
+    setExpandedCardId((prev) => (prev === id ? null : id));
+  };
+
   if (!isConnected) {
     return (
       <section className="view-panel">
@@ -239,18 +521,20 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
     );
   }
 
+  const needsConfigHint =
+    configStatus === 'missing' || configStatus === 'empty' || configStatus === 'invalid';
+
   return (
     <section className="view-panel">
       <div className="view-header">
         <h2 className="view-title">Channels</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="ch-header-actions">
           {targets.length > 0 ? (
             <select
               value={selectedTargetId ?? ''}
               onChange={(e) => {
                 setSelectedTargetId(e.target.value || null);
               }}
-              style={{ maxWidth: 260 }}
             >
               {targets.map((target) => (
                 <option key={target.id} value={target.id}>
@@ -271,6 +555,95 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
         </div>
       </div>
 
+      {/* Summary Strip */}
+      {summary.total > 0 ? (
+        <div className="ch-summary-strip">
+          <SummaryGauge
+            label="Connected"
+            value={summary.connected}
+            total={summary.total}
+            color="var(--green)"
+          />
+          <SummaryGauge
+            label="Configured"
+            value={summary.configured}
+            total={summary.total}
+            color="var(--accent)"
+          />
+          {summary.riskyDm > 0 ? (
+            <div className="ch-summary-alert">
+              <span className="ch-summary-alert-dot" />
+              {summary.riskyDm} DM risk
+            </div>
+          ) : null}
+          {configPath ? <div className="ch-summary-config-path mono">{configPath}</div> : null}
+        </div>
+      ) : null}
+
+      {/* Compact config hint */}
+      {needsConfigHint ? (
+        <div
+          className={`ch-config-banner${configStatus === 'invalid' ? ' ch-config-banner-error' : ''}`}
+        >
+          <div className="ch-config-banner-row">
+            <span className="ch-config-banner-icon">{configStatus === 'invalid' ? '!' : 'i'}</span>
+            <span className="ch-config-banner-text">
+              {configStatus === 'missing'
+                ? 'Config not detected for this target'
+                : configStatus === 'empty'
+                  ? 'Config file is empty'
+                  : 'Config file has invalid JSON'}
+            </span>
+            {configCandidates.length > 0 || configStatus !== 'invalid' ? (
+              <button
+                className="ch-config-banner-toggle"
+                type="button"
+                onClick={() => {
+                  setConfigHintOpen((v) => !v);
+                }}
+              >
+                {configHintOpen ? 'Hide' : 'Details'}
+              </button>
+            ) : null}
+          </div>
+          {configHintOpen ? (
+            <div className="ch-config-banner-details">
+              {configCandidates.length > 0 ? (
+                <div className="ch-config-paths">
+                  Expected: <span className="mono">{configCandidates.join(' / ')}</span>
+                </div>
+              ) : null}
+              <div className="ch-config-actions">
+                {configCandidates[0] ? (
+                  <button
+                    className="btn-ghost"
+                    type="button"
+                    onClick={() => {
+                      handleCopy(configCandidates[0]!, 'copy-config-path');
+                    }}
+                  >
+                    {copiedKey === 'copy-config-path' ? 'Copied' : 'Copy Path'}
+                  </button>
+                ) : null}
+                <button
+                  className="btn-ghost"
+                  type="button"
+                  onClick={() => {
+                    handleCopy(
+                      '{\n  "channels": {\n    "discord": {\n      "enabled": true,\n      "dmPolicy": "pairing",\n      "groupsEnabled": false\n    }\n  }\n}',
+                      'copy-config-template'
+                    );
+                  }}
+                >
+                  {copiedKey === 'copy-config-template' ? 'Copied' : 'Copy Template'}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Toolbar */}
       <div className="channels-toolbar">
         <input
           type="search"
@@ -301,94 +674,6 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
           </button>
         </div>
       </div>
-
-      <div className="task-stats-bar" style={{ marginBottom: 12 }}>
-        <div className="task-stat">
-          <span className="task-stat-label">Total</span>
-          <span className="status-strip-value mono">{summary.total}</span>
-        </div>
-        <div className="task-stat">
-          <span className="task-stat-label">Configured</span>
-          <span className="status-strip-value mono">{summary.configured}</span>
-        </div>
-        <div className="task-stat">
-          <span className="task-stat-label">Connected</span>
-          <span className="status-strip-value mono">{summary.connected}</span>
-        </div>
-        <div className="task-stat">
-          <span className="task-stat-label">DM Open</span>
-          <span className="status-strip-value mono">{summary.dmOpen}</span>
-        </div>
-        <div className="task-stat">
-          <span className="task-stat-label">DM Risk</span>
-          <span className="status-strip-value mono">{summary.riskyDm}</span>
-        </div>
-      </div>
-
-      {configPath ? (
-        <div className="task-stats-bar" style={{ marginBottom: 12 }}>
-          <div className="task-stat">
-            <span className="task-stat-label">Config</span>
-            <span className="status-strip-value mono">{configPath}</span>
-          </div>
-        </div>
-      ) : null}
-
-      {configStatus === 'missing' ? (
-        <div className="channels-config-hint">
-          Config file is currently empty/not detected for this target. Run OpenClaw setup on the
-          selected target to generate the correct path.
-          {configCandidates.length > 0 ? (
-            <div style={{ marginTop: 6, fontSize: '0.72rem' }}>
-              Expected paths: <span className="mono">{configCandidates.join('  •  ')}</span>
-            </div>
-          ) : null}
-          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {configCandidates[0] ? (
-              <button
-                className="btn-ghost"
-                type="button"
-                onClick={() => {
-                  handleCopy(configCandidates[0]!, 'copy-config-path');
-                }}
-              >
-                {copiedKey === 'copy-config-path' ? 'Path Copied' : 'Copy Config Path'}
-              </button>
-            ) : null}
-            <button
-              className="btn-ghost"
-              type="button"
-              onClick={() => {
-                handleCopy(
-                  `{\n  "channels": {\n    "discord": {\n      "enabled": true,\n      "dmPolicy": "pairing",\n      "groupsEnabled": false\n    }\n  }\n}`,
-                  'copy-config-template'
-                );
-              }}
-            >
-              {copiedKey === 'copy-config-template' ? 'Template Copied' : 'Copy Starter Template'}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {configStatus === 'empty' ? (
-        <div className="channels-config-hint">
-          Config file exists but is empty. Add valid JSON channel configuration before runtime
-          checks can pass.
-          {configPath ? (
-            <div style={{ marginTop: 6, fontSize: '0.72rem' }}>
-              Detected path: <span className="mono">{configPath}</span>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {configStatus === 'invalid' ? (
-        <div className="channels-config-hint channels-config-hint-warn" role="alert">
-          Config file exists but is invalid JSON. Fix `openclaw.json` before channel status can be
-          trusted.
-        </div>
-      ) : null}
 
       {error ? (
         <div className="task-error-banner" role="alert">
@@ -425,77 +710,19 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
                 <span>{groupedChannels.attention.length} channels</span>
               </div>
               <div className="channels-grid">
-                {groupedChannels.attention.map((channel) => {
-                  const priority = channelPriority(channel);
-                  return (
-                    <article
-                      key={channel.id}
-                      className={`channel-card channel-card-smart channel-priority-${priority}`}
-                    >
-                      <header className="channel-card-head">
-                        <div>
-                          <strong className="channel-card-title">{channel.name}</strong>
-                          <div className="tone-muted channel-card-subtitle">{channel.id}</div>
-                        </div>
-                        <div className="channel-card-badges">
-                          <span className={`badge ${channelBadgeTone(channel)}`}>
-                            {channel.configured
-                              ? channel.connected
-                                ? 'connected'
-                                : 'configured'
-                              : 'not configured'}
-                          </span>
-                          <span className={`badge ${channelPriorityTone(priority)}`}>
-                            {priority === 'high' ? 'setup first' : 'needs review'}
-                          </span>
-                        </div>
-                      </header>
-                      <div className="channel-card-meta">
-                        <span className={`badge ${dmBadgeTone(channel.dmPolicy)}`}>
-                          DM: {channel.dmPolicy}
-                        </span>
-                        <span className="badge tone-neutral">
-                          allowFrom: {channel.allowFromCount}
-                        </span>
-                        {channel.allowFromHasWildcard ? (
-                          <span className="badge tone-warn">allowFrom *</span>
-                        ) : null}
-                        <span className="badge tone-neutral">group: {channel.groupPolicy}</span>
-                        <span
-                          className={`badge ${channel.hasGroups ? 'tone-neutral' : 'tone-muted'}`}
-                        >
-                          {channel.hasGroups ? 'groups enabled' : 'groups off'}
-                        </span>
-                        {channel.accountSummary.total > 0 ? (
-                          <span className="badge tone-neutral">
-                            accounts {channel.accountSummary.connected}/
-                            {channel.accountSummary.total}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="channel-recommendation">{channelRecommendation(channel)}</p>
-                      <div className="channel-quick-actions">
-                        <button
-                          className="btn-ghost"
-                          type="button"
-                          onClick={() => {
-                            handleCopy(`channels.${channel.id}`, `key-${channel.id}`);
-                          }}
-                        >
-                          {copiedKey === `key-${channel.id}` ? 'Key Copied' : 'Copy Channel Key'}
-                        </button>
-                      </div>
-                      <div className="channel-card-footer">
-                        {channel.lastMessageAt ? (
-                          <span>Last message {formatRelativeTime(channel.lastMessageAt)}</span>
-                        ) : (
-                          <span>No recent messages</span>
-                        )}
-                        <span className="mono">{channel.messageCount ?? 0} msgs</span>
-                      </div>
-                    </article>
-                  );
-                })}
+                {groupedChannels.attention.map((channel) => (
+                  <ChannelCard
+                    key={channel.id}
+                    channel={channel}
+                    expanded={expandedCardId === channel.id}
+                    onToggle={() => {
+                      toggleCard(channel.id);
+                    }}
+                    copiedKey={copiedKey}
+                    onCopy={handleCopy}
+                    onConfigure={() => void openConfigDialog(channel)}
+                  />
+                ))}
               </div>
             </section>
           ) : null}
@@ -503,71 +730,49 @@ export function ChannelsView(props: ChannelsViewProps): JSX.Element {
           {groupedChannels.healthy.length > 0 ? (
             <section className="channels-section">
               <div className="channels-section-head">
-                <h3>Healthy Channels</h3>
+                <h3>Healthy</h3>
                 <span>{groupedChannels.healthy.length} channels</span>
               </div>
               <div className="channels-grid">
                 {groupedChannels.healthy.map((channel) => (
-                  <article
+                  <ChannelCard
                     key={channel.id}
-                    className="channel-card channel-card-smart channel-priority-low"
-                  >
-                    <header className="channel-card-head">
-                      <div>
-                        <strong className="channel-card-title">{channel.name}</strong>
-                        <div className="tone-muted channel-card-subtitle">{channel.id}</div>
-                      </div>
-                      <div className="channel-card-badges">
-                        <span className={`badge ${channelBadgeTone(channel)}`}>connected</span>
-                        <span className={`badge ${channelPriorityTone('low')}`}>healthy</span>
-                      </div>
-                    </header>
-                    <div className="channel-card-meta">
-                      <span className={`badge ${dmBadgeTone(channel.dmPolicy)}`}>
-                        DM: {channel.dmPolicy}
-                      </span>
-                      <span className="badge tone-neutral">
-                        allowFrom: {channel.allowFromCount}
-                      </span>
-                      <span className="badge tone-neutral">group: {channel.groupPolicy}</span>
-                      <span
-                        className={`badge ${channel.hasGroups ? 'tone-neutral' : 'tone-muted'}`}
-                      >
-                        {channel.hasGroups ? 'groups enabled' : 'groups off'}
-                      </span>
-                      {channel.accountSummary.total > 0 ? (
-                        <span className="badge tone-neutral">
-                          accounts {channel.accountSummary.connected}/{channel.accountSummary.total}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="channel-recommendation">{channelRecommendation(channel)}</p>
-                    <div className="channel-quick-actions">
-                      <button
-                        className="btn-ghost"
-                        type="button"
-                        onClick={() => {
-                          handleCopy(`channels.${channel.id}`, `key-${channel.id}`);
-                        }}
-                      >
-                        {copiedKey === `key-${channel.id}` ? 'Key Copied' : 'Copy Channel Key'}
-                      </button>
-                    </div>
-                    <div className="channel-card-footer">
-                      {channel.lastMessageAt ? (
-                        <span>Last message {formatRelativeTime(channel.lastMessageAt)}</span>
-                      ) : (
-                        <span>No recent messages</span>
-                      )}
-                      <span className="mono">{channel.messageCount ?? 0} msgs</span>
-                    </div>
-                  </article>
+                    channel={channel}
+                    expanded={expandedCardId === channel.id}
+                    onToggle={() => {
+                      toggleCard(channel.id);
+                    }}
+                    copiedKey={copiedKey}
+                    onCopy={handleCopy}
+                    onConfigure={() => void openConfigDialog(channel)}
+                  />
                 ))}
               </div>
             </section>
           ) : null}
         </>
       )}
+
+      {configDialogChannel ? (
+        <ChannelConfigDialog
+          channelId={configDialogChannel.id}
+          channelName={configDialogChannel.name}
+          initialEnabled={configDialogChannel.configured}
+          initialDmPolicy={
+            configDialogChannel.dmPolicy !== 'unknown' ? configDialogChannel.dmPolicy : undefined
+          }
+          initialGroupPolicy={
+            configDialogChannel.groupPolicy !== 'unknown'
+              ? configDialogChannel.groupPolicy
+              : undefined
+          }
+          agentOptions={agentOptions}
+          modelOptions={modelOptionsForDialog}
+          onSubmit={handleChannelConfig}
+          onBind={handleChannelBind}
+          onClose={() => setConfigDialogChannel(null)}
+        />
+      ) : null}
     </section>
   );
 }

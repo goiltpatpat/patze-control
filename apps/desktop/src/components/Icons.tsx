@@ -281,3 +281,150 @@ export function IconRepeat(props: IconProps): JSX.Element {
     </Icon>
   );
 }
+
+export function IconFolder(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </Icon>
+  );
+}
+
+export function IconFolderOpen(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M5 19a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2 2h4a2 2 0 0 1 2 2v1" />
+      <path d="M20 13H8.5a2 2 0 0 0-1.9 1.3L5 19h12.5a2 2 0 0 0 1.9-1.3L21 13z" />
+    </Icon>
+  );
+}
+
+export function IconFile(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+    </Icon>
+  );
+}
+
+export function IconDollar(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <line x1="12" y1="1" x2="12" y2="23" />
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </Icon>
+  );
+}
+
+export function IconConsole(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="3" width="20" height="18" rx="2" />
+      <polyline points="6 9 10 13 6 17" />
+      <line x1="14" y1="17" x2="18" y2="17" />
+    </Icon>
+  );
+}
+
+export function IconChevronRight(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <polyline points="9 18 15 12 9 6" />
+    </Icon>
+  );
+}
+
+export function IconChevronDown(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <polyline points="6 9 12 15 18 9" />
+    </Icon>
+  );
+}
+
+export function IconEdit(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </Icon>
+  );
+}
+
+export function IconSave(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </Icon>
+  );
+}
+
+export function IconBrain(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M9.5 3a3.5 3.5 0 0 0-3.5 3.5c0 .8.27 1.53.72 2.12A3.5 3.5 0 0 0 5 11.5c0 1.35.77 2.52 1.9 3.1a3.5 3.5 0 0 0 6.2 0 3.5 3.5 0 0 0 6.2-3.1 3.5 3.5 0 0 0-1.72-2.88 3.5 3.5 0 1 0-6.1-3.12H9.5z" />
+      <path d="M9 8.5c1 .25 2 .25 3 0" />
+      <path d="M9 12c1 .25 2 .25 3 0" />
+      <path d="M15 8.5c-1 .25-2 .25-3 0" />
+      <path d="M15 12c-1 .25-2 .25-3 0" />
+    </Icon>
+  );
+}
+
+export function IconBuilding(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="2" width="18" height="20" rx="2" />
+      <line x1="7" y1="6" x2="7.01" y2="6" strokeWidth="2.5" />
+      <line x1="12" y1="6" x2="12.01" y2="6" strokeWidth="2.5" />
+      <line x1="17" y1="6" x2="17.01" y2="6" strokeWidth="2.5" />
+      <line x1="7" y1="10" x2="7.01" y2="10" strokeWidth="2.5" />
+      <line x1="12" y1="10" x2="12.01" y2="10" strokeWidth="2.5" />
+      <line x1="17" y1="10" x2="17.01" y2="10" strokeWidth="2.5" />
+      <line x1="7" y1="14" x2="7.01" y2="14" strokeWidth="2.5" />
+      <line x1="12" y1="14" x2="12.01" y2="14" strokeWidth="2.5" />
+      <line x1="17" y1="14" x2="17.01" y2="14" strokeWidth="2.5" />
+      <path d="M10 22v-4a2 2 0 0 1 4 0v4" />
+    </Icon>
+  );
+}
+
+export function IconCpu(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <rect x="9" y="9" width="6" height="6" rx="1" />
+      <path d="M15 2v2" />
+      <path d="M15 20v2" />
+      <path d="M2 15h2" />
+      <path d="M2 9h2" />
+      <path d="M20 15h2" />
+      <path d="M20 9h2" />
+      <path d="M9 2v2" />
+      <path d="M9 20v2" />
+    </Icon>
+  );
+}
+
+export function IconBook(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <line x1="8" y1="7" x2="16" y2="7" />
+      <line x1="8" y1="11" x2="13" y2="11" />
+    </Icon>
+  );
+}
+
+export function IconPlus(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </Icon>
+  );
+}

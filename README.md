@@ -253,6 +253,38 @@ With explicit ports/expiry:
   --expires-in 7d
 ```
 
+## Install
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/goiltpatpat/patze-control/releases):
+
+| Platform              | Format                     |
+| --------------------- | -------------------------- |
+| macOS (Apple Silicon) | `.dmg`                     |
+| macOS (Intel)         | `.dmg`                     |
+| Windows               | `.exe` installer, portable |
+| Linux                 | `.deb` / `.AppImage`       |
+
+## Releasing
+
+Releases are automated via GitHub Actions. To cut a new release:
+
+```bash
+# 1. Generate signing keys (first time only)
+pnpm --filter @patze/desktop tauri signer generate -w ~/.tauri/patze-control.key
+
+# 2. Add secrets to GitHub repo settings:
+#    TAURI_SIGNING_PRIVATE_KEY      — contents of ~/.tauri/patze-control.key
+#    TAURI_SIGNING_PRIVATE_KEY_PASSWORD — the password you chose
+
+# 3. Copy the public key into apps/desktop/src-tauri/tauri.conf.json → plugins.updater.pubkey
+
+# 4. Tag and push
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The `release.yml` workflow builds for all platforms and publishes a GitHub Release with installers and auto-update manifest (`latest.json`).
+
 ## Reliability and Security Notes
 
 - Event ID dedup across ingest/client paths

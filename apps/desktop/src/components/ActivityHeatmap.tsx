@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 
 export interface HeatmapEvent {
   readonly ts: string;
@@ -91,10 +91,8 @@ export function ActivityHeatmap(props: ActivityHeatmapProps): JSX.Element {
 
           {/* Day rows */}
           {DAYS.map((day, dayIndex) => (
-            <>
-              <div key={`d${day}`} className="heatmap-day-label">
-                {day}
-              </div>
+            <Fragment key={day}>
+              <div className="heatmap-day-label">{day}</div>
               {HOURS.map((hour) => {
                 const count = grid[dayIndex]?.[hour] ?? 0;
                 return (
@@ -118,7 +116,7 @@ export function ActivityHeatmap(props: ActivityHeatmapProps): JSX.Element {
                   />
                 );
               })}
-            </>
+            </Fragment>
           ))}
         </div>
       </div>

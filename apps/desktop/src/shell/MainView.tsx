@@ -12,14 +12,22 @@ import type { UseOpenClawTargetsResult } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus, FrontendUnifiedSnapshot } from '../types';
 import { AgentsView } from '../views/AgentsView';
 import { ChannelsView } from '../views/ChannelsView';
+import { CostsView } from '../views/CostsView';
 import { LogsView } from '../views/LogsView';
+import { MemoryBrowserView } from '../views/MemoryBrowserView';
 import { MachinesView } from '../views/MachinesView';
+import { OfficeView } from '../views/OfficeView';
 import { OverviewView } from '../views/OverviewView';
 import { RunsView } from '../views/RunsView';
 import { SessionsView } from '../views/SessionsView';
 import { SettingsView } from '../views/SettingsView';
+import { SystemMonitorView } from '../views/SystemMonitorView';
 import { TasksView } from '../views/TasksView';
+import { TerminalView } from '../views/TerminalView';
 import { TunnelsView, type TunnelEndpointRow } from '../views/TunnelsView';
+import { WorkspaceView } from '../views/WorkspaceView';
+import { ModelsView } from '../views/ModelsView';
+import { RecipesView } from '../views/RecipesView';
 import type { AppRoute, RouteFilter, RouteState } from './routes';
 
 export interface MainViewProps {
@@ -61,7 +69,15 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
         />
       );
     case 'agents':
-      return <AgentsView snapshot={props.snapshot} filter={filter} />;
+      return (
+        <AgentsView
+          snapshot={props.snapshot}
+          filter={filter}
+          baseUrl={props.baseUrl}
+          token={props.token}
+          targetId={props.openclawTargets.entries[0]?.target.id ?? undefined}
+        />
+      );
     case 'tunnels':
       return (
         <TunnelsView
@@ -112,6 +128,56 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           openclawTargets={props.openclawTargets.entries}
         />
       );
+    case 'monitor':
+      return <SystemMonitorView snapshot={props.snapshot} />;
+    case 'workspace':
+      return (
+        <WorkspaceView
+          baseUrl={props.baseUrl}
+          token={props.token}
+          connected={props.status === 'connected' || props.status === 'degraded'}
+          {...(filter.openFile ? { initialFilePath: filter.openFile } : {})}
+          {...(filter.line ? { initialLine: filter.line } : {})}
+        />
+      );
+    case 'memory':
+      return (
+        <MemoryBrowserView
+          baseUrl={props.baseUrl}
+          token={props.token}
+          connected={props.status === 'connected' || props.status === 'degraded'}
+        />
+      );
+    case 'terminal':
+      return (
+        <TerminalView
+          baseUrl={props.baseUrl}
+          token={props.token}
+          connected={props.status === 'connected' || props.status === 'degraded'}
+        />
+      );
+    case 'costs':
+      return <CostsView snapshot={props.snapshot} />;
+    case 'models':
+      return (
+        <ModelsView
+          baseUrl={props.baseUrl}
+          token={props.token}
+          connected={props.status === 'connected' || props.status === 'degraded'}
+          targetId={props.openclawTargets.entries[0]?.target.id ?? null}
+        />
+      );
+    case 'recipes':
+      return (
+        <RecipesView
+          baseUrl={props.baseUrl}
+          token={props.token}
+          connected={props.status === 'connected' || props.status === 'degraded'}
+          targetId={props.openclawTargets.entries[0]?.target.id ?? null}
+        />
+      );
+    case 'office':
+      return <OfficeView openclawTargets={props.openclawTargets.entries} />;
     case 'settings':
       return (
         <SettingsView

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useToast } from './components/Toast';
 import { useBridgeConnections } from './hooks/useBridgeConnections';
 import { useEndpointManager } from './hooks/useEndpointManager';
 import { useManagedBridges } from './hooks/useManagedBridges';
@@ -69,8 +68,6 @@ export function App(): JSX.Element {
   const [appReady, setAppReady] = useState(moduleAutoConnectDone);
   const transitionLockRef = useRef(false);
   const { state, connect, disconnect } = useControlMonitor();
-  const { addToast } = useToast();
-  const prevStatusRef = useRef(state.status);
 
   const connectRef = useRef(connect);
   connectRef.current = connect;
@@ -117,30 +114,6 @@ export function App(): JSX.Element {
     };
   }, []);
 
-  useEffect(() => {
-    const prev = prevStatusRef.current;
-    const next = state.status;
-    prevStatusRef.current = next;
-    if (prev === next) return;
-
-    switch (next) {
-      case 'connected':
-        addToast('success', 'Connected to control plane');
-        break;
-      case 'error':
-        addToast('error', state.errorMessage ?? 'Connection failed');
-        break;
-      case 'idle':
-        if (prev === 'connected' || prev === 'degraded') {
-          addToast('warn', 'Disconnected from control plane');
-        }
-        break;
-      case 'degraded':
-        addToast('warn', 'Connection degraded');
-        break;
-    }
-  }, [state.status, state.errorMessage, addToast]);
-
   const handleBaseUrlChange = (value: string): void => {
     setBaseUrl(value);
     persistString(STORAGE_KEY_URL, value);
@@ -151,9 +124,9 @@ export function App(): JSX.Element {
     persistString(STORAGE_KEY_TOKEN, value);
   };
 
-  const endpointManager = useEndpointManager(baseUrl);
+  const endpointManager = useEndpointManager(baseUrl, token);
   const isConnected = state.status === 'connected' || state.status === 'degraded';
-  const bridgeConnections = useBridgeConnections(baseUrl, isConnected);
+  const bridgeConnections = useBridgeConnections(baseUrl, token, isConnected);
   const managedBridges = useManagedBridges(baseUrl, token, isConnected);
   useEventToasts(state.snapshot);
 

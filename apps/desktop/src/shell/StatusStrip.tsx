@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MonitorState } from '../control-monitor';
 import { HealthBadge } from '../components/badges/HealthBadge';
 import { IconClock } from '../components/Icons';
@@ -34,21 +34,43 @@ function formatLastUpdated(value: string | null): string {
   }).format(date);
 }
 
-function computeFleetResource(
-  snapshot: FrontendUnifiedSnapshot
-): { avgCpu: number; avgMem: number } | null {
+interface FleetResource {
+  avgCpu: number;
+  avgMem: number;
+  avgDisk: number | null;
+}
+
+function computeFleetResource(snapshot: FrontendUnifiedSnapshot): FleetResource | null {
   const withResource = snapshot.machines.filter((m) => m.lastResource !== undefined);
   if (withResource.length === 0) return null;
   let totalCpu = 0;
   let totalMem = 0;
+  let totalDisk = 0;
+  let diskCount = 0;
   for (const m of withResource) {
     totalCpu += m.lastResource!.cpuPct;
     totalMem += m.lastResource!.memoryPct;
+    if (m.lastResource!.diskPct !== undefined) {
+      totalDisk += m.lastResource!.diskPct;
+      diskCount += 1;
+    }
   }
   return {
     avgCpu: totalCpu / withResource.length,
     avgMem: totalMem / withResource.length,
+    avgDisk: diskCount > 0 ? totalDisk / diskCount : null,
   };
+}
+
+function countAgents(snapshot: FrontendUnifiedSnapshot): number {
+  const agentIds = new Set<string>();
+  for (const session of snapshot.sessions) {
+    if (session.agentId) agentIds.add(session.agentId);
+  }
+  for (const run of snapshot.runs) {
+    if (run.agentId) agentIds.add(run.agentId);
+  }
+  return agentIds.size;
 }
 
 function gaugeTone(pct: number): string {
@@ -57,10 +79,15 @@ function gaugeTone(pct: number): string {
   return 'tone-good';
 }
 
-function MiniGauge(props: { label: string; value: number }): JSX.Element {
+function MiniGauge(props: { label: string; value: number; onClick?: () => void }): JSX.Element {
   const pct = Math.min(100, Math.max(0, props.value));
+  const Tag = props.onClick ? 'button' : 'span';
   return (
-    <span className="status-strip-gauge">
+    <Tag
+      className={`status-strip-gauge${props.onClick ? ' status-strip-gauge-clickable' : ''}`}
+      onClick={props.onClick}
+      title={props.onClick ? `View ${props.label} details` : undefined}
+    >
       <span className="status-strip-gauge-label">{props.label}</span>
       <span className="status-strip-gauge-value">{pct.toFixed(0)}%</span>
       <span className="status-strip-gauge-bar">
@@ -69,7 +96,7 @@ function MiniGauge(props: { label: string; value: number }): JSX.Element {
           style={{ width: `${String(pct)}%` }}
         />
       </span>
-    </span>
+    </Tag>
   );
 }
 
@@ -114,8 +141,7 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
   const { overallHealth: openclawHealth, count: openclawTargetCount } = props.openclawSummary;
   const fleetResource = snapshot ? computeFleetResource(snapshot) : null;
 
-  // Track connection uptime
-  const [connectedAtRef] = useState<{ current: number | null }>({ current: null });
+  const connectedAtRef = useRef<number | null>(null);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -124,20 +150,21 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
     } else if (props.state.status !== 'connected' && props.state.status !== 'degraded') {
       connectedAtRef.current = null;
     }
-  }, [props.state.status, connectedAtRef]);
+  }, [props.state.status]);
 
-  // Update uptime display every minute
   useEffect(() => {
-    if (!connectedAtRef.current) return;
+    if (props.state.status !== 'connected' && props.state.status !== 'degraded') return;
     const timer = setInterval(() => {
       setTick((t) => t + 1);
     }, 60_000);
     return () => {
       clearInterval(timer);
     };
-  }, [connectedAtRef]);
+  }, [props.state.status]);
 
   const isConnected = props.state.status === 'connected' || props.state.status === 'degraded';
+
+  const agentCount = snapshot ? countAgents(snapshot) : 0;
 
   return (
     <footer className="status-strip">
@@ -152,26 +179,70 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
         <span className="status-strip-label">Health</span>
         <HealthBadge health={overallHealth} />
       </span>
-      {/* Fleet Resource Mini Gauges */}
       {fleetResource ? (
         <>
           <span className="status-strip-sep" />
-          <MiniGauge label="CPU" value={fleetResource.avgCpu} />
-          <MiniGauge label="MEM" value={fleetResource.avgMem} />
+          <MiniGauge
+            label="CPU"
+            value={fleetResource.avgCpu}
+            onClick={() => {
+              navigate('monitor');
+            }}
+          />
+          <MiniGauge
+            label="MEM"
+            value={fleetResource.avgMem}
+            onClick={() => {
+              navigate('monitor');
+            }}
+          />
+          {fleetResource.avgDisk !== null ? (
+            <MiniGauge
+              label="DISK"
+              value={fleetResource.avgDisk}
+              onClick={() => {
+                navigate('monitor');
+              }}
+            />
+          ) : null}
           <span className="status-strip-sep" />
         </>
       ) : null}
-      <span className="status-strip-item">
+      {agentCount > 0 ? (
+        <button
+          className="status-strip-item status-strip-link"
+          onClick={() => {
+            navigate('agents');
+          }}
+          title="View agents"
+        >
+          <span className="status-strip-label">Agents</span>
+          <span className="status-strip-value">{agentCount}</span>
+        </button>
+      ) : null}
+      <button
+        className="status-strip-item status-strip-link"
+        onClick={() => {
+          navigate('runs');
+        }}
+        title="View runs"
+      >
         <span className="status-strip-label">Active Runs</span>
         <span className={`status-strip-value${activeRunsCount > 0 ? ' metric-active' : ''}`}>
           {activeRunsCount}
         </span>
-      </span>
+      </button>
       {props.bridgeCount > 0 ? (
-        <span className="status-strip-item">
+        <button
+          className="status-strip-item status-strip-link"
+          onClick={() => {
+            navigate('tunnels');
+          }}
+          title="View bridges"
+        >
           <span className="status-strip-label">Bridges</span>
           <span className="status-strip-value metric-active">{props.bridgeCount}</span>
-        </span>
+        </button>
       ) : null}
       <button
         className="status-strip-item status-strip-link"
@@ -194,7 +265,6 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
         <span className="status-strip-label">Updated</span>
         <span className="status-strip-value">{lastUpdated}</span>
       </span>
-      {/* Uptime */}
       {isConnected && connectedAtRef.current ? (
         <>
           <span className="status-strip-sep" />

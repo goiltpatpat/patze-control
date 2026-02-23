@@ -112,7 +112,17 @@ export interface UseEndpointManagerResult {
   readonly disconnectEndpoint: (id: string) => Promise<void>;
 }
 
-export function useEndpointManager(primaryBaseUrl: string): UseEndpointManagerResult {
+function buildAuthHeaders(token: string, json?: boolean): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (token.length > 0) headers.Authorization = `Bearer ${token}`;
+  if (json) headers['Content-Type'] = 'application/json';
+  return headers;
+}
+
+export function useEndpointManager(
+  primaryBaseUrl: string,
+  token: string
+): UseEndpointManagerResult {
   const [endpoints, setEndpoints] = useState<ManagedEndpoint[]>(() =>
     loadPersistedEndpoints().map(toManaged)
   );
@@ -167,7 +177,7 @@ export function useEndpointManager(primaryBaseUrl: string): UseEndpointManagerRe
 
         const res = await fetch(`${primaryBaseUrl}/remote/attach`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: buildAuthHeaders(token, true),
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(15_000),
         });
@@ -190,7 +200,7 @@ export function useEndpointManager(primaryBaseUrl: string): UseEndpointManagerRe
         updateEndpoint(id, (e) => patchEndpoint(e, { status: 'error', errorMessage: message }));
       }
     },
-    [primaryBaseUrl, updateEndpoint]
+    [primaryBaseUrl, token, updateEndpoint]
   );
 
   const disconnectEndpoint = useCallback(
@@ -206,7 +216,7 @@ export function useEndpointManager(primaryBaseUrl: string): UseEndpointManagerRe
       try {
         await fetch(`${primaryBaseUrl}/remote/detach`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: buildAuthHeaders(token, true),
           body: JSON.stringify({ attachmentId: ep.attachmentId }),
           signal: AbortSignal.timeout(10_000),
         });
@@ -218,13 +228,14 @@ export function useEndpointManager(primaryBaseUrl: string): UseEndpointManagerRe
         patchEndpoint(e, { status: 'disconnected', clearAttachmentId: true })
       );
     },
-    [primaryBaseUrl, updateEndpoint]
+    [primaryBaseUrl, token, updateEndpoint]
   );
 
   const syncAttachments = useCallback(async (): Promise<boolean> => {
     if (endpointsRef.current.length === 0) return true;
     try {
       const res = await fetch(`${primaryBaseUrl}/remote/attachments`, {
+        headers: buildAuthHeaders(token),
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) return false;
@@ -250,7 +261,7 @@ export function useEndpointManager(primaryBaseUrl: string): UseEndpointManagerRe
     } catch {
       return false;
     }
-  }, [primaryBaseUrl]);
+  }, [primaryBaseUrl, token]);
 
   const hasEndpoints = endpoints.length > 0;
 
