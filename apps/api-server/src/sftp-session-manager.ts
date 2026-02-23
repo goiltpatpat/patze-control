@@ -1,8 +1,42 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { Client, type SFTPWrapper } from 'ssh2';
 import type { BridgeSetupManager } from './bridge-setup-manager.js';
+
+async function loadKnownHostKeys(hostName: string, port: number): Promise<Set<string>> {
+  const keys = new Set<string>();
+  const knownHostsPath = path.join(os.homedir(), '.ssh', 'known_hosts');
+  try {
+    const content = await readFile(knownHostsPath, 'utf-8');
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const parts = trimmed.split(/\s+/);
+      const offset = parts[0]?.startsWith('@') ? 1 : 0;
+      const hostsField = parts[offset];
+      const keyBase64 = parts[offset + 2];
+      if (!hostsField || !keyBase64) continue;
+      const hosts = hostsField.split(',');
+      const matches = hosts.some((h) => {
+        const ht = h.trim();
+        if (ht.startsWith('[')) {
+          const close = ht.indexOf(']');
+          if (close <= 0) return false;
+          const bracketHost = ht.slice(1, close);
+          const portPart = ht.slice(close + 1);
+          if (!portPart.startsWith(':')) return false;
+          return bracketHost === hostName && Number(portPart.slice(1)) === port;
+        }
+        return port === 22 && ht === hostName;
+      });
+      if (matches) keys.add(keyBase64);
+    }
+  } catch {
+    /* known_hosts may not exist */
+  }
+  return keys;
+}
 
 export interface CustomSshConnection {
   readonly id: string;
@@ -54,8 +88,16 @@ export class SftpSessionManager {
   }
 
   private async saveConnections(): Promise<void> {
-    await mkdir(CONNECTIONS_DIR, { recursive: true });
-    await writeFile(CONNECTIONS_FILE, JSON.stringify(this.customConnections, null, 2), 'utf-8');
+    await mkdir(CONNECTIONS_DIR, { recursive: true, mode: 0o700 });
+    await writeFile(CONNECTIONS_FILE, JSON.stringify(this.customConnections, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
+    try {
+      await chmod(CONNECTIONS_FILE, 0o600);
+    } catch {
+      /* best effort */
+    }
   }
 
   async getConnections(): Promise<FileConnection[]> {
@@ -144,13 +186,24 @@ export class SftpSessionManager {
     const conn = this.customConnections.find((c) => c.id === connId);
     if (!conn) throw new Error(`Unknown connection: ${connId}`);
 
-    const resolvedKey = conn.keyPath.replace(/^~/, os.homedir());
+    const homeDir = os.homedir();
+    const resolvedKey = conn.keyPath.startsWith('~/')
+      ? path.join(homeDir, conn.keyPath.slice(2))
+      : conn.keyPath;
+    const sshDir = path.join(homeDir, '.ssh');
+    const normalizedKey = path.resolve(resolvedKey);
+    if (!normalizedKey.startsWith(sshDir + path.sep)) {
+      throw new Error(`SSH key path must be under ~/.ssh/ — got "${conn.keyPath}"`);
+    }
+
     let privateKey: Buffer;
     try {
-      privateKey = await readFile(resolvedKey);
+      privateKey = await readFile(normalizedKey);
     } catch {
       throw new Error(`Cannot read SSH key: ${conn.keyPath}`);
     }
+
+    const expectedKeys = await loadKnownHostKeys(conn.host, conn.port);
 
     const client = new Client();
 
@@ -163,6 +216,11 @@ export class SftpSessionManager {
         username: conn.user,
         privateKey,
         readyTimeout: 15_000,
+        hostVerifier: (key: Buffer): boolean => {
+          const presented = key.toString('base64');
+          if (expectedKeys.size === 0) return false;
+          return expectedKeys.has(presented);
+        },
       });
     });
 
