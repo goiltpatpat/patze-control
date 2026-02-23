@@ -240,29 +240,16 @@ export class BridgeSetupManager {
     const client = new Client();
     try {
       const privateKey = await this.loadSshKey(effective.keyPath);
-      try {
-        await this.connectClient(client, effective, privateKey, false);
-      } catch (connErr) {
-        const msg = connErr instanceof Error ? connErr.message : String(connErr);
-        const isHostVerifyFail =
-          msg.includes('verification failed') ||
-          msg.includes('Host denied') ||
-          msg.includes('Handshake failed') ||
-          msg.includes('KEY_EXCHANGE');
-        if (isHostVerifyFail) {
-          throw new Error(
-            `Host key not found in ~/.ssh/known_hosts for ${effective.host}:${effective.port}. ` +
-              `Run: ssh-keyscan -p ${effective.port} ${effective.host} >> ~/.ssh/known_hosts — ` +
-              `or click "Connect" which accepts the key on first use.`
-          );
-        }
-        throw connErr;
-      }
+      const acceptedNewKey = await this.connectClient(client, effective, privateKey, true);
 
       const result = await this.remoteExec(client, 'echo ok');
       if (result.exitCode !== 0 || result.stdout !== 'ok\n') {
         throw new Error('SSH pre-flight check failed (echo ok mismatch).');
       }
+
+      const warning = acceptedNewKey
+        ? `New host key accepted and saved for ${effective.host}:${effective.port}. Verify the fingerprint for production use.`
+        : undefined;
 
       return {
         ok: true,
@@ -270,7 +257,7 @@ export class BridgeSetupManager {
         sshHost: effective.host,
         sshUser: effective.user,
         sshPort: effective.port,
-        message: 'SSH pre-flight passed.',
+        message: warning ? `SSH pre-flight passed. ${warning}` : 'SSH pre-flight passed.',
       };
     } finally {
       try {
