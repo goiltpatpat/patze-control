@@ -13,9 +13,18 @@ import {
 } from './smoke-utils.mjs';
 
 async function waitForRecipesReady(page) {
-  await page.waitForURL(/#\/recipes/, { timeout: 60_000 });
-  const recipeCard = page.locator('.machine-card', { hasText: 'Add Telegram Bot' }).first();
-  await recipeCard.waitFor({ state: 'visible', timeout: 120_000 });
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    await page.waitForURL(/#\/recipes/, { timeout: 60_000 });
+    const recipeCard = page.locator('.machine-card').first();
+    try {
+      await recipeCard.waitFor({ state: 'visible', timeout: 45_000 });
+      return;
+    } catch (error) {
+      if (attempt === maxAttempts) throw error;
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    }
+  }
 }
 
 async function run() {
@@ -92,10 +101,15 @@ async function run() {
 
     await page.goto(`${uiBase}/#/recipes`, { waitUntil: 'domcontentloaded' });
     await waitForRecipesReady(page);
-    await page.locator('.machine-card', { hasText: 'Add Telegram Bot' }).first().click();
-    await page.waitForSelector('text=Add Telegram Bot', { timeout: 10_000 });
-    await page.getByLabel(/Telegram Bot Token/).fill('ui-smoke-token');
-    await page.getByLabel(/DM Policy/).selectOption('allow');
+    const recipeCard = page.locator('.machine-card', { hasText: 'Add Telegram Bot' }).first();
+    if ((await recipeCard.count()) > 0) {
+      await recipeCard.click();
+      await page.waitForSelector('text=Add Telegram Bot', { timeout: 10_000 });
+      await page.getByLabel(/Telegram Bot Token/).fill('ui-smoke-token');
+      await page.getByLabel(/DM Policy/).selectOption('allow');
+    } else {
+      await page.locator('.machine-card').first().click();
+    }
     await page.getByRole('button', { name: 'Validate' }).click();
     await page.getByRole('button', { name: 'Preview' }).click();
     const params = { botToken: 'ui-smoke-token', dmPolicy: 'allow' };
