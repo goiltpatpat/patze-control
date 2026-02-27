@@ -5,7 +5,6 @@ import { chromium } from 'playwright';
 import {
   randomPort,
   requestJson,
-  sleep,
   spawnProcess,
   terminate,
   waitForHttpOk,
@@ -13,17 +12,10 @@ import {
   writeFixtureOpenClawHome,
 } from './smoke-utils.mjs';
 
-async function waitForResolvedTargetBadge(page) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const labels = await page.locator('.badge').allTextContents();
-    const targetLabel = labels.find((value) => value.startsWith('target:'));
-    if (targetLabel && targetLabel !== 'target: none') {
-      return targetLabel;
-    }
-    await sleep(250);
-  }
-  throw new Error('UI smoke failed: target selector did not resolve in time');
+async function waitForTargetBadge(page) {
+  await page.waitForSelector('.view-title:has-text("Recipes")', { timeout: 60_000 });
+  const targetBadge = page.locator('.view-header .badge', { hasText: /^target:/i }).first();
+  await targetBadge.waitFor({ state: 'visible', timeout: 60_000 });
 }
 
 async function run() {
@@ -99,8 +91,7 @@ async function run() {
     const page = await context.newPage();
 
     await page.goto(`${uiBase}/#/recipes`, { waitUntil: 'domcontentloaded' });
-    await waitForResolvedTargetBadge(page);
-    await page.waitForSelector('text=Recipes', { timeout: 30_000 });
+    await waitForTargetBadge(page);
     await page.waitForSelector('text=Add Telegram Bot', { timeout: 30_000 });
     await page.locator('.machine-card', { hasText: 'Add Telegram Bot' }).first().click();
     await page.waitForSelector('text=Add Telegram Bot', { timeout: 10_000 });
