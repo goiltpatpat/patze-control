@@ -1,6 +1,6 @@
 # Tech Context
 
-_Last updated: 2026-02-22_
+_Last updated: 2026-02-26_
 
 ## Stack
 
@@ -20,16 +20,23 @@ _Last updated: 2026-02-22_
 - `fastify` ^5.x — HTTP server with SSE streaming
 - `@tauri-apps/api` ^2.x — desktop integration (sidecar, invoke)
 - `ssh2` — SSH tunnel for remote node attachment
+- `esbuild` — bridge bundle artifact (`dist/bridge-bundle.mjs`) for remote SFTP-based deploy flow
 - `concurrently` — parallel dev servers
 - `tsx` — TypeScript execution for dev + tests
+- `playwright` — headless browser automation for UI smoke flow
 
 ## Development
 
 ```bash
 pnpm dev                 # Start API + Desktop dev servers (concurrently)
 pnpm build:api-server    # Build telemetry-core + api-server (tsc)
+pnpm --filter @patze/openclaw-bridge run build:bundle  # Build deployable bridge bundle
 npx tsx --test <file>    # Run individual test files
 pnpm ci:verify           # Typecheck + lint + format + test (CI equivalent)
+pnpm test:smoke:openclaw-flow # Spin isolated API and verify readiness->recipe->rollback flow
+pnpm test:smoke:ui-openclaw-flow # Spin API+desktop and verify browser recipe flow + rollback path
+pnpm test:clawpal-gate   # telemetry-core + api-server tests + typecheck
+pnpm ci:verify:clawpal   # lint + format + clawpal-gate
 ```
 
 - API: http://localhost:9700
@@ -70,6 +77,7 @@ apps/api-server/src/
   ├── task-executor.ts                        # Task action executor (webhook, health_check, openclaw_cron_run)
   ├── cli-tasks.ts                            # CLI for task management
   ├── bridge-setup-manager.ts                 # VPS bridge setup state machine
+  ├── openclaw-config-reader.test.ts          # Parser regression tests (modern + legacy schema)
   ├── ssh-config-parser.ts                    # Parse ~/.ssh/config for host aliases
   ├── remote-node-attachment-orchestrator.ts  # SSH tunnel orchestration
   └── ssh-tunnel-runtime.ts                   # SSH tunnel lifecycle

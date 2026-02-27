@@ -55,6 +55,7 @@ type ActiveRunState = Exclude<SessionRunLifecycleState, 'completed' | 'failed' |
 const MAX_RECENT_EVENTS = 50;
 const MAX_TOOL_CALLS_PER_RUN = 50;
 const MAX_LOGS = 200;
+const STALE_GHOST_MACHINE_PRUNE_MS = 2 * 60_000;
 
 interface SnapshotCollections {
   machines: Map<string, FrontendMachineSnapshot>;
@@ -146,6 +147,12 @@ function freezeObject<T extends object>(value: T): Readonly<T> {
   return deepFreeze(value);
 }
 
+function isGhostBridgeMachine(machine: FrontendMachineSnapshot): boolean {
+  return (
+    machine.machineId.startsWith('machine_') && (!machine.name || machine.name.trim().length === 0)
+  );
+}
+
 function createCollections(snapshot: FrontendReducerState): SnapshotCollections {
   const runDetails = new Map<string, MutableRunDetail>();
   for (const [runId, detail] of Object.entries(snapshot.runDetails)) {
@@ -205,6 +212,9 @@ function upsertFromEvent(
         cpuPct: payload.resource.cpuPct,
         memoryBytes: payload.resource.memoryBytes,
         memoryPct: payload.resource.memoryPct,
+        ...(payload.resource.memoryTotalBytes !== undefined
+          ? { memoryTotalBytes: payload.resource.memoryTotalBytes }
+          : {}),
         ...(payload.resource.netRxBytes !== undefined
           ? { netRxBytes: payload.resource.netRxBytes }
           : {}),
@@ -475,12 +485,6 @@ function buildSnapshot(
   collections: SnapshotCollections,
   lastUpdated: IsoUtcTimestamp
 ): FrontendUnifiedSnapshot {
-  const machines = freezeArray(
-    Array.from(collections.machines.values())
-      .map((machine) => freezeObject({ ...machine }))
-      .sort(compareByIdAsc)
-  );
-
   const sessions = freezeArray(
     Array.from(collections.sessions.values())
       .map((session) => freezeObject({ ...session }))
@@ -507,6 +511,42 @@ function buildSnapshot(
           }) as FrontendActiveRunSnapshot
       )
       .sort(compareRuns)
+  );
+
+  const nowMsCandidate = Date.parse(lastUpdated);
+  const nowMs = Number.isNaN(nowMsCandidate) ? Date.now() : nowMsCandidate;
+  const machineIdsWithRecentActivity = new Set<string>();
+  for (const session of sessions) {
+    const updatedAtMs = Date.parse(session.updatedAt);
+    if (!Number.isNaN(updatedAtMs) && nowMs - updatedAtMs <= STALE_GHOST_MACHINE_PRUNE_MS) {
+      machineIdsWithRecentActivity.add(session.machineId);
+    }
+  }
+  for (const run of runs) {
+    const updatedAtMs = Date.parse(run.updatedAt);
+    if (!Number.isNaN(updatedAtMs) && nowMs - updatedAtMs <= STALE_GHOST_MACHINE_PRUNE_MS) {
+      machineIdsWithRecentActivity.add(run.machineId);
+    }
+  }
+
+  const machines = freezeArray(
+    Array.from(collections.machines.values())
+      .filter((machine) => {
+        if (!isGhostBridgeMachine(machine)) {
+          return true;
+        }
+        const lastSeenMs = Date.parse(machine.lastSeenAt);
+        if (Number.isNaN(lastSeenMs)) {
+          return true;
+        }
+        const stale = nowMs - lastSeenMs > STALE_GHOST_MACHINE_PRUNE_MS;
+        if (!stale) {
+          return true;
+        }
+        return machineIdsWithRecentActivity.has(machine.machineId);
+      })
+      .map((machine) => freezeObject({ ...machine }))
+      .sort(compareByIdAsc)
   );
 
   const runDetailsRecord: Record<string, Readonly<FrontendRunDetailSnapshot>> = {};

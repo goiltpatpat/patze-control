@@ -65,6 +65,53 @@ export interface BridgeLogger {
   error(message: string, context?: Record<string, string | number | boolean>): void;
 }
 
+export type BridgeControlIntent =
+  | 'trigger_job'
+  | 'agent_set_enabled'
+  | 'approve_request'
+  | 'run_command';
+
+export type BridgeControlCommandState =
+  | 'queued'
+  | 'leased'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'rejected'
+  | 'expired'
+  | 'deadletter';
+
+export interface BridgeControlCommandSnapshot {
+  readonly targetId: string;
+  readonly machineId: string;
+  readonly targetVersion: string;
+  readonly intent: BridgeControlIntent;
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly createdBy: string;
+  readonly idempotencyKey: string;
+  readonly approvalRequired: boolean;
+  readonly policyVersion?: string | undefined;
+}
+
+export interface BridgeControlCommand {
+  readonly id: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly state: BridgeControlCommandState;
+  readonly snapshot: BridgeControlCommandSnapshot;
+}
+
+export interface BridgeControlCommandResult {
+  readonly status: 'succeeded' | 'failed';
+  readonly exitCode: number;
+  readonly durationMs: number;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly truncated: boolean;
+  readonly artifact?: string | undefined;
+  readonly duplicate?: boolean | undefined;
+}
+
 export interface MachineInfo {
   machineId: MachineId;
   machineLabel: string;

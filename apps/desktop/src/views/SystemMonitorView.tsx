@@ -3,12 +3,15 @@ import { GaugeBar } from '../components/GaugeBar';
 import { IconActivity, IconZap } from '../components/Icons';
 import { HealthBadge } from '../components/badges/HealthBadge';
 import { StateBadge } from '../components/badges/StateBadge';
+import type { FleetTargetStatus } from '../hooks/useSmartFleet';
 import type { FrontendUnifiedSnapshot } from '../types';
 import { formatBytes, formatRate } from '../utils/format';
 import { formatRelativeTime } from '../utils/time';
 
 export interface SystemMonitorViewProps {
   readonly snapshot: FrontendUnifiedSnapshot | null;
+  readonly smartFleetTargets: readonly FleetTargetStatus[];
+  readonly smartFleetEnabled: boolean;
 }
 
 interface NetworkSample {
@@ -40,9 +43,11 @@ interface FleetSummary {
 
 function computeMemoryTotalBytes(machine: FrontendMachineSnapshot): number | null {
   const resource = machine.lastResource;
-  if (!resource || resource.memoryPct <= 0) {
-    return null;
+  if (!resource) return null;
+  if (resource.memoryTotalBytes !== undefined && resource.memoryTotalBytes > 0) {
+    return resource.memoryTotalBytes;
   }
+  if (resource.memoryPct <= 0) return null;
   return (resource.memoryBytes * 100) / resource.memoryPct;
 }
 
@@ -151,6 +156,23 @@ export function SystemMonitorView(props: SystemMonitorViewProps): JSX.Element {
   }, [props.snapshot]);
 
   const fleet = useMemo(() => computeFleetSummary(machineMetrics), [machineMetrics]);
+  const smartFleetSummary = useMemo(() => {
+    if (!props.smartFleetEnabled || props.smartFleetTargets.length === 0) return null;
+    const totalScore = props.smartFleetTargets.reduce((sum, target) => sum + target.healthScore, 0);
+    const driftCount = props.smartFleetTargets.reduce(
+      (sum, target) => sum + target.drifts.length,
+      0
+    );
+    const violationCount = props.smartFleetTargets.reduce(
+      (sum, target) => sum + target.violations.length,
+      0
+    );
+    return {
+      avgHealthScore: totalScore / props.smartFleetTargets.length,
+      driftCount,
+      violationCount,
+    };
+  }, [props.smartFleetEnabled, props.smartFleetTargets]);
 
   if (!props.snapshot) {
     return (
@@ -211,6 +233,34 @@ export function SystemMonitorView(props: SystemMonitorViewProps): JSX.Element {
             {fleet ? formatRate(fleet.totalTxRateBytesPerSec) : '0 B/s'}
           </span>
         </div>
+        {smartFleetSummary ? (
+          <>
+            <div className="stat-card">
+              <span className="stat-label">Fleet Health Score</span>
+              <span className="stat-value" data-accent="cyan">
+                {smartFleetSummary.avgHealthScore.toFixed(0)}
+              </span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Fleet Drifts</span>
+              <span
+                className="stat-value"
+                data-accent={smartFleetSummary.driftCount > 0 ? 'yellow' : 'green'}
+              >
+                {String(smartFleetSummary.driftCount)}
+              </span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Fleet Violations</span>
+              <span
+                className="stat-value"
+                data-accent={smartFleetSummary.violationCount > 0 ? 'red' : 'green'}
+              >
+                {String(smartFleetSummary.violationCount)}
+              </span>
+            </div>
+          </>
+        ) : null}
       </div>
 
       {fleet ? (

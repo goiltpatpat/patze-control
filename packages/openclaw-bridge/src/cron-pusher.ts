@@ -24,6 +24,7 @@ interface CronPusherOptions {
 interface PersistedCronState {
   readonly version: 1;
   readonly jobsHash: string;
+  readonly configHash?: string;
   readonly offsets: Record<string, number>;
 }
 
@@ -38,6 +39,8 @@ interface CronSyncPayload {
   readonly bridgeVersion: string;
   readonly jobsHash: string;
   readonly jobs: readonly OpenClawCronJob[] | undefined;
+  readonly configHash: string;
+  readonly configRaw: string | null | undefined;
   readonly newRuns: Readonly<Record<string, readonly OpenClawRunRecord[]>>;
   readonly sentAt: string;
 }
@@ -48,6 +51,7 @@ export class CronPusher {
   private readonly reader: OpenClawCronReader;
   private timer: ReturnType<typeof setInterval> | null = null;
   private jobsHash = '';
+  private configHash = '';
   private readonly runOffsets = new Map<string, number>();
   private running = false;
 
@@ -57,12 +61,14 @@ export class CronPusher {
     this.loadState();
   }
 
-  public async start(): Promise<void> {
+  public async start(options?: { readonly skipInitialSync?: boolean }): Promise<void> {
     if (this.running) {
       return;
     }
     this.running = true;
-    await this.pushDelta();
+    if (!options?.skipInitialSync) {
+      await this.pushDelta();
+    }
     this.timer = setInterval(() => {
       void this.pushDelta();
     }, this.options.syncIntervalMs);
@@ -75,6 +81,10 @@ export class CronPusher {
     }
     clearInterval(this.timer);
     this.timer = null;
+  }
+
+  public isRunning(): boolean {
+    return this.running;
   }
 
   private buildSyncUrl(): string {
@@ -111,6 +121,7 @@ export class CronPusher {
         return;
       }
       this.jobsHash = parsed.jobsHash;
+      this.configHash = parsed.configHash ?? '';
       for (const [filename, offset] of Object.entries(parsed.offsets)) {
         if (Number.isFinite(offset) && offset >= 0) {
           this.runOffsets.set(filename, offset);
@@ -136,6 +147,7 @@ export class CronPusher {
       const data: PersistedCronState = {
         version: 1,
         jobsHash: this.jobsHash,
+        configHash: this.configHash,
         offsets,
       };
       const tmpPath = `${this.options.stateFilePath}.tmp`;
@@ -158,6 +170,24 @@ export class CronPusher {
     } catch {
       return null;
     }
+  }
+
+  private getConfigRaw(): string | null {
+    const candidates = [
+      path.join(this.options.openclawHomeDir, 'openclaw.json'),
+      path.join(this.options.openclawHomeDir, 'config', 'openclaw.json'),
+    ];
+    for (const configPath of candidates) {
+      try {
+        if (!fs.existsSync(configPath)) {
+          continue;
+        }
+        return fs.readFileSync(configPath, 'utf-8');
+      } catch {
+        /* try next candidate */
+      }
+    }
+    return null;
   }
 
   private static hashContent(value: string | null): string {
@@ -284,10 +314,14 @@ export class CronPusher {
       const nextJobsHash = CronPusher.hashContent(jobsRaw);
       const jobsChanged = nextJobsHash !== this.jobsHash;
       const jobs = jobsChanged ? this.reader.readJobs() : undefined;
+      const configRaw = this.getConfigRaw();
+      const nextConfigHash = CronPusher.hashContent(configRaw);
+      const configChanged = nextConfigHash !== this.configHash;
+      const configPayload = configChanged ? configRaw : undefined;
 
       const { runsByJobId, nextOffsets } = this.collectNewRuns();
       const hasRunDelta = CronPusher.hasRuns(runsByJobId);
-      if (!jobsChanged && !hasRunDelta) {
+      if (!jobsChanged && !hasRunDelta && !configChanged) {
         return;
       }
 
@@ -297,12 +331,15 @@ export class CronPusher {
         bridgeVersion: this.options.bridgeVersion,
         jobsHash: nextJobsHash,
         jobs,
+        configHash: nextConfigHash,
+        configRaw: configPayload,
         newRuns: runsByJobId,
         sentAt: new Date().toISOString(),
       };
 
       await this.postPayload(payload);
       this.jobsHash = nextJobsHash;
+      this.configHash = nextConfigHash;
       this.runOffsets.clear();
       for (const [filename, offset] of nextOffsets) {
         this.runOffsets.set(filename, offset);
@@ -310,6 +347,7 @@ export class CronPusher {
       this.saveState();
       this.options.logger.info('cron_sync_pushed', {
         jobsChanged,
+        configChanged,
         runsJobs: Object.keys(runsByJobId).length,
       });
     } catch (error) {

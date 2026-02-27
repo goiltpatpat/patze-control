@@ -8,6 +8,7 @@ import type {
   PersistedEndpoint,
 } from '../hooks/useEndpointManager';
 import type { ManagedBridgeState, BridgeSetupInput } from '../hooks/useManagedBridges';
+import type { FleetPolicyViolation, FleetTargetStatus } from '../hooks/useSmartFleet';
 import type { UseOpenClawTargetsResult } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus, FrontendUnifiedSnapshot } from '../types';
 import { AgentsView } from '../views/AgentsView';
@@ -38,7 +39,9 @@ export interface MainViewProps {
   readonly isTunnelTransitioning: boolean;
   readonly baseUrl: string;
   readonly token: string;
+  readonly onTokenChange: (value: string) => void;
   readonly status: ConnectionStatus;
+  readonly onBaseUrlChange: (value: string) => void;
   readonly onConnect: () => void;
   readonly onAttach: () => void;
   readonly onDetach: () => void;
@@ -59,7 +62,14 @@ export interface MainViewProps {
   ) => Promise<ManagedBridgeState | null>;
   readonly onSkipSudo: (id: string) => Promise<ManagedBridgeState | null>;
   readonly managedBridgesLoading: boolean;
+  readonly smartFleetTargets: readonly FleetTargetStatus[];
+  readonly smartFleetViolations: readonly FleetPolicyViolation[];
+  readonly onReconcileFleetTarget: (targetId: string) => Promise<boolean>;
+  readonly onRefreshSmartFleet: () => Promise<void>;
+  readonly smartFleetEnabled: boolean;
   readonly openclawTargets: UseOpenClawTargetsResult;
+  readonly selectedTargetId: string | null;
+  readonly onSelectedTargetIdChange: (targetId: string | null) => void;
 }
 
 function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps): JSX.Element {
@@ -81,7 +91,7 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           filter={filter}
           baseUrl={props.baseUrl}
           token={props.token}
-          targetId={props.openclawTargets.entries[0]?.target.id ?? undefined}
+          selectedTargetId={props.selectedTargetId}
         />
       );
     case 'tunnels':
@@ -107,12 +117,25 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           onSubmitSudoPassword={props.onSubmitSudoPassword}
           onSkipSudo={props.onSkipSudo}
           managedBridgesLoading={props.managedBridgesLoading}
+          smartFleetTargets={props.smartFleetTargets}
+          smartFleetViolations={props.smartFleetViolations}
+          onReconcileFleetTarget={props.onReconcileFleetTarget}
+          onRefreshSmartFleet={props.onRefreshSmartFleet}
+          smartFleetEnabled={props.smartFleetEnabled}
         />
       );
     case 'machines':
       return <MachinesView snapshot={props.snapshot} filter={filter} />;
     case 'sessions':
-      return <SessionsView snapshot={props.snapshot} filter={filter} />;
+      return (
+        <SessionsView
+          snapshot={props.snapshot}
+          filter={filter}
+          baseUrl={props.baseUrl}
+          token={props.token}
+          selectedTargetId={props.selectedTargetId}
+        />
+      );
     case 'runs':
       return <RunsView snapshot={props.snapshot} filter={filter} />;
     case 'logs':
@@ -124,6 +147,8 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           token={props.token}
           status={props.status}
           openclawTargets={props.openclawTargets}
+          selectedTargetId={props.selectedTargetId}
+          onSelectedTargetIdChange={props.onSelectedTargetIdChange}
           {...(filter.taskView ? { initialFilter: filter.taskView } : {})}
         />
       );
@@ -134,16 +159,25 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           token={props.token}
           status={props.status}
           openclawTargets={props.openclawTargets.entries}
+          selectedTargetId={props.selectedTargetId}
+          onSelectedTargetIdChange={props.onSelectedTargetIdChange}
         />
       );
     case 'monitor':
-      return <SystemMonitorView snapshot={props.snapshot} />;
+      return (
+        <SystemMonitorView
+          snapshot={props.snapshot}
+          smartFleetTargets={props.smartFleetTargets}
+          smartFleetEnabled={props.smartFleetEnabled}
+        />
+      );
     case 'workspace':
       return (
         <WorkspaceView
           baseUrl={props.baseUrl}
           token={props.token}
           connected={props.status === 'connected' || props.status === 'degraded'}
+          selectedTargetId={props.selectedTargetId}
           {...(filter.openFile ? { initialFilePath: filter.openFile } : {})}
           {...(filter.line ? { initialLine: filter.line } : {})}
         />
@@ -172,7 +206,7 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           baseUrl={props.baseUrl}
           token={props.token}
           connected={props.status === 'connected' || props.status === 'degraded'}
-          targetId={props.openclawTargets.entries[0]?.target.id ?? null}
+          targetId={props.selectedTargetId}
         />
       );
     case 'recipes':
@@ -181,7 +215,7 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           baseUrl={props.baseUrl}
           token={props.token}
           connected={props.status === 'connected' || props.status === 'degraded'}
-          targetId={props.openclawTargets.entries[0]?.target.id ?? null}
+          targetId={props.selectedTargetId}
         />
       );
     case 'files':
@@ -193,7 +227,14 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
         />
       );
     case 'office':
-      return <OfficeView openclawTargets={props.openclawTargets.entries} />;
+      return (
+        <OfficeView
+          openclawTargets={props.openclawTargets.entries}
+          baseUrl={props.baseUrl}
+          token={props.token}
+          selectedTargetId={props.selectedTargetId}
+        />
+      );
     case 'settings':
       return (
         <SettingsView
@@ -201,6 +242,10 @@ function renderRoute(route: AppRoute, filter: RouteFilter, props: MainViewProps)
           baseUrl={props.baseUrl}
           token={props.token}
           status={props.status}
+          selectedTargetId={props.selectedTargetId}
+          onBaseUrlChange={props.onBaseUrlChange}
+          onTokenChange={props.onTokenChange}
+          onConnect={props.onConnect}
         />
       );
     default: {

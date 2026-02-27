@@ -1,5 +1,6 @@
 import type { BridgeConnection } from '../../hooks/useBridgeConnections';
 import type { ManagedBridgeState, BridgeSetupInput } from '../../hooks/useManagedBridges';
+import type { FleetPolicyViolation, FleetTargetStatus } from '../../hooks/useSmartFleet';
 import type {
   ConnectCredentials,
   ManagedEndpoint,
@@ -42,6 +43,11 @@ export interface TunnelsViewProps {
   ) => Promise<ManagedBridgeState | null>;
   readonly onSkipSudo: (id: string) => Promise<ManagedBridgeState | null>;
   readonly managedBridgesLoading: boolean;
+  readonly smartFleetTargets: readonly FleetTargetStatus[];
+  readonly smartFleetViolations: readonly FleetPolicyViolation[];
+  readonly onReconcileFleetTarget: (targetId: string) => Promise<boolean>;
+  readonly onRefreshSmartFleet: () => Promise<void>;
+  readonly smartFleetEnabled: boolean;
 }
 
 export const BRIDGE_STALE_THRESHOLD_MS = 120_000;

@@ -28,10 +28,24 @@ function hashConfig(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
 }
 
+function resolveCommandBinary(command: string): string {
+  if (command === 'openclaw') {
+    const override = process.env.OPENCLAW_BIN?.trim();
+    if (override) return override;
+  }
+  return command;
+}
+
 interface TargetQueue {
   targetId: string;
   openclawDir: string;
   commands: OpenClawQueuedCommand[];
+}
+
+export interface OpenClawCommandInput {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly description: string;
 }
 
 export class OpenClawCommandQueue {
@@ -45,7 +59,7 @@ export class OpenClawCommandQueue {
   public queue(
     targetId: string,
     openclawDir: string,
-    commands: readonly { command: string; args: readonly string[]; description: string }[]
+    commands: readonly OpenClawCommandInput[]
   ): OpenClawCommandQueueState {
     let tq = this.queues.get(targetId);
     if (!tq) {
@@ -81,19 +95,38 @@ export class OpenClawCommandQueue {
   public async preview(targetId: string): Promise<OpenClawConfigDiff | null> {
     const tq = this.queues.get(targetId);
     if (!tq || tq.commands.length === 0) return null;
+    return this.previewCommands(tq.openclawDir, tq.commands);
+  }
 
-    const before = readRawConfigString(tq.openclawDir) ?? '{}';
-    const commands = tq.commands.map((cmd) => ({
+  public async apply(
+    targetId: string,
+    source: string
+  ): Promise<{ ok: boolean; error?: string | undefined; snapshotId?: string | undefined }> {
+    const tq = this.queues.get(targetId);
+    if (!tq || tq.commands.length === 0) {
+      return { ok: false, error: 'No pending commands' };
+    }
+    const result = await this.applyCommands(targetId, tq.openclawDir, tq.commands, source);
+    this.queues.delete(targetId);
+    return result;
+  }
+
+  public async previewCommands(
+    openclawDir: string,
+    commandsInput: readonly OpenClawCommandInput[]
+  ): Promise<OpenClawConfigDiff> {
+    const before = readRawConfigString(openclawDir) ?? '{}';
+    const commands = commandsInput.map((cmd) => ({
       description: cmd.description,
       cli: `${cmd.command} ${cmd.args.join(' ')}`,
     }));
 
-    const configPath = getConfigPath(tq.openclawDir);
+    const configPath = getConfigPath(openclawDir);
     if (!configPath) {
       return {
         before,
         after: before,
-        commandCount: tq.commands.length,
+        commandCount: commandsInput.length,
         commands,
         simulated: false,
       };
@@ -104,13 +137,13 @@ export class OpenClawCommandQueue {
       `patze-preview-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     );
     try {
-      const relPath = path.relative(tq.openclawDir, configPath);
+      const relPath = path.relative(openclawDir, configPath);
       const tmpConfigPath = path.join(tmpDir, relPath);
       fs.mkdirSync(path.dirname(tmpConfigPath), { recursive: true });
       fs.copyFileSync(configPath, tmpConfigPath);
 
-      for (const cmd of tq.commands) {
-        await execFileAsync(cmd.command, [...cmd.args], {
+      for (const cmd of commandsInput) {
+        await execFileAsync(resolveCommandBinary(cmd.command), [...cmd.args], {
           timeout: 10_000,
           maxBuffer: 2 * 1024 * 1024,
           cwd: tmpDir,
@@ -118,13 +151,13 @@ export class OpenClawCommandQueue {
       }
 
       const after = fs.readFileSync(tmpConfigPath, 'utf-8');
-      return { before, after, commandCount: tq.commands.length, commands, simulated: true };
+      return { before, after, commandCount: commandsInput.length, commands, simulated: true };
     } catch (err: unknown) {
       const simulationError = err instanceof Error ? err.message : String(err);
       return {
         before,
         after: before,
-        commandCount: tq.commands.length,
+        commandCount: commandsInput.length,
         commands,
         simulated: false,
         simulationError,
@@ -138,41 +171,40 @@ export class OpenClawCommandQueue {
     }
   }
 
-  public async apply(
+  public async applyCommands(
     targetId: string,
+    openclawDir: string,
+    commandsInput: readonly OpenClawCommandInput[],
     source: string
   ): Promise<{ ok: boolean; error?: string | undefined; snapshotId?: string | undefined }> {
-    const tq = this.queues.get(targetId);
-    if (!tq || tq.commands.length === 0) {
-      return { ok: false, error: 'No pending commands' };
+    if (commandsInput.length === 0) {
+      return { ok: false, error: 'No commands to apply' };
     }
 
-    const beforeConfig = readRawConfigString(tq.openclawDir);
+    const beforeConfig = readRawConfigString(openclawDir);
     const snapshotId = await this.createSnapshot(
       targetId,
       beforeConfig ?? '{}',
       source,
-      `Before applying ${tq.commands.length} command(s)`
+      `Before applying ${commandsInput.length} command(s)`
     );
 
     const errors: string[] = [];
-    for (const cmd of tq.commands) {
+    for (const cmd of commandsInput) {
       try {
-        await execFileAsync(cmd.command, [...cmd.args], {
+        await execFileAsync(resolveCommandBinary(cmd.command), [...cmd.args], {
           timeout: 30_000,
           maxBuffer: 5 * 1024 * 1024,
-          cwd: tq.openclawDir,
+          cwd: openclawDir,
         });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         errors.push(`${cmd.description}: ${message}`);
-        await this.rollbackToSnapshot(snapshotId, tq.openclawDir);
-        this.queues.delete(targetId);
+        await this.rollbackToSnapshot(snapshotId, openclawDir);
         return { ok: false, error: errors.join('; '), snapshotId };
       }
     }
 
-    this.queues.delete(targetId);
     return { ok: true, snapshotId };
   }
 

@@ -1,138 +1,83 @@
 # Active Context
 
-_Last updated: 2026-02-22_
+_Last updated: 2026-02-26_
 
 ## Current Focus
 
-Major UI/UX overhaul inspired by tenacitOS design patterns. 8 phases of enhancements shipped to `cursor/ui-ux-tenacitos-d014` branch. All CI checks passing (typecheck, lint, format, 16/16 tests).
+Stabilize real OpenClaw-on-VPS operations and keep UI behavior deterministic in Tauri desktop: bridge setup reliability (sudo/systemd edge cases), target-aware data views, and less noisy telemetry presentation.
 
-## Recent Changes (2026-02-22 - Office 3D Rollout)
+## Verified Recent Changes (Current Cycle)
 
-- Upgraded Office rendering from CSS-isometric-only to a hybrid model with runtime mode switch (`3D` / `Classic`)
-- Added `OfficeScene3D` with `three` + `@react-three/fiber` + `@react-three/drei`
-- Implemented 3D desk layout mapping from OpenClaw targets with status-based color/emissive cues
-- Kept existing task drill-down behavior: selecting a desk still routes into OpenClaw task context
-- Preserved safe fallback path by retaining Classic isometric view as a first-class mode
-- Added robust rendering fallback: runtime WebGL capability check auto-switches to Classic mode when 3D is unavailable
-- Improved scene composition using tenacitOS-inspired light rig + desk labels + centered camera target and dynamic floor bounds
+### Critical Flow Hardening
 
-## Recent Changes (2026-02-22 - Feature Parity Sprint)
+- `selectedTargetId` is now the shared source of truth across `AppShell` -> `MainView` -> OpenClaw views.
+- Tasks/Channels removed local fallback target state to avoid cross-view mismatch.
+- Agents/Models/Recipes/Channels gained clearer loading, error, and "select target first" empty states.
 
-### Feature 1 - System Monitor Expansion
+### Polling and Race Protection
 
-- Wired `netRxBytes`/`netTxBytes` from telemetry heartbeat payload through projection + frontend reducer
-- Added new `SystemMonitorView` route with fleet CPU/MEM/DISK and per-machine telemetry cards
-- Implemented network throughput calculation in UI from cumulative counters using prev-snapshot delta/time (`B/s`)
-- Added Disk `% used` gauge to `OverviewView` (with strict gauge definition)
+- `useSmartPoll` now passes `{ signal, requestId }` to fetchers.
+- Hooks that fetch OpenClaw targets, managed bridges, bridge connections, and endpoint attachments now ignore stale responses.
+- Polling behavior adjusted for desktop context (no hidden-tab deadlock in Tauri-sensitive flows).
 
-### Feature 2 - Full-text Workspace Search
+### Bridge + Config Sync Hardening
 
-- Added `GET /workspace/search` endpoint with:
-  - min query length
-  - maxResults cap
-  - 5s timeout
-  - binary extension skip + 512KB file limit
-  - compact result payload (`line`, `lineNumber`, `contextBefore`, `contextAfter`)
-  - LRU content cache keyed by `path + mtime`
-- Integrated async file search into `CommandPalette` with:
-  - debounce 500ms
-  - `AbortController` cancellation on new keystrokes
-  - file result actions that open file directly in Workspace route
+- Bridge setup manager now handles `sudo` privilege modes explicitly, including `needs_sudo_password`.
+- Added retry path for sudo password submission (`/bridge/managed/:id/sudo-password`).
+- Added safe bundle replacement flow before restart (upload then move into target path).
+- Bridge cron sync now carries `configHash`/`configRaw`; API writes `openclaw.json` mirror when config changes.
+- Install script improved for service mask edge cases and user/system install paths.
+- Bridge runtime now exposes local `/health` endpoint (default `127.0.0.1:19701`) with runtime/tick/poller status for external liveness checks.
+- Bridge runtime now exposes local Prometheus `/metrics` endpoint for uptime/tick/process observability.
+- Bridge now handles `SIGHUP` as graceful runtime restart trigger (clean shutdown + exit for supervisor restart) to avoid in-process port-rebind races.
+- Bridge telemetry sender now persists queue to local disk spool file and hydrates on restart for crash/shutdown resilience.
+- Added targeted telemetry-core tests for spool hydrate/persist/flush behavior to reduce regression risk.
+- Fixed spool persistence race during flush/close so latest queue snapshot is not lost when persist calls overlap.
+- Smoke checks validated: health/metrics availability, HUP exit code 0 for restart path, and seeded spool hydrate visibility via `/health`.
+- Installer now supports `--verify-bundle-sha256` and writes structured install report JSON (`/var/log/patze-bridge-install.json` or user-mode local path).
+- File Manager now supports folder export as client-side `.zip` (recursive SFTP list + per-file download + JSZip packaging) alongside single-file download and copy-content actions.
+- File Manager folder export was upgraded to server-side zip streaming endpoint (`/files/:connId/download-folder`) to reduce browser memory usage and improve large-folder reliability.
 
-### Feature 3 - Memory Browser + Write Safety
+### Telemetry Accuracy
 
-- Added `GET /workspace/memory-files` for OpenClaw memory discovery across targets/workspaces
-- Added `PUT /workspace/memory-file` with backend allowlist enforcement (`MEMORY.md`, `SOUL.md`, `TASKS.md`, `CHANGELOG.md`, `CONTEXT.md`, `README.md`)
-- Added dedicated `MemoryBrowserView` with agent list, memory tabs, editor, and save controls
-- Enforced frontend write allowlist + backend root/path validation (double defense)
+- Bridge resource mapper switched to CPU delta measurement (`measureCpuPct()`).
+- `memoryTotalBytes` now flows from heartbeat payload through shared types/reducer to desktop monitor view.
+- Bridge connection freshness now uses API server receive time (not client-sent timestamps) to avoid clock-skew false positives.
+- Bridge stale cleanup TTL reduced from day-level to minute-level to reduce ghost-online machines in UI.
+- Remote attachment status now probes tunneled `/health` before returning `connected` to the desktop.
 
-### Feature 4 - Office View (Isometric CSS)
+### Model Profiles Correctness + UX
 
-- Added new `OfficeView` route (dependency-free, CSS-only isometric floor)
-- Office maps OpenClaw targets to desks (agent-centric) with status derivation:
-  - active / idle / error / offline
-- Added status legend, desk cards, and navigation action into task context
+- `Model Profiles` backend CRUD now edits `openclaw.json` in schema-aware mode for `models.providers.<provider>.models[]` instead of legacy-only `models.<id>`.
+- Added safe support for model IDs containing provider prefix (e.g. `moonshot/kimi-k2.5`) across update/delete/default routes.
+- Added direct default-model endpoint (`POST /openclaw/targets/:targetId/models/default`) to update `agents.defaults.model.primary` without command-queue ambiguity.
+- `ModelsView` now loads model context from `config-raw` and surfaces default/fallback counts plus alias badges for better parity with real OpenClaw state.
+- Model mutations in desktop now execute immediately via API (with in-view error reporting + refresh) rather than queuing opaque config commands.
+- `Referenced Models` panel now has smart UX grouping (`Needs Profiling` vs `Already Profiled`), quick filters, and inline `Create Profile` prefill actions to reduce cognitive load and close missing-profile gaps faster.
 
-### Routing/UI Shell Updates
+### Recipe Lifecycle UX + Quality Gate
 
-- Added new routes: `monitor`, `memory`, `office`
-- Updated `SidebarNav` and `MainView` route wiring for all new views
-- Extended command palette navigation to include new routes
+- `CookWizard` result step now includes direct `Open Rollback` action to jump into rollback workflow after recipe apply.
+- Monorepo test gate now includes API server tests by default, with dedicated `test:clawpal-gate` and `ci:verify:clawpal` scripts.
+- Added deterministic smoke flow script (`scripts/smoke-openclaw-flow.mjs`) that boots API in temp sandbox and verifies readiness -> recipe validate/preview/apply -> rollback.
+- CI quality workflow now runs `ci:verify:clawpal`, so smoke flow is part of enforced repository checks.
+- Added browser-level smoke flow (`scripts/smoke-ui-openclaw-flow.mjs`) with Playwright headless Chromium to verify real UI flow: open recipes page -> run validate/preview/apply -> navigate to rollback path.
+- ClawPal gate now validates both API smoke and UI smoke before typecheck.
 
-## Recent Changes (2026-02-22)
+## Active Risks and Gaps
 
-### tenacitOS UI/UX Integration (Branch: cursor/ui-ux-tenacitos-d014)
+- Bridge UX can still appear "stuck" when remote service is masked/misconfigured despite tunnel success.
+- Office 3D movement realism (human-like walking, anti-clipping, smoothness) still needs tuning.
+- Tasks panel layout/readability requires additional polish for production quality.
+- Fleet CPU spikes may still appear due to short sampling windows and bursty host scheduling.
 
-#### Phase 8: Design System Polish
+## Near-Term Next Steps
 
-- New CSS variables: `--accent-soft`, `--green-soft`, `--amber-soft`, `--red-soft`, `--blue-soft`, `--muted-soft`
-- Event type accent colors (`--type-machine`, `--type-session`, etc.)
-- `.accent-line` utility, `.section-header` pattern
-- Enhanced badge variants (`.badge-info`, `.badge-success`, `.badge-error`, `.badge-warning`)
-- Global scrollbar styling, panel hover transitions, skeleton pulse animation
-- ~1150 new lines of CSS covering all 8 phases upfront
+1. Add targeted tests for bridge install modes and cron config sync edge cases.
+2. Add desktop/Tauri browser automation on top of API smoke gate for full UI parity checks.
 
-#### Phase 1: Command Palette (⌘K)
+## Historical Milestones (Compressed)
 
-- `CommandPalette.tsx`: Modal overlay with fuzzy search across views, machines, sessions, runs
-- Arrow keys + Enter navigation, Escape to close, backdrop click dismiss
-- Results grouped by type with icons and keyboard shortcut hints
-- Integrated into `AppShell.tsx` with `Cmd/Ctrl + K` handler
-
-#### Phase 2: Notification Center
-
-- `useNotifications.ts`: Hook with localStorage persistence, max 100 notifications
-- `NotificationCenter.tsx`: Bell dropdown with unread badge, type-colored icons
-- Mark read, mark all read, delete, clear read operations
-- Auto-generates notifications from connection state changes (connected, error, degraded, disconnected)
-- Integrated into `TopMachineContextBar.tsx` with search button
-
-#### Phase 3: Enhanced Overview Dashboard
-
-- Quick Links grid: 6 shortcut cards to key views with keyboard hints
-- Section Headers: Accent line + uppercase labels for Machines, Active Runs
-- Success Rate Bar: Visual progress bar showing run success % with color coding
-
-#### Phase 4: StatusStrip Enhancements
-
-- MiniGauge component: 48px inline bars for CPU/MEM with color coding
-- Fleet resource aggregation across all machines
-- Uptime counter tracking connection duration
-
-#### Phase 5: Activity Heatmap
-
-- `ActivityHeatmap.tsx`: 7×24 grid (days × hours) from event timestamps
-- Accent-colored cells with opacity-based intensity
-- Hover tooltip, legend, empty state handling
-
-#### Phase 6: Task Timeline
-
-- `TaskTimeline.tsx`: 7-day forward-looking calendar grid
-- Color-coded per task (8-color palette), legend, interval/cron/at support
-- Merged patze tasks + openclaw jobs into unified timeline
-- New "Timeline" tab in TasksView
-
-#### Phase 7: Quick Notes (Notepad)
-
-- `Notepad.tsx`: Auto-saving textarea with 2s debounce
-- localStorage persistence, save status indicator, clear button
-- Integrated into OverviewView
-
-### New Icons (13 total)
-
-- IconSearch, IconBell, IconCheck, IconCheckAll, IconX, IconTrash
-- IconNote, IconCalendar, IconInfo, IconCheckCircle, IconAlertTriangle, IconXCircle, IconRepeat
-
-## Verification Status
-
-- CI: typecheck ✓, lint ✓, format ✓, test 16/16 ✓
-- pnpm ci:verify: FULL GREEN
-- Branch: cursor/ui-ux-tenacitos-d014 (9 commits)
-
-## Next Steps
-
-1. Merge UI/UX branch into main via PR
-2. Visual testing of all new components in browser
-3. Merge open Dependabot PRs (#2-#9) for dependency hygiene
-4. Production deployment (Tauri sidecar bundling + installer)
-5. E2E tests for multi-target + bridge flows
+- tenacitOS-inspired UI expansion shipped (command palette, notifications, timeline, heatmap, design-system polish).
+- Office view expanded from CSS-only isometric to hybrid `3D` + `Classic` with runtime fallback.
+- Multi-target OpenClaw + parser hardening completed for modern and legacy schema compatibility.

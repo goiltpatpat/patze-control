@@ -1,22 +1,39 @@
 import { useState } from 'react';
 
 interface AddTargetFormProps {
-  readonly onAdd: (input: {
+  readonly onSubmit: (input: {
     label: string;
     type: 'local' | 'remote';
+    purpose: 'production' | 'test';
     openclawDir: string;
     pollIntervalMs: number;
   }) => void;
   readonly onCancel: () => void;
+  readonly initialValues?: {
+    readonly label: string;
+    readonly type: 'local' | 'remote';
+    readonly purpose: 'production' | 'test';
+    readonly openclawDir: string;
+    readonly pollIntervalMs: number;
+  };
+  readonly title?: string;
+  readonly submitLabel?: string;
 }
 
 export function AddTargetForm(props: AddTargetFormProps): JSX.Element {
-  const [label, setLabel] = useState('');
-  const [type, setType] = useState<'local' | 'remote'>('local');
-  const [dir, setDir] = useState('~/.openclaw');
-  const [interval, setInterval] = useState('30');
+  const [label, setLabel] = useState(props.initialValues?.label ?? '');
+  const [type, setType] = useState<'local' | 'remote'>(props.initialValues?.type ?? 'local');
+  const [purpose, setPurpose] = useState<'production' | 'test'>(
+    props.initialValues?.purpose ?? 'production'
+  );
+  const [dir, setDir] = useState(props.initialValues?.openclawDir ?? '~/.openclaw');
+  const [interval, setInterval] = useState(
+    String(Math.max(5, Math.round((props.initialValues?.pollIntervalMs ?? 30_000) / 1000)))
+  );
 
   const canSubmit = label.trim().length > 0 && dir.trim().length > 0;
+  const title = props.title ?? 'Add OpenClaw Target';
+  const submitLabel = props.submitLabel ?? 'Add Target';
 
   return (
     <div className="panel" style={{ padding: 20 }}>
@@ -28,7 +45,7 @@ export function AddTargetForm(props: AddTargetFormProps): JSX.Element {
           marginBottom: 14,
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Add OpenClaw Target</h3>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{title}</h3>
       </div>
       <div className="dialog-form-grid" style={{ marginTop: 0 }}>
         <div className="dialog-form-row cols-2">
@@ -57,14 +74,16 @@ export function AddTargetForm(props: AddTargetFormProps): JSX.Element {
         </div>
         <div className="dialog-form-row cols-2">
           <div className="dialog-field">
-            <label className="dialog-field-label">OpenClaw Directory</label>
-            <input
-              value={dir}
+            <label className="dialog-field-label">Purpose</label>
+            <select
+              value={purpose}
               onChange={(e) => {
-                setDir(e.target.value);
+                setPurpose(e.target.value as 'production' | 'test');
               }}
-              placeholder="/home/user/.openclaw"
-            />
+            >
+              <option value="production">Production</option>
+              <option value="test">Test / Sandbox</option>
+            </select>
           </div>
           <div className="dialog-field">
             <label className="dialog-field-label">Poll Interval (seconds)</label>
@@ -78,21 +97,34 @@ export function AddTargetForm(props: AddTargetFormProps): JSX.Element {
             />
           </div>
         </div>
+        <div className="dialog-form-row cols-2">
+          <div className="dialog-field">
+            <label className="dialog-field-label">OpenClaw Directory</label>
+            <input
+              value={dir}
+              onChange={(e) => {
+                setDir(e.target.value);
+              }}
+              placeholder="/home/user/.openclaw"
+            />
+          </div>
+        </div>
       </div>
       <div className="actions" style={{ marginTop: 16 }}>
         <button
           className="btn-primary"
           disabled={!canSubmit}
           onClick={() => {
-            props.onAdd({
+            props.onSubmit({
               label: label.trim(),
               type,
+              purpose,
               openclawDir: dir.trim(),
               pollIntervalMs: Math.max(5, parseInt(interval, 10) || 30) * 1000,
             });
           }}
         >
-          Add Target
+          {submitLabel}
         </button>
         <button className="btn-secondary" onClick={props.onCancel}>
           Cancel

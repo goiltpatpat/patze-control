@@ -1,94 +1,80 @@
 {
-  "timestamp": "2026-02-22T12:40:00Z",
-  "evidence": "git log (5 commits on main), gh pr list (11 PRs), file structure scan, PR #1 + #10 review",
+  "timestamp": "2026-02-24T00:00:00Z",
+  "evidence": "working-tree audit via git status/git diff, memory-bank wc/rg size checks, and direct file reads",
   "confidence": "high",
   "compaction": {
-    "activeContext": { "before": 48, "after": 56 },
-    "progress": { "before": 46, "after": 56 },
-    "systemPatterns": { "before": 94, "after": 112 },
-    "techContext": { "before": 85, "after": 102 },
-    "productContext": { "before": 31, "after": 38 },
-    "projectbrief": { "before": 24, "after": 24 }
+    "activeContext": { "before": 55, "after": 55 },
+    "progress": { "before": 79, "after": 86 },
+    "systemPatterns": { "before": 112, "after": 127 },
+    "techContext": { "before": 109, "after": 112 }
   },
   "added": [],
   "modified": [
     {
-      "file": "memory-bank/activeContext.md",
-      "changes": [
-        "Rewrote current focus to reflect CI/CD + governance + public repo",
-        "Added PR #1: CI/CD pipeline (repo-ci, desktop-ci, workflow-lint)",
-        "Added PR #1: Repository governance (branch protection, CODEOWNERS, templates)",
-        "Added PR #10: OpenClaw schema expansion (stagger, payload, wakeMode, state)",
-        "Added PR #10: Channel intelligence (groupPolicy, allowFrom, accountSummary)",
-        "Updated verification to reflect CI pass status",
-        "Updated next steps (added Dependabot PRs)"
-      ]
-    },
-    {
       "file": "memory-bank/progress.md",
       "changes": [
-        "Added CI/CD Pipeline to What Works",
-        "Added Repository Governance to What Works",
-        "Added OpenClaw Rich Schema to What Works",
-        "Added Channel Intelligence to What Works",
-        "Updated view count from 9 to 10",
-        "Added Dependabot PRs to What's Left",
-        "Added evolution steps 11 (CI/CD), 12 (rich schema), 13 (channel intel)"
+        "Bumped Last updated to 2026-02-24",
+        "Added bridge install hardening status",
+        "Added bridge config mirror status (configHash/configRaw)",
+        "Added OpenClaw jobs panel UX refresh status",
+        "Reworded verification as historical baseline + needs re-run",
+        "Added regression test follow-up item and evolution steps 15-17"
       ]
     },
     {
       "file": "memory-bank/systemPatterns.md",
       "changes": [
-        "Added OpenClaw Rich Schema Parsing section",
-        "Added Channel Intelligence section",
-        "Added CI/CD Architecture section",
-        "Updated architecture diagram: 10 views, channel intelligence subsystem, openclaw.json"
+        "Bumped Last updated to 2026-02-24",
+        "Documented bridge setup reliability pattern (bundle upload, sudo retry, masked unit handling)",
+        "Documented config mirroring in multi-target sync flow",
+        "Added frontend target + polling contract section (selectedTargetId + abortable smart poll)"
       ]
     },
     {
       "file": "memory-bank/techContext.md",
       "changes": [
-        "Added bridge-setup-manager.ts and ssh-config-parser.ts to file structure",
-        "Added test files (openclaw-reader.test.ts, openclaw-sync.test.ts, snapshot-rollback.test.ts)",
-        "Updated to 10 views (added Channels)",
-        "Added pnpm 9.15.4, bun, Node 22 to stack",
-        "Added CI workflows table",
-        "Added bridge remote port 19700",
-        "Added ci:verify command to development section"
+        "Bumped Last updated to 2026-02-24",
+        "Added esbuild dependency rationale for bridge bundle deployment",
+        "Added build:bundle command in development workflow",
+        "Added openclaw-config-reader.test.ts to API file structure"
       ]
     },
     {
-      "file": "memory-bank/productContext.md",
+      "file": "memory-bank/update_report.md",
       "changes": [
-        "Added channel risk blindness to Problems Solved",
-        "Added channel intelligence step to How It Works",
-        "Updated OpenClaw targets sync description with rich schema note",
-        "Added actionable insights to UX Goals"
+        "Replaced prior-cycle report with current /update audit details",
+        "Added compaction table, drift findings, classification, and safety gate results"
       ]
     }
   ],
   "removed": [],
-  "uncertain_items": [],
+  "uncertain_items": [
+    {
+      "item": "AGENTS.md presence policy",
+      "reason": "AGENTS.md is not present in repository root in this workspace; left unchanged",
+      "status": "needs_verification"
+    }
+  ],
   "drift_found": [
     {
       "type": "missing_documentation",
-      "files": ["activeContext.md", "progress.md", "systemPatterns.md"],
-      "claim": "No CI/CD, governance, or OpenClaw schema/channel intelligence documented",
-      "reality": "PR #1 added CI/CD + governance, PR #10 added schema + channel intel",
+      "files": ["memory-bank/systemPatterns.md"],
+      "claim": "Bridge hardening and target selection/polling contract were under-documented",
+      "reality": "Current code includes bundle-based bridge deploy, sudo retry state, and shared selectedTargetId with abortable polling",
       "action": "fixed"
     },
     {
-      "type": "incorrect_count",
-      "files": ["systemPatterns.md", "techContext.md"],
-      "claim": "9 views",
-      "reality": "10 views (Channels added separately from Tunnels)",
+      "type": "missing_documentation",
+      "files": ["memory-bank/techContext.md"],
+      "claim": "Bridge bundle build/test surface was not reflected",
+      "reality": "openclaw-bridge now has build:bundle and parser test coverage added in api-server",
       "action": "fixed"
     },
     {
-      "type": "missing_files_in_docs",
-      "file": "techContext.md",
-      "claim": "File structure missing bridge-setup-manager.ts, ssh-config-parser.ts, test files",
-      "reality": "Files exist in apps/api-server/src/ and packages/telemetry-core/src/cron/",
+      "type": "stale_verification_language",
+      "files": ["memory-bank/progress.md"],
+      "claim": "Verification wording implied current-tree validation",
+      "reality": "No new full verification run was executed during this /update task",
       "action": "fixed"
     }
   ]

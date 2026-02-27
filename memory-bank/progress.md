@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-02-22_
+_Last updated: 2026-02-26_
 
 ## What Works
 
@@ -37,23 +37,50 @@ _Last updated: 2026-02-22_
 - **Office View (Hybrid 3D + Classic)**: Agent-centric OpenClaw desk visualization with new 3D scene mode (Three.js via React Three Fiber) and Classic fallback mode
 - **Office 3D Robustness Pass**: Dynamic camera/scene fitting for small or large desk counts, tenacitOS-inspired lighting/status labels, and WebGL capability fallback to Classic mode
 - **Route Expansion**: New routes wired (`monitor`, `memory`, `office`) in sidebar + shell
+- **Critical Target Contract**: `selectedTargetId` is unified as source-of-truth across key OpenClaw views (Agents/Tasks/Channels/Models/Recipes)
+- **OpenClaw Config Parser Hardening**: API parser now handles modern schema (`agents.list`, `models.providers`) and filters invalid bindings safely
+- **Config Reader Tests**: Added regression tests for modern + legacy OpenClaw schema parsing in API server
+- **Smart State Consistency**: Better loading/error/empty guidance in critical views, including explicit “select target” state
+- **Polling/Race Guard Upgrade**: `useSmartPoll` now supports abortable requests + request IDs; Channels moved to smart polling; key hooks now guard against stale responses
+- **Bridge Install Hardening**: Bridge setup now supports pre-uploaded bundle replacement, sudo password retry, and systemd masked-unit recovery for user/system install modes
+- **Bridge Config Mirroring**: Bridge cron sync payload now carries `configHash`/`configRaw`; API mirrors `openclaw.json` on target when config changes
+- **OpenClaw Jobs Panel Refresh**: Tasks OpenClaw panel redesigned with richer stats, filter/search chips, and clearer run history presentation
+- **Bridge Runtime Health Endpoint**: `openclaw-bridge` now serves local `/health` (default `127.0.0.1:19701`) with runtime status, tick health, and poller/sync running signals
+- **Bridge Runtime Metrics Endpoint**: `openclaw-bridge` now serves local Prometheus-style `/metrics` with uptime, tick success/failure counters, worker running gauges, and process memory metrics
+- **Installer Integrity + Reporting**: `install-bridge.sh` now supports `--verify-bundle-sha256` and emits structured install report JSON for audit/debug
+- **Bridge Reload Safety (Signal-based)**: `SIGHUP` now triggers clean bridge shutdown + supervisor restart path to avoid in-process port rebind instability
+- **Bridge Telemetry Disk Spool**: Telemetry queue now persists to disk and hydrates on restart, reducing data loss during crashes/restarts
+- **Bridge Spool Regression Tests**: Added `HttpSinkAdapter` tests for hydrate/persist/flush spool behavior and wired into telemetry-core test script
+- **Bridge Spool Race Fix**: Resolved overlapping persist race in `HttpSinkAdapter` to guarantee latest queue snapshot durability during shutdown/flush overlap
+- **Reload Stability Fix**: Switched `SIGHUP` path to graceful process restart trigger (for supervisor restart) to eliminate in-process health port rebind crashes
+- **File Manager Folder Download**: Added recursive folder download to `.zip` in desktop UI using JSZip (with transfer progress), plus copy-content support for text files
+- **File Manager Server-side Zip Download**: Added API endpoint to stream folder archives as `.zip` and switched desktop folder download flow to use server-side archive generation
+- **Model Profiles Schema Alignment**: API model CRUD now works against modern `models.providers` config shape (including `provider/model` IDs and default model updates), reducing drift from real OpenClaw config state
+- **Model Profiles Smart Context UI**: Desktop models page now shows default/fallback model context and aliases from live `config-raw`, with direct mutation flows + clearer auth-key messaging
+- **Model Profiles Smart Reference Actions**: Referenced models now support focus filters + missing-profile prioritization + one-click prefilled Create Profile actions from reference-only entries
+- **Bridge Data-Truth Hardening**: API now uses server-time freshness for bridge last-seen tracking, aggressively expires stale bridge entries, and validates remote attachments with `/health` probe before reporting connected status
+- **Recipe→Rollback UX Unification**: Recipe wizard success step now exposes direct `Open Rollback` navigation for faster transactional recovery workflows
+- **ClawPal Reliability Gate Scripts**: Root test flow now includes `@patze/api-server` tests, with dedicated `test:clawpal-gate` and `ci:verify:clawpal` commands for higher confidence pre-release checks
+- **OpenClaw E2E Smoke Gate (API Sandbox)**: Added `scripts/smoke-openclaw-flow.mjs` and wired it into `test:clawpal-gate` to validate readiness + recipe validate/preview/apply + rollback in an isolated temp environment
+- **OpenClaw E2E Smoke Gate (UI Browser)**: Added `scripts/smoke-ui-openclaw-flow.mjs` with Playwright Chromium headless to validate real desktop web UI path (`#/recipes` -> validate/preview/apply -> `Open Rollback`) plus rollback endpoint verification
 
 ## What's Left
 
 - [ ] Merge UI/UX branch (cursor/ui-ux-tenacitos-d014) into main via PR
 - [ ] Merge open Dependabot PRs (#2-#9) for dependency hygiene
 - [ ] Production deployment (Tauri sidecar bundling + installer)
-- [ ] E2E tests for multi-target + bridge flows
+- [ ] E2E tests for multi-target + bridge flows (API smoke gate done; full browser automation coverage still pending)
 - [ ] Target edit dialog (rename, change settings in-place)
 - [ ] OpenClaw CLI execution delegation for remote targets
 - [ ] Multi-target dashboard overview (aggregated health across targets)
 - [ ] Add richer Office interactions (desk detail drawer + per-target drill-down)
 - [ ] Add optional indexing strategy for very large workspace search (beyond LRU cache)
+- [ ] Run and lock regression tests for bridge install modes + config sync path
 
 ## Verification
 
-- CI (branch): typecheck ✓, lint ✓, format ✓, test 16/16 ✓
-- ci:verify: FULL GREEN
+- CI (baseline at last full run): typecheck ✓, lint ✓, format ✓, test 16/16 ✓
+- ci:verify: FULL GREEN (historical baseline, needs re-run for current working tree)
 - Browser: UI renders, interactions work
 
 ## Evolution
@@ -72,3 +99,7 @@ _Last updated: 2026-02-22_
 12. OpenClaw rich schema: stagger, payload, wakeMode, sessionTarget, runtime state, nested state extraction
 13. Channel intelligence: groupPolicy, allowFrom, runtimeState, accountSummary, risk scoring
 14. tenacitOS UI/UX integration: command palette, notifications, heatmap, timeline, notepad, design system polish
+15. Target contract + smart polling hardening: shared `selectedTargetId`, abortable polling, stale response guards
+16. Bridge install + sync hardening: SFTP bundle flow, sudo retry, config mirror (`configHash`/`configRaw`)
+17. Tasks OpenClaw jobs UX refresh: stats/search/filter + improved run-history readability
+18. Bridge runtime observability + installer integrity: local `/health` + `/metrics`, SHA-256 bundle verification, structured install report JSON

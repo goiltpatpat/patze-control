@@ -9,6 +9,8 @@ export interface OpenClawTarget {
   readonly id: string;
   readonly label: string;
   readonly type: 'local' | 'remote';
+  readonly origin: 'user' | 'auto' | 'smoke';
+  readonly purpose: 'production' | 'test';
   readonly openclawDir: string;
   readonly pollIntervalMs: number;
   readonly enabled: boolean;
@@ -16,7 +18,13 @@ export interface OpenClawTarget {
   readonly updatedAt: string;
 }
 
-export type OpenClawTargetInput = Omit<OpenClawTarget, 'id' | 'createdAt' | 'updatedAt'>;
+export type OpenClawTargetInput = Omit<
+  OpenClawTarget,
+  'id' | 'createdAt' | 'updatedAt' | 'origin' | 'purpose'
+> & {
+  readonly origin?: OpenClawTarget['origin'];
+  readonly purpose?: OpenClawTarget['purpose'];
+};
 export type OpenClawTargetPatch = Partial<Omit<OpenClawTarget, 'id' | 'createdAt' | 'updatedAt'>>;
 
 export interface TargetSyncStatusEntry {
@@ -27,6 +35,41 @@ export interface TargetSyncStatusEntry {
 interface TargetStoreData {
   readonly version: 1;
   readonly targets: readonly OpenClawTarget[];
+}
+
+function parseTargetOrigin(value: unknown): OpenClawTarget['origin'] {
+  if (value === 'auto' || value === 'smoke') {
+    return value;
+  }
+  return 'user';
+}
+
+function looksLikeLegacyTestTarget(label: string, openclawDir: string): boolean {
+  return (
+    /^ui smoke target/i.test(label) ||
+    /^smoke target/i.test(label) ||
+    /^ui target alpha\b/i.test(label) ||
+    /^ui target beta\b/i.test(label) ||
+    /patze-smoke/i.test(openclawDir) ||
+    /patze-ui-smoke/i.test(openclawDir) ||
+    /patze-ui-multi/i.test(openclawDir) ||
+    /patze-ui-target-edit-smoke/i.test(openclawDir)
+  );
+}
+
+function parseTargetPurpose(
+  value: unknown,
+  origin: OpenClawTarget['origin'],
+  label: string,
+  openclawDir: string
+): OpenClawTarget['purpose'] {
+  if (value === 'production' || value === 'test') {
+    return value;
+  }
+  if (origin === 'smoke') {
+    return 'test';
+  }
+  return looksLikeLegacyTestTarget(label, openclawDir) ? 'test' : 'production';
 }
 
 export class OpenClawTargetStore {
@@ -52,6 +95,8 @@ export class OpenClawTargetStore {
       id: `oct_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
       label: input.label,
       type: input.type,
+      origin: input.origin ?? 'user',
+      purpose: input.purpose ?? (input.origin === 'smoke' ? 'test' : 'production'),
       openclawDir: input.openclawDir,
       pollIntervalMs: input.pollIntervalMs,
       enabled: input.enabled,
@@ -72,6 +117,8 @@ export class OpenClawTargetStore {
       ...existing,
       ...(patch.label !== undefined ? { label: patch.label } : {}),
       ...(patch.type !== undefined ? { type: patch.type } : {}),
+      ...(patch.origin !== undefined ? { origin: patch.origin } : {}),
+      ...(patch.purpose !== undefined ? { purpose: patch.purpose } : {}),
       ...(patch.openclawDir !== undefined ? { openclawDir: patch.openclawDir } : {}),
       ...(patch.pollIntervalMs !== undefined ? { pollIntervalMs: patch.pollIntervalMs } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
@@ -96,7 +143,33 @@ export class OpenClawTargetStore {
       const raw = fs.readFileSync(this.filePath, 'utf-8');
       const data = JSON.parse(raw) as TargetStoreData;
       if (data.version === 1 && Array.isArray(data.targets)) {
-        this.targets = [...data.targets];
+        this.targets = data.targets
+          .map((target) => {
+            if (
+              !target ||
+              typeof target.id !== 'string' ||
+              typeof target.label !== 'string' ||
+              (target.type !== 'local' && target.type !== 'remote') ||
+              typeof target.openclawDir !== 'string' ||
+              typeof target.pollIntervalMs !== 'number' ||
+              typeof target.enabled !== 'boolean' ||
+              typeof target.createdAt !== 'string' ||
+              typeof target.updatedAt !== 'string'
+            ) {
+              return null;
+            }
+            return {
+              ...target,
+              origin: parseTargetOrigin((target as { origin?: unknown }).origin),
+              purpose: parseTargetPurpose(
+                (target as { purpose?: unknown }).purpose,
+                parseTargetOrigin((target as { origin?: unknown }).origin),
+                target.label,
+                target.openclawDir
+              ),
+            };
+          })
+          .filter((target): target is OpenClawTarget => target !== null);
       }
     } catch {
       this.targets = [];

@@ -12,6 +12,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
 function resolveConfigPath(openclawDir: string): string | null {
   const base = path.resolve(openclawDir);
   const candidates = [path.join(base, 'openclaw.json'), path.join(base, 'config', 'openclaw.json')];
@@ -44,8 +48,42 @@ function parseAgents(raw: Record<string, unknown>): OpenClawAgent[] {
   const agentsRecord = raw.agents;
   if (!isRecord(agentsRecord)) return agents;
 
+  // Newer OpenClaw schema: agents.list = [{ id, name, identity, model, enabled, ... }]
+  const list = agentsRecord.list;
+  if (Array.isArray(list)) {
+    for (const entry of list) {
+      if (!isRecord(entry) || typeof entry.id !== 'string' || entry.id.length === 0) continue;
+      const modelValue = entry.model;
+      const model =
+        typeof modelValue === 'string'
+          ? { primary: modelValue }
+          : isRecord(modelValue)
+            ? {
+                primary: typeof modelValue.primary === 'string' ? modelValue.primary : undefined,
+                fallback: typeof modelValue.fallback === 'string' ? modelValue.fallback : undefined,
+              }
+            : undefined;
+      const identity = isRecord(entry.identity) ? entry.identity : null;
+      const entryName = nonEmptyString(entry.name);
+      const identityName = identity ? nonEmptyString(identity.name) : null;
+      const entryEmoji = nonEmptyString(entry.emoji);
+      const identityEmoji = identity ? nonEmptyString(identity.emoji) : null;
+      const systemPrompt = nonEmptyString(entry.systemPrompt);
+      agents.push({
+        id: entry.id,
+        name: entryName ?? identityName ?? entry.id,
+        emoji: identityEmoji ?? entryEmoji ?? undefined,
+        model,
+        systemPrompt: systemPrompt ?? undefined,
+        enabled: entry.enabled !== false,
+      });
+    }
+    if (agents.length > 0) return agents;
+  }
+
   for (const [id, value] of Object.entries(agentsRecord)) {
     if (id === 'defaults') continue;
+    if (id === 'list') continue;
     if (!isRecord(value)) continue;
     agents.push({
       id,
@@ -66,6 +104,36 @@ function parseAgents(raw: Record<string, unknown>): OpenClawAgent[] {
 
 function parseModels(raw: Record<string, unknown>): OpenClawModelProfile[] {
   const models: OpenClawModelProfile[] = [];
+
+  // Newer OpenClaw schema: models.providers.<provider>.models = [{ id, name, ... }]
+  const modelsRoot = raw.models;
+  if (isRecord(modelsRoot) && isRecord(modelsRoot.providers)) {
+    for (const [providerId, providerConfig] of Object.entries(modelsRoot.providers)) {
+      if (!isRecord(providerConfig) || !Array.isArray(providerConfig.models)) continue;
+      for (const modelEntry of providerConfig.models) {
+        if (
+          !isRecord(modelEntry) ||
+          typeof modelEntry.id !== 'string' ||
+          modelEntry.id.length === 0
+        ) {
+          continue;
+        }
+        models.push({
+          id: `${providerId}/${modelEntry.id}`,
+          name:
+            typeof modelEntry.name === 'string'
+              ? modelEntry.name
+              : `${providerId}/${modelEntry.id}`,
+          provider: providerId,
+          model: modelEntry.id,
+          apiKey: nonEmptyString(providerConfig.apiKey) ?? undefined,
+          baseUrl: nonEmptyString(providerConfig.baseUrl) ?? undefined,
+          enabled: modelEntry.enabled !== false,
+        });
+      }
+    }
+    if (models.length > 0) return models;
+  }
 
   const modelsRecord =
     raw.models ?? (isRecord(raw.agents) ? (raw.agents as Record<string, unknown>).models : null);
@@ -97,12 +165,18 @@ function parseBindings(raw: Record<string, unknown>): OpenClawChannelBinding[] {
     if (Array.isArray(agents)) {
       for (const entry of agents) {
         if (typeof entry === 'string') {
-          bindings.push({ channelId, agentId: entry });
+          const agentId = nonEmptyString(entry);
+          if (!agentId) continue;
+          bindings.push({ channelId, agentId });
         } else if (isRecord(entry)) {
+          const fromAgentId = nonEmptyString(entry.agentId);
+          const fromId = nonEmptyString(entry.id);
+          const agentId = fromAgentId ?? fromId;
+          if (!agentId) continue;
           bindings.push({
             channelId,
-            agentId: typeof entry.agentId === 'string' ? entry.agentId : String(entry.id ?? ''),
-            modelOverride: typeof entry.model === 'string' ? entry.model : undefined,
+            agentId,
+            modelOverride: nonEmptyString(entry.model) ?? undefined,
           });
         }
       }

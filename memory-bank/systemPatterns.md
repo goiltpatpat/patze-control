@@ -1,6 +1,6 @@
 # System Patterns
 
-_Last updated: 2026-02-22_
+_Last updated: 2026-02-24_
 
 ## Architecture
 
@@ -41,6 +41,14 @@ OpenClaw installations
 - `OpenClawSyncManager` holds `Map<targetId, SyncInstance>` of running `OpenClawCronSync` instances
 - Start/stop/restart per target, aggregate status across all targets
 - Auto-creates default "Local" target on first boot if store is empty
+- Bridge sync payload now includes `configHash` and optional `configRaw`; API mirrors `openclaw.json` updates on target paths
+
+## Bridge Setup Reliability Pattern
+
+- `BridgeSetupManager` uses pre-uploaded bundle flow (`build:bundle` -> SFTP upload -> remote replace) to avoid fragile remote npm installs
+- Existing running service path now attempts non-interactive restart first (`sudo -n`), then moves to explicit `needs_sudo_password` state
+- Retry endpoint (`/bridge/managed/:id/sudo-password`) can resume restart/install with controlled stdin handling
+- Install script hardening covers masked systemd unit recovery for both user/system service scopes
 
 ## OpenClaw Rich Schema Parsing
 
@@ -66,6 +74,13 @@ OpenClaw installations
 - On failure: exponential backoff `2^(failures-1) x basePollInterval`, capped at 1 hour
 - On success: reset to base interval
 - Status changes emitted only when serialized status differs (`emitStatusIfChanged`)
+
+## Frontend Target + Poll Contract
+
+- `selectedTargetId` is owned by `AppShell` and propagated through `MainView` into Agents/Tasks/Channels/Models/Recipes
+- Top context bar acts as single selector source; views no longer maintain conflicting local fallback target IDs
+- `useSmartPoll` now passes `{ signal, requestId }`, aborts in-flight requests, and rejects stale responses in key hooks
+- Desktop-sensitive polling paths set `pauseOnHidden: false` to avoid hidden-tab deadlock in Tauri webviews
 
 ## SSE Event Architecture
 

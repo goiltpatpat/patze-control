@@ -1,8 +1,13 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { IconActivity } from '../../components/Icons';
 import { HealthBadge } from '../../components/badges/HealthBadge';
+import { cachedFetch, getCacheStats, invalidateCache } from '../../hooks/useApiCache';
 import { AuthSettingsSection } from './AuthSettingsSection';
+import { FleetAlertsSection } from './FleetAlertsSection';
+import { FleetPoliciesSection } from './FleetPoliciesSection';
 import { DiffViewer } from '../../components/DiffViewer';
+import { navigate } from '../../shell/routes';
 import type { ConnectionStatus, FrontendUnifiedSnapshot } from '../../types';
 import type { OpenClawConfigSnapshot } from '@patze/telemetry-core';
 
@@ -10,17 +15,27 @@ function ConfigHistorySection(props: {
   readonly baseUrl: string;
   readonly token: string;
   readonly connected: boolean;
+  readonly selectedTargetId: string | null;
 }): JSX.Element {
   const [snapshots, setSnapshots] = useState<readonly OpenClawConfigSnapshot[]>([]);
   const [selectedSnap, setSelectedSnap] = useState<OpenClawConfigSnapshot | null>(null);
   const [previousSnap, setPreviousSnap] = useState<OpenClawConfigSnapshot | null>(null);
+  const [rollbackPending, setRollbackPending] = useState(false);
+  const [rollbackResult, setRollbackResult] = useState<string | null>(null);
+  const [confirmRollbackId, setConfirmRollbackId] = useState<string | null>(null);
+
+  const targetId = props.selectedTargetId ?? 'local';
 
   const fetchSnapshots = useCallback(async () => {
     if (!props.connected) return;
     try {
-      const res = await fetch(`${props.baseUrl}/openclaw/targets/local/config-snapshots`, {
-        headers: { Authorization: `Bearer ${props.token}` },
-      });
+      const res = await cachedFetch(
+        `${props.baseUrl}/openclaw/targets/${encodeURIComponent(targetId)}/config-snapshots`,
+        {
+          headers: { Authorization: `Bearer ${props.token}` },
+          ttlMs: 10_000,
+        }
+      );
       if (res.ok) {
         const data = (await res.json()) as { snapshots?: OpenClawConfigSnapshot[] };
         setSnapshots(data.snapshots ?? []);
@@ -28,29 +43,43 @@ function ConfigHistorySection(props: {
     } catch {
       /* ignore */
     }
-  }, [props.baseUrl, props.token, props.connected]);
+  }, [props.baseUrl, props.token, props.connected, targetId]);
 
   useEffect(() => {
     void fetchSnapshots();
   }, [fetchSnapshots]);
 
-  const handleRollback = useCallback(
+  const doRollback = useCallback(
     async (snapId: string) => {
+      setRollbackPending(true);
+      setRollbackResult(null);
       try {
-        await fetch(
-          `${props.baseUrl}/openclaw/targets/local/config-snapshots/${encodeURIComponent(snapId)}/rollback`,
+        const res = await fetch(
+          `${props.baseUrl}/openclaw/targets/${encodeURIComponent(targetId)}/config-snapshots/${encodeURIComponent(snapId)}/rollback`,
           {
             method: 'POST',
             headers: { Authorization: `Bearer ${props.token}`, 'Content-Type': 'application/json' },
           }
         );
-        void fetchSnapshots();
+        if (res.ok) {
+          setRollbackResult('Rollback applied successfully');
+          invalidateCache('/openclaw/');
+          void fetchSnapshots();
+        } else {
+          setRollbackResult(`Rollback failed (HTTP ${res.status})`);
+        }
       } catch {
-        /* ignore */
+        setRollbackResult('Rollback failed — network error');
+      } finally {
+        setRollbackPending(false);
       }
     },
-    [props.baseUrl, props.token, fetchSnapshots]
+    [props.baseUrl, props.token, targetId, fetchSnapshots]
   );
+
+  const handleRollback = useCallback((snapId: string) => {
+    setConfirmRollbackId(snapId);
+  }, []);
 
   const viewDiff = useCallback(
     (snap: OpenClawConfigSnapshot, idx: number) => {
@@ -71,11 +100,22 @@ function ConfigHistorySection(props: {
         </p>
       ) : (
         <>
+          {rollbackResult ? (
+            <div
+              className={`doctor-issue ${rollbackResult.includes('success') ? 'doctor-issue-info' : 'doctor-issue-error'}`}
+              style={{ marginBottom: 8 }}
+            >
+              <span>{rollbackResult}</span>
+              <button type="button" className="btn-ghost" onClick={() => setRollbackResult(null)}>
+                Dismiss
+              </button>
+            </div>
+          ) : null}
           <div className="config-history-list">
-            {snapshots.slice(0, 15).map((snap, idx) => (
+            {snapshots.slice(0, 20).map((snap, idx) => (
               <div key={snap.id} className="config-history-item">
                 <div className="config-history-meta">
-                  <span className="config-history-source">{snap.source}</span>
+                  <span className="config-history-source badge tone-neutral">{snap.source}</span>
                   <span className="config-history-time">
                     {new Date(snap.timestamp).toLocaleString()}
                   </span>
@@ -83,14 +123,15 @@ function ConfigHistorySection(props: {
                 <span className="config-history-desc">{snap.description}</span>
                 <div className="config-history-actions">
                   <button type="button" className="btn-ghost" onClick={() => viewDiff(snap, idx)}>
-                    View
+                    Diff
                   </button>
                   <button
                     type="button"
                     className="btn-ghost"
+                    disabled={rollbackPending}
                     onClick={() => void handleRollback(snap.id)}
                   >
-                    Rollback
+                    {rollbackPending ? 'Rolling back...' : 'Rollback'}
                   </button>
                 </div>
               </div>
@@ -115,6 +156,21 @@ function ConfigHistorySection(props: {
           ) : null}
         </>
       )}
+
+      {confirmRollbackId ? (
+        <ConfirmDialog
+          title="Rollback Config"
+          message="Rollback to this config snapshot? Current config will be overwritten."
+          variant="warn"
+          confirmLabel="Rollback"
+          onConfirm={() => {
+            const id = confirmRollbackId;
+            setConfirmRollbackId(null);
+            void doRollback(id);
+          }}
+          onCancel={() => setConfirmRollbackId(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -122,27 +178,83 @@ function ConfigHistorySection(props: {
 function UpdateSection(): JSX.Element {
   const [checking, setChecking] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<
-    'idle' | 'checking' | 'available' | 'up-to-date'
+    'idle' | 'checking' | 'available' | 'up-to-date' | 'error'
   >('idle');
   const [updateInfo, setUpdateInfo] = useState<string | null>(null);
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [releaseUrl, setReleaseUrl] = useState<string | null>(null);
+
+  const parseVersion = useCallback((value: string): [number, number, number] => {
+    const normalized = value.trim().replace(/^v/i, '');
+    const [majorRaw, minorRaw, patchRaw] = normalized.split('.');
+    const major = Number(majorRaw ?? '0');
+    const minor = Number(minorRaw ?? '0');
+    const patch = Number((patchRaw ?? '0').split('-')[0] ?? '0');
+    return [
+      Number.isFinite(major) ? major : 0,
+      Number.isFinite(minor) ? minor : 0,
+      Number.isFinite(patch) ? patch : 0,
+    ];
+  }, []);
+
+  const isVersionNewer = useCallback(
+    (current: string, latest: string): boolean => {
+      const a = parseVersion(current);
+      const b = parseVersion(latest);
+      if (b[0] !== a[0]) return b[0] > a[0];
+      if (b[1] !== a[1]) return b[1] > a[1];
+      return b[2] > a[2];
+    },
+    [parseVersion]
+  );
 
   const checkForUpdates = useCallback(async () => {
     setChecking(true);
     setUpdateStatus('checking');
+    setLatestVersion(null);
+    setReleaseUrl(null);
     try {
-      if (typeof window.__TAURI__ !== 'undefined') {
-        setUpdateStatus('up-to-date');
-        setUpdateInfo('Tauri updater integration pending — check GitHub for releases.');
+      const latestReleaseUrl =
+        import.meta.env.VITE_RELEASES_LATEST_URL ??
+        'https://api.github.com/repos/patyagami/patze-control/releases/latest';
+      const res = await fetch(latestReleaseUrl, {
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) {
+        setUpdateStatus('error');
+        setUpdateInfo(`Unable to check updates (HTTP ${String(res.status)}).`);
+        return;
+      }
+      const data = (await res.json()) as {
+        tag_name?: string;
+        html_url?: string;
+        published_at?: string;
+      };
+      const latestTag = typeof data.tag_name === 'string' ? data.tag_name : '';
+      if (!latestTag) {
+        setUpdateStatus('error');
+        setUpdateInfo('Release feed returned no tag_name.');
+        return;
+      }
+      const newer = isVersionNewer(__APP_VERSION__, latestTag);
+      setLatestVersion(latestTag);
+      setReleaseUrl(typeof data.html_url === 'string' ? data.html_url : null);
+      if (newer) {
+        setUpdateStatus('available');
+        setUpdateInfo(
+          `Update available (${latestTag}). Published ${data.published_at ? new Date(data.published_at).toLocaleString() : 'recently'}.`
+        );
       } else {
         setUpdateStatus('up-to-date');
-        setUpdateInfo('Running in browser — auto-update available in desktop app only.');
+        setUpdateInfo(`You're on the latest version (${__APP_VERSION__}).`);
       }
     } catch {
-      setUpdateStatus('idle');
+      setUpdateStatus('error');
+      setUpdateInfo('Unable to check updates — network error.');
     } finally {
       setChecking(false);
     }
-  }, []);
+  }, [isVersionNewer]);
 
   return (
     <div className="settings-section">
@@ -160,23 +272,41 @@ function UpdateSection(): JSX.Element {
               ? 'Checking...'
               : updateStatus === 'available'
                 ? 'Update available!'
-                : 'Up to date'}
+                : updateStatus === 'error'
+                  ? 'Check failed'
+                  : 'Up to date'}
         </span>
       </div>
+      {latestVersion ? (
+        <div className="settings-row">
+          <span className="settings-row-label">Latest Release</span>
+          <span className="settings-row-value">{latestVersion}</span>
+        </div>
+      ) : null}
       {updateInfo ? (
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>
           {updateInfo}
         </p>
       ) : null}
-      <button
-        type="button"
-        className="btn-primary"
-        style={{ marginTop: 8 }}
-        onClick={() => void checkForUpdates()}
-        disabled={checking}
-      >
-        {checking ? 'Checking...' : 'Check for Updates'}
-      </button>
+      <div className="fleet-policy-actions" style={{ marginTop: 8 }}>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => void checkForUpdates()}
+          disabled={checking}
+        >
+          {checking ? 'Checking...' : 'Check for Updates'}
+        </button>
+        {updateStatus === 'available' && releaseUrl ? (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => window.open(releaseUrl, '_blank', 'noopener,noreferrer')}
+          >
+            Open Release
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -186,77 +316,207 @@ export interface SettingsViewProps {
   readonly baseUrl: string;
   readonly token: string;
   readonly status: ConnectionStatus;
+  readonly selectedTargetId: string | null;
+  readonly onBaseUrlChange: (value: string) => void;
+  readonly onTokenChange: (value: string) => void;
+  readonly onConnect: () => void;
 }
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+const SMART_FLEET_V2_ENABLED = (import.meta.env.VITE_SMART_FLEET_V2_ENABLED ?? '1') !== '0';
+const DEV_DIAGNOSTICS_ENABLED = import.meta.env.DEV;
+
+interface DoctorReconcileCandidate {
+  readonly targetId: string;
+  readonly label: string;
+  readonly reasons: readonly string[];
+  readonly consecutiveFailures: number;
+  readonly stale: boolean;
+  readonly available: boolean;
+  readonly running: boolean;
+}
+
+interface DoctorVerifySummary {
+  readonly baseline: number;
+  readonly after: number;
+  readonly resolved: number;
+  readonly remaining: number;
+  readonly checkedAt: string;
+}
+
+interface OpenClawReadinessCheck {
+  readonly id:
+    | 'bridge-connected'
+    | 'targets-available'
+    | 'sync-running'
+    | 'recent-runs'
+    | 'auth-mode';
+  readonly status: 'ok' | 'warn' | 'error';
+  readonly title: string;
+  readonly detail: string;
+  readonly actionHints: readonly string[];
+}
+
+interface OpenClawReadinessResponse {
+  readonly ok: boolean;
+  readonly score: number;
+  readonly checks: readonly OpenClawReadinessCheck[];
+  readonly rootCause?: {
+    readonly severity: 'error' | 'warn' | 'ok';
+    readonly detail: string;
+  };
+  readonly summary: {
+    readonly bridgeConnections: number;
+    readonly targets: number;
+    readonly syncRunningTargets: number;
+    readonly recentRuns: number;
+    readonly authMode: 'none' | 'token';
+  };
+}
+
+interface OperationJournalEntry {
+  readonly operationId: string;
+  readonly type: string;
+  readonly targetId?: string;
+  readonly status: 'started' | 'succeeded' | 'failed';
+  readonly startedAt: string;
+  readonly endedAt?: string;
+  readonly message: string;
+  readonly error?: string;
+}
 
 export function SettingsView(props: SettingsViewProps): JSX.Element {
   const { snapshot, baseUrl, status } = props;
   const health = snapshot?.health;
   const [doctorRun, setDoctorRun] = useState(false);
+  const [doctorActionPending, setDoctorActionPending] = useState(false);
+  const [doctorActionMessage, setDoctorActionMessage] = useState<string | null>(null);
+  const [doctorPlanPending, setDoctorPlanPending] = useState(false);
+  const [doctorPlanCandidates, setDoctorPlanCandidates] = useState<
+    readonly DoctorReconcileCandidate[]
+  >([]);
+  const [doctorVerifyPending, setDoctorVerifyPending] = useState(false);
+  const [doctorVerifySummary, setDoctorVerifySummary] = useState<DoctorVerifySummary | null>(null);
+  const [doctorPlanConfig, setDoctorPlanConfig] = useState({
+    minConsecutiveFailures: 2,
+    includeStale: true,
+    includeUnavailable: true,
+  });
+  const [readiness, setReadiness] = useState<OpenClawReadinessResponse | null>(null);
+  const [readinessPending, setReadinessPending] = useState(false);
+  const [readinessFixPending, setReadinessFixPending] = useState(false);
+  const [readinessMessage, setReadinessMessage] = useState<string | null>(null);
+  const [operations, setOperations] = useState<readonly OperationJournalEntry[]>([]);
+  const [testRunPending, setTestRunPending] = useState(false);
+  const [testRunMessage, setTestRunMessage] = useState<string | null>(null);
+  const [testRunLastRunId, setTestRunLastRunId] = useState<string | null>(null);
   const isConnected = status === 'connected' || status === 'degraded';
 
   const doctorResults = useMemo(() => {
-    if (!snapshot) {
-      return null;
-    }
+    if (!snapshot) return null;
 
     const now = Date.now();
     const sessions = snapshot.sessions;
     const runs = snapshot.runs;
     const machines = snapshot.machines;
 
+    type DoctorIssue = {
+      severity: 'error' | 'warn' | 'info';
+      message: string;
+      fixLabel?: string;
+      fixAction?: string;
+    };
+
+    const issues: DoctorIssue[] = [];
+    let score = 100;
+
     const staleSessions = sessions.filter((s) => {
       const isActive = !['completed', 'failed', 'cancelled'].includes(s.state);
-      if (!isActive) {
-        return false;
-      }
-      const lastUpdate = new Date(s.updatedAt).getTime();
-      return now - lastUpdate > STALE_THRESHOLD_MS;
+      if (!isActive) return false;
+      return now - new Date(s.updatedAt).getTime() > STALE_THRESHOLD_MS;
     });
-
-    const orphanedRuns = runs.filter((r) => {
-      const hasSession = sessions.some((s) => s.sessionId === r.sessionId);
-      return !hasSession;
-    });
-
-    const offlineMachines = machines.filter((m) => m.status === 'offline');
-
-    const issues: Array<{ severity: 'warn' | 'error' | 'info'; message: string }> = [];
-
     if (staleSessions.length > 0) {
+      score -= Math.min(20, staleSessions.length * 5);
       issues.push({
         severity: 'warn',
-        message: `${staleSessions.length} stale session(s) — active but no update for >5 minutes`,
+        message: `${staleSessions.length} stale session(s) — active but no update for >5 min`,
       });
     }
 
+    const orphanedRuns = runs.filter((r) => !sessions.some((s) => s.sessionId === r.sessionId));
     if (orphanedRuns.length > 0) {
+      score -= Math.min(15, orphanedRuns.length * 3);
       issues.push({
         severity: 'warn',
         message: `${orphanedRuns.length} orphaned run(s) — session no longer tracked`,
       });
     }
 
+    const offlineMachines = machines.filter((m) => m.status === 'offline');
     if (offlineMachines.length > 0) {
+      score -= offlineMachines.length * 5;
       issues.push({
         severity: 'info',
         message: `${offlineMachines.length} offline machine(s)`,
       });
     }
 
-    if ((health?.failedRunsTotal ?? 0) > 0) {
+    const degradedMachines = machines.filter((m) => m.status === 'degraded');
+    if (degradedMachines.length > 0) {
+      score -= degradedMachines.length * 10;
       issues.push({
-        severity: 'error',
-        message: `${health?.failedRunsTotal ?? 0} failed run(s) detected`,
+        severity: 'warn',
+        message: `${degradedMachines.length} degraded machine(s) — check bridge connectivity`,
+        fixLabel: 'Reconcile unhealthy targets',
+        fixAction: 'reconcile-unhealthy-targets',
       });
     }
+
+    const failedRuns = health?.failedRunsTotal ?? 0;
+    if (failedRuns > 0) {
+      score -= Math.min(25, failedRuns * 2);
+      issues.push({
+        severity: 'error',
+        message: `${failedRuns} failed run(s) detected`,
+        fixLabel: 'Reconcile unhealthy targets',
+        fixAction: 'reconcile-unhealthy-targets',
+      });
+    }
+
+    const emptySessions = sessions.filter((s) => {
+      const hasRuns = runs.some((r) => r.sessionId === s.sessionId);
+      return !hasRuns && ['completed', 'failed', 'cancelled'].includes(s.state);
+    });
+    if (emptySessions.length > 5) {
+      score -= 5;
+      issues.push({
+        severity: 'info',
+        message: `${emptySessions.length} empty terminated sessions — consider cleanup via Session Analysis`,
+      });
+    }
+
+    const cacheStats = getCacheStats();
+    if (cacheStats.entries > 400) {
+      issues.push({
+        severity: 'info',
+        message: `API cache is ${Math.round((cacheStats.entries / cacheStats.maxEntries) * 100)}% full (${cacheStats.entries}/${cacheStats.maxEntries})`,
+        fixLabel: 'Flush cache',
+        fixAction: 'flush-cache',
+      });
+    }
+
+    if (health?.overall === 'degraded') {
+      score -= 15;
+    }
+
+    score = Math.max(0, Math.min(100, score));
 
     if (issues.length === 0) {
       issues.push({ severity: 'info', message: 'All systems healthy — no issues detected' });
     }
 
     return {
+      score,
       issues,
       totalEvents: snapshot.recentEvents.length,
       totalLogs: snapshot.logs.length,
@@ -264,6 +524,324 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
       totalRuns: runs.length,
     };
   }, [snapshot, health]);
+
+  const handleDoctorFix = useCallback(
+    async (fixAction: string): Promise<void> => {
+      if (doctorActionPending) return;
+      if (fixAction === 'flush-cache') {
+        invalidateCache();
+        setDoctorActionMessage('API cache flushed.');
+        setDoctorRun(false);
+        return;
+      }
+      if (fixAction === 'reconcile-unhealthy-targets') {
+        setDoctorActionMessage(
+          'Use Playbook controls below: Preview Plan first, then Apply Playbook.'
+        );
+      }
+    },
+    [doctorActionPending]
+  );
+
+  const runDoctorPlaybook = useCallback(
+    async (dryRun: boolean): Promise<void> => {
+      if (dryRun) {
+        setDoctorPlanPending(true);
+      } else {
+        setDoctorActionPending(true);
+      }
+      if (!dryRun) {
+        setDoctorActionMessage(null);
+        setDoctorVerifySummary(null);
+      }
+      try {
+        const res = await fetch(`${props.baseUrl}/doctor/actions/reconcile-unhealthy-targets`, {
+          method: 'POST',
+          ...(props.token.length > 0
+            ? {
+                headers: {
+                  Authorization: `Bearer ${props.token}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            : { headers: { 'Content-Type': 'application/json' } }),
+          body: JSON.stringify({
+            minConsecutiveFailures: doctorPlanConfig.minConsecutiveFailures,
+            includeStale: doctorPlanConfig.includeStale,
+            includeUnavailable: doctorPlanConfig.includeUnavailable,
+            dryRun,
+          }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!res.ok) {
+          const msg = dryRun
+            ? `Preview plan failed (HTTP ${String(res.status)}).`
+            : `Apply playbook failed (HTTP ${String(res.status)}).`;
+          setDoctorActionMessage(msg);
+          return;
+        }
+        const data = (await res.json()) as {
+          candidates?: DoctorReconcileCandidate[];
+          attempted?: number;
+          restarted?: number;
+          skipped?: number;
+        };
+        setDoctorPlanCandidates(data.candidates ?? []);
+        if (dryRun) {
+          setDoctorVerifySummary(null);
+          setDoctorActionMessage(
+            `Preview: ${String(data.attempted ?? 0)} candidate target(s) match current playbook strategy.`
+          );
+        } else {
+          const baselineCandidates = data.candidates ?? [];
+          const baselineSet = new Set(baselineCandidates.map((candidate) => candidate.targetId));
+          setDoctorActionMessage(
+            `Apply completed: attempted ${String(data.attempted ?? 0)}, restarted ${String(
+              data.restarted ?? 0
+            )}, skipped ${String(data.skipped ?? 0)}. Verifying...`
+          );
+          setDoctorVerifyPending(true);
+          try {
+            await new Promise<void>((resolve) => {
+              setTimeout(() => resolve(), 1_500);
+            });
+            const verifyRes = await fetch(
+              `${props.baseUrl}/doctor/actions/reconcile-unhealthy-targets`,
+              {
+                method: 'POST',
+                ...(props.token.length > 0
+                  ? {
+                      headers: {
+                        Authorization: `Bearer ${props.token}`,
+                        'Content-Type': 'application/json',
+                      },
+                    }
+                  : { headers: { 'Content-Type': 'application/json' } }),
+                body: JSON.stringify({
+                  minConsecutiveFailures: doctorPlanConfig.minConsecutiveFailures,
+                  includeStale: doctorPlanConfig.includeStale,
+                  includeUnavailable: doctorPlanConfig.includeUnavailable,
+                  dryRun: true,
+                }),
+                signal: AbortSignal.timeout(10_000),
+              }
+            );
+            if (verifyRes.ok) {
+              const verifyData = (await verifyRes.json()) as {
+                candidates?: DoctorReconcileCandidate[];
+              };
+              const afterCandidates = verifyData.candidates ?? [];
+              setDoctorPlanCandidates(afterCandidates);
+              const remaining = afterCandidates.filter((candidate) =>
+                baselineSet.has(candidate.targetId)
+              ).length;
+              const resolved = Math.max(0, baselineSet.size - remaining);
+              setDoctorVerifySummary({
+                baseline: baselineSet.size,
+                after: afterCandidates.length,
+                resolved,
+                remaining,
+                checkedAt: new Date().toISOString(),
+              });
+              setDoctorActionMessage(
+                `Apply completed. Verify: resolved ${String(resolved)}/${String(
+                  baselineSet.size
+                )}, remaining ${String(remaining)} (total unhealthy now ${String(afterCandidates.length)}).`
+              );
+            } else {
+              setDoctorActionMessage(
+                `Apply completed, but verify failed (HTTP ${String(verifyRes.status)}).`
+              );
+            }
+          } catch {
+            setDoctorActionMessage('Apply completed, but verify failed — network error.');
+          } finally {
+            setDoctorVerifyPending(false);
+          }
+          invalidateCache('/openclaw/');
+          props.onConnect();
+          setDoctorRun(false);
+        }
+      } catch {
+        setDoctorActionMessage(
+          dryRun ? 'Preview plan failed — network error.' : 'Apply playbook failed — network error.'
+        );
+      } finally {
+        if (dryRun) {
+          setDoctorPlanPending(false);
+        } else {
+          setDoctorActionPending(false);
+        }
+      }
+    },
+    [doctorPlanConfig, props.baseUrl, props.onConnect, props.token]
+  );
+
+  const sendTelemetryTestRun = useCallback(async (): Promise<void> => {
+    if (testRunPending) return;
+    setTestRunPending(true);
+    setTestRunMessage(null);
+    setTestRunLastRunId(null);
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (props.token.length > 0) {
+        headers.Authorization = `Bearer ${props.token}`;
+      }
+
+      const seed = Date.now();
+      const runId = `run_manual_test_${String(seed)}`;
+      const sessionId = `session_manual_test_${String(seed)}`;
+      const agentId = 'agent_manual_test';
+      const machineId = `machine_manual_test_${String(seed)}`;
+      const traceId = `trace_manual_test_${String(seed)}`;
+      const startTs = new Date().toISOString();
+      const endTs = new Date(Date.now() + 1_000).toISOString();
+      const events = [
+        {
+          version: 'telemetry.v1',
+          id: `manual-test-running-${String(seed)}`,
+          ts: startTs,
+          machineId,
+          severity: 'info',
+          type: 'run.state.changed',
+          payload: {
+            runId,
+            sessionId,
+            agentId,
+            from: 'queued',
+            to: 'running',
+          },
+          trace: {
+            traceId,
+          },
+        },
+        {
+          version: 'telemetry.v1',
+          id: `manual-test-completed-${String(seed)}`,
+          ts: endTs,
+          machineId,
+          severity: 'info',
+          type: 'run.state.changed',
+          payload: {
+            runId,
+            sessionId,
+            agentId,
+            from: 'running',
+            to: 'completed',
+          },
+          trace: {
+            traceId,
+          },
+        },
+      ] as const;
+
+      for (const event of events) {
+        const response = await fetch(`${props.baseUrl}/ingest`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(event),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!response.ok) {
+          setTestRunMessage(`Send test run failed (HTTP ${String(response.status)}).`);
+          return;
+        }
+      }
+
+      setTestRunLastRunId(runId);
+      setTestRunMessage(`Test run sent: ${runId} (running -> completed). Open Runs to verify.`);
+    } catch {
+      setTestRunMessage('Send test run failed — network error.');
+    } finally {
+      setTestRunPending(false);
+    }
+  }, [props.baseUrl, props.token, testRunPending]);
+
+  const refreshOpenClawReadiness = useCallback(async (): Promise<void> => {
+    if (!isConnected) {
+      setReadiness(null);
+      setOperations([]);
+      setReadinessMessage('Connect to run OpenClaw readiness checks.');
+      return;
+    }
+    setReadinessPending(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (props.token.length > 0) {
+        headers.Authorization = `Bearer ${props.token}`;
+      }
+      const [readinessRes, operationsRes] = await Promise.all([
+        fetch(`${props.baseUrl}/openclaw/readiness`, {
+          headers,
+          signal: AbortSignal.timeout(8_000),
+        }),
+        fetch(`${props.baseUrl}/operations/recent?limit=12`, {
+          headers,
+          signal: AbortSignal.timeout(8_000),
+        }),
+      ]);
+      if (!readinessRes.ok) {
+        setReadinessMessage(`Readiness check failed (HTTP ${String(readinessRes.status)}).`);
+        return;
+      }
+      const readinessData = (await readinessRes.json()) as OpenClawReadinessResponse;
+      setReadiness(readinessData);
+      setReadinessMessage(null);
+      if (operationsRes.ok) {
+        const operationsData = (await operationsRes.json()) as {
+          operations?: OperationJournalEntry[];
+        };
+        setOperations(operationsData.operations ?? []);
+      } else {
+        setOperations([]);
+      }
+    } catch {
+      setReadinessMessage('Cannot verify OpenClaw readiness right now — network error.');
+    } finally {
+      setReadinessPending(false);
+    }
+  }, [isConnected, props.baseUrl, props.token]);
+
+  const runReadinessFix = useCallback(
+    async (
+      action: 'create_default_target' | 'restart_sync_all' | 'reconcile_unhealthy'
+    ): Promise<void> => {
+      if (readinessFixPending) return;
+      setReadinessFixPending(true);
+      setReadinessMessage(null);
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (props.token.length > 0) {
+          headers.Authorization = `Bearer ${props.token}`;
+        }
+        const res = await fetch(`${props.baseUrl}/openclaw/readiness/fix`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!res.ok) {
+          setReadinessMessage(`Readiness fix failed (HTTP ${String(res.status)}).`);
+          return;
+        }
+        setReadinessMessage(`Readiness fix executed: ${action}.`);
+        await refreshOpenClawReadiness();
+      } catch {
+        setReadinessMessage('Readiness fix failed — network error.');
+      } finally {
+        setReadinessFixPending(false);
+      }
+    },
+    [props.baseUrl, props.token, readinessFixPending, refreshOpenClawReadiness]
+  );
+
+  useEffect(() => {
+    void refreshOpenClawReadiness();
+  }, [refreshOpenClawReadiness]);
 
   return (
     <section className="view-panel">
@@ -284,30 +862,236 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
           </div>
         </div>
 
-        <div className="settings-section">
+        <div className="settings-section settings-section-diagnostics">
           <h3 className="settings-section-title">Diagnostics</h3>
-          <div className="settings-row">
-            <span className="settings-row-label">Overall Health</span>
-            <span className="settings-row-value">
-              <HealthBadge health={health ? health.overall : 'not connected'} />
-            </span>
+          <div className="settings-smart-actions">
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                navigate('tunnels');
+              }}
+            >
+              Connections
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                navigate('tasks', { taskView: 'openclaw' });
+              }}
+            >
+              OpenClaw Jobs
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                navigate('runs');
+              }}
+            >
+              Runs
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                void refreshOpenClawReadiness();
+              }}
+            >
+              Refresh
+            </button>
           </div>
-          <div className="settings-row">
-            <span className="settings-row-label">Machines</span>
-            <span className="settings-row-value">{health?.machines.length ?? 0}</span>
+          <div className="settings-kpi-grid">
+            <div className="settings-kpi-card">
+              <span className="settings-kpi-label">Overall</span>
+              <span className="settings-kpi-value">
+                <HealthBadge health={health ? health.overall : 'not connected'} />
+              </span>
+            </div>
+            <div className="settings-kpi-card">
+              <span className="settings-kpi-label">Machines</span>
+              <span className="settings-kpi-value">{health?.machines.length ?? 0}</span>
+            </div>
+            <div className="settings-kpi-card">
+              <span className="settings-kpi-label">Active Runs</span>
+              <span className="settings-kpi-value">{health?.activeRunsTotal ?? 0}</span>
+            </div>
+            <div className="settings-kpi-card">
+              <span className="settings-kpi-label">Failed Runs</span>
+              <span className="settings-kpi-value">{health?.failedRunsTotal ?? 0}</span>
+            </div>
+            <div className="settings-kpi-card">
+              <span className="settings-kpi-label">Bridge</span>
+              <span className="settings-kpi-value">
+                {String(readiness?.summary.bridgeConnections ?? 0)}
+              </span>
+            </div>
+            <div className="settings-kpi-card">
+              <span className="settings-kpi-label">Targets</span>
+              <span className="settings-kpi-value">{String(readiness?.summary.targets ?? 0)}</span>
+            </div>
           </div>
-          <div className="settings-row">
-            <span className="settings-row-label">Stale Machines</span>
-            <span className="settings-row-value">{health?.staleMachinesTotal ?? 0}</span>
+          <div className="settings-readiness-score">
+            <div className="settings-readiness-score-head">
+              <span className="settings-row-label">Readiness Score</span>
+              <span className="settings-row-value">
+                {readinessPending
+                  ? 'Checking…'
+                  : readiness
+                    ? `${String(readiness.score)} / 100`
+                    : '-'}
+              </span>
+            </div>
+            <div className="settings-readiness-score-bar">
+              <span
+                className={`settings-readiness-score-fill ${
+                  (readiness?.score ?? 0) >= 80
+                    ? 'is-good'
+                    : (readiness?.score ?? 0) >= 60
+                      ? 'is-warn'
+                      : 'is-bad'
+                }`}
+                style={{ width: `${String(Math.max(0, Math.min(100, readiness?.score ?? 0)))}%` }}
+              />
+            </div>
+            {readiness?.rootCause ? (
+              <p className="doctor-hint" style={{ marginTop: 8, marginBottom: 0 }}>
+                {`Root cause: ${readiness.rootCause.detail}`}
+              </p>
+            ) : null}
           </div>
-          <div className="settings-row">
-            <span className="settings-row-label">Active Runs</span>
-            <span className="settings-row-value">{health?.activeRunsTotal ?? 0}</span>
-          </div>
-          <div className="settings-row">
-            <span className="settings-row-label">Failed Runs</span>
-            <span className="settings-row-value">{health?.failedRunsTotal ?? 0}</span>
-          </div>
+          {readinessMessage ? (
+            <div className="doctor-issue doctor-issue-info">
+              <span className="doctor-issue-msg">{readinessMessage}</span>
+            </div>
+          ) : null}
+          {readiness ? (
+            <div className="settings-readiness-grid">
+              {readiness.checks.map((check) => (
+                <div
+                  key={check.id}
+                  className={`settings-readiness-card status-${
+                    check.status === 'error' ? 'error' : check.status === 'warn' ? 'warn' : 'ok'
+                  }`}
+                >
+                  <div className="settings-readiness-card-head">
+                    <span className="doctor-issue-badge">{check.status.toUpperCase()}</span>
+                    <span className="settings-readiness-card-title">{check.title}</span>
+                  </div>
+                  <p className="settings-readiness-card-detail">{check.detail}</p>
+                  <div className="settings-readiness-card-actions">
+                    {check.id === 'targets-available' ? (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        disabled={readinessFixPending}
+                        onClick={() => {
+                          void runReadinessFix('create_default_target');
+                        }}
+                      >
+                        {readinessFixPending ? 'Working…' : 'Create Default Target'}
+                      </button>
+                    ) : null}
+                    {check.id === 'sync-running' ? (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        disabled={readinessFixPending}
+                        onClick={() => {
+                          void runReadinessFix('restart_sync_all');
+                        }}
+                      >
+                        {readinessFixPending ? 'Working…' : 'Restart Sync'}
+                      </button>
+                    ) : null}
+                    {check.id === 'bridge-connected' ? (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => {
+                          navigate('tunnels');
+                        }}
+                      >
+                        Open Connections
+                      </button>
+                    ) : null}
+                    {check.id === 'recent-runs' ? (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => {
+                          navigate('runs');
+                        }}
+                      >
+                        Open Runs
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {operations.length > 0 ? (
+            <div style={{ marginTop: 8 }}>
+              <h4 className="section-subtitle" style={{ marginBottom: 8 }}>
+                Recent Operations
+              </h4>
+              <div className="doctor-playbook-list">
+                {operations.slice(0, 8).map((entry) => (
+                  <div key={entry.operationId} className="doctor-playbook-item">
+                    <span className="mono">{`${entry.type} · ${entry.status}`}</span>
+                    <span className="doctor-hint">{entry.message}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {DEV_DIAGNOSTICS_ENABLED ? (
+            <>
+              <div className="settings-row">
+                <span className="settings-row-label">Telemetry Test</span>
+                <span className="settings-row-value">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={!isConnected || testRunPending}
+                    onClick={() => {
+                      void sendTelemetryTestRun();
+                    }}
+                  >
+                    {testRunPending ? 'Sending...' : 'Send test run event'}
+                  </button>
+                </span>
+              </div>
+              {testRunMessage ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <p className="doctor-hint" style={{ margin: 0 }}>
+                    {testRunMessage}
+                  </p>
+                  {testRunLastRunId ? (
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => {
+                        navigate('runs');
+                      }}
+                    >
+                      Open Runs
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
 
         <div className="settings-section">
@@ -330,9 +1114,27 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
           </div>
         </div>
 
-        <AuthSettingsSection baseUrl={baseUrl} token={props.token} connected={isConnected} />
+        <AuthSettingsSection
+          baseUrl={baseUrl}
+          token={props.token}
+          connected={isConnected}
+          onBaseUrlChange={props.onBaseUrlChange}
+          onTokenChange={props.onTokenChange}
+          onConnect={props.onConnect}
+        />
+        {SMART_FLEET_V2_ENABLED ? (
+          <>
+            <FleetAlertsSection baseUrl={baseUrl} token={props.token} connected={isConnected} />
+            <FleetPoliciesSection baseUrl={baseUrl} token={props.token} connected={isConnected} />
+          </>
+        ) : null}
 
-        <ConfigHistorySection baseUrl={baseUrl} token={props.token} connected={isConnected} />
+        <ConfigHistorySection
+          baseUrl={baseUrl}
+          token={props.token}
+          connected={isConnected}
+          selectedTargetId={props.selectedTargetId}
+        />
         <UpdateSection />
 
         <div className="settings-section doctor-section">
@@ -340,6 +1142,11 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
             <IconActivity className="doctor-icon" />
             Doctor
           </h3>
+          {doctorActionMessage ? (
+            <p className="doctor-hint" style={{ marginBottom: 8 }}>
+              {doctorActionMessage}
+            </p>
+          ) : null}
           {!snapshot ? (
             <p className="doctor-hint">Connect to a control plane to run diagnostics.</p>
           ) : !doctorRun ? (
@@ -356,19 +1163,133 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
             </div>
           ) : doctorResults ? (
             <div className="doctor-results">
-              <div className="doctor-summary">
-                <span className="doctor-stat">{doctorResults.totalSessions} sessions</span>
-                <span className="doctor-stat">{doctorResults.totalRuns} runs</span>
-                <span className="doctor-stat">{doctorResults.totalEvents} events</span>
-                <span className="doctor-stat">{doctorResults.totalLogs} logs</span>
+              <div className="doctor-score-row">
+                <div
+                  className={`doctor-score-ring ${doctorResults.score >= 80 ? 'score-good' : doctorResults.score >= 50 ? 'score-warn' : 'score-bad'}`}
+                >
+                  <span className="doctor-score-value">{doctorResults.score}</span>
+                  <span className="doctor-score-label">/ 100</span>
+                </div>
+                <div className="doctor-summary">
+                  <span className="doctor-stat">{doctorResults.totalSessions} sessions</span>
+                  <span className="doctor-stat">{doctorResults.totalRuns} runs</span>
+                  <span className="doctor-stat">{doctorResults.totalEvents} events</span>
+                  <span className="doctor-stat">{doctorResults.totalLogs} logs</span>
+                </div>
+              </div>
+              <div className="doctor-playbook">
+                <div className="doctor-playbook-header">Playbook: Reconcile Unhealthy Targets</div>
+                <div className="doctor-playbook-controls">
+                  <label className="fleet-policy-checkbox">
+                    Min failures
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      className="fleet-policy-input doctor-playbook-input"
+                      value={String(doctorPlanConfig.minConsecutiveFailures)}
+                      onChange={(event) =>
+                        setDoctorPlanConfig((prev) => ({
+                          ...prev,
+                          minConsecutiveFailures: Math.max(1, Number(event.target.value) || 1),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="fleet-policy-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={doctorPlanConfig.includeStale}
+                      onChange={(event) =>
+                        setDoctorPlanConfig((prev) => ({
+                          ...prev,
+                          includeStale: event.target.checked,
+                        }))
+                      }
+                    />
+                    Include stale targets
+                  </label>
+                  <label className="fleet-policy-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={doctorPlanConfig.includeUnavailable}
+                      onChange={(event) =>
+                        setDoctorPlanConfig((prev) => ({
+                          ...prev,
+                          includeUnavailable: event.target.checked,
+                        }))
+                      }
+                    />
+                    Include unavailable/not running
+                  </label>
+                  <div className="fleet-policy-actions">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={doctorPlanPending || doctorActionPending}
+                      onClick={() => void runDoctorPlaybook(true)}
+                    >
+                      {doctorPlanPending ? 'Previewing...' : 'Preview Plan'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={doctorPlanPending || doctorActionPending}
+                      onClick={() => void runDoctorPlaybook(false)}
+                    >
+                      {doctorActionPending ? 'Applying...' : 'Apply Playbook'}
+                    </button>
+                  </div>
+                </div>
+                {doctorPlanCandidates.length > 0 ? (
+                  <div className="doctor-playbook-list">
+                    {doctorPlanCandidates.slice(0, 8).map((candidate) => (
+                      <div key={candidate.targetId} className="doctor-playbook-item">
+                        <span className="mono">{candidate.label}</span>
+                        <span className="doctor-hint">
+                          {`reasons: ${candidate.reasons.join(', ')}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {doctorVerifyPending ? (
+                  <p className="doctor-hint" style={{ marginTop: 8, marginBottom: 0 }}>
+                    Verifying post-apply health...
+                  </p>
+                ) : null}
+                {doctorVerifySummary ? (
+                  <p className="doctor-hint" style={{ marginTop: 8, marginBottom: 0 }}>
+                    {`Verify summary: resolved ${String(doctorVerifySummary.resolved)}/${String(
+                      doctorVerifySummary.baseline
+                    )}, remaining ${String(doctorVerifySummary.remaining)}, checked at ${new Date(
+                      doctorVerifySummary.checkedAt
+                    ).toLocaleTimeString()}.`}
+                  </p>
+                ) : null}
               </div>
               <div className="doctor-issues">
-                {doctorResults.issues.map((issue, i) => (
-                  <div key={i} className={`doctor-issue doctor-issue-${issue.severity}`}>
-                    <span className="doctor-issue-badge">{issue.severity.toUpperCase()}</span>
-                    <span>{issue.message}</span>
-                  </div>
-                ))}
+                {doctorResults.issues.map((issue, i) => {
+                  const fixAction = issue.fixAction;
+                  return (
+                    <div key={i} className={`doctor-issue doctor-issue-${issue.severity}`}>
+                      <span className="doctor-issue-badge">{issue.severity.toUpperCase()}</span>
+                      <span className="doctor-issue-msg">{issue.message}</span>
+                      {fixAction ? (
+                        <button
+                          type="button"
+                          className="btn-ghost doctor-fix-btn"
+                          disabled={doctorActionPending}
+                          onClick={() => {
+                            void handleDoctorFix(fixAction);
+                          }}
+                        >
+                          {doctorActionPending ? 'Working...' : issue.fixLabel}
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
               <button
                 className="btn-secondary"

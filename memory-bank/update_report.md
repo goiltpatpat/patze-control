@@ -1,66 +1,52 @@
 # Update Report
 
-**Date**: 2026-02-22
+**Date**: 2026-02-24
 **Trigger**: `/update`
 **Risk**: Low
 
 ## Changes Applied
 
-### Files Modified
-
-| File                | Before (lines) | After (lines) | Key Changes                                                                                                                                                                                                                                                |
-| ------------------- | -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `activeContext.md`  | 48             | 56            | Rewrote current focus; added PR #1 (CI/CD, governance, README) and PR #10 (OpenClaw schema, channel intel); updated verification to reflect CI status; updated next steps                                                                                  |
-| `progress.md`       | 46             | 56            | Added CI/CD pipeline, repository governance, OpenClaw rich schema, channel intelligence to What Works; added Dependabot PRs to What's Left; added evolution steps 11-13                                                                                    |
-| `systemPatterns.md` | 94             | 112           | Added OpenClaw Rich Schema Parsing section; added Channel Intelligence section; added CI/CD Architecture section; updated architecture diagram (10 views, channel intelligence subsystem, openclaw.json)                                                   |
-| `techContext.md`    | 85             | 102           | Added bridge-setup-manager.ts, ssh-config-parser.ts, test files to file structure; updated to 10 views; added pnpm version 9.15.4; added bun for sidecar; added Node 22; added CI workflows table; added bridge remote port 19700; added ci:verify command |
-| `productContext.md` | 31             | 38            | Added channel risk blindness to Problems Solved; added channel intelligence and rich schema to How It Works; added actionable insights to UX Goals                                                                                                         |
-
-### No Changes Needed
-
-| File              | Reason                                                   |
-| ----------------- | -------------------------------------------------------- |
-| `projectbrief.md` | Foundation document still accurate; no drift detected    |
-| `.cursor/rules/`  | No runtime rules to check                                |
-| `AGENTS.md`       | Does not exist; not creating unless explicitly requested |
+- Updated `progress.md` to reflect current bridge install/config-sync hardening, OpenClaw jobs panel refresh, and refreshed verification wording to avoid over-claiming current dirty tree validation.
+- Updated `systemPatterns.md` with bridge setup reliability pattern (bundle upload + sudo retry + masked-unit recovery), config mirroring path (`configHash`/`configRaw`), and frontend target/poll contract (`selectedTargetId`, abortable smart poll).
+- Updated `techContext.md` with bridge bundling dependency/command (`esbuild`, `build:bundle`) and new API parser test file (`openclaw-config-reader.test.ts`).
+- Kept `projectbrief.md`, `productContext.md`, and `activeContext.md` unchanged (already aligned for this cycle).
 
 ## Compaction
 
-All files well within budget. No compaction needed.
+No compaction required. All files are within adaptive budgets.
 
-| File                | Lines | Target | Status         |
-| ------------------- | ----- | ------ | -------------- |
-| `activeContext.md`  | 56    | 180    | OK (31%)       |
-| `progress.md`       | 56    | 240    | OK (23%)       |
-| `systemPatterns.md` | 112   | 360    | OK (31%)       |
-| `techContext.md`    | 102   | 260    | OK (39%)       |
-| `productContext.md` | 38    | --     | OK             |
-| `projectbrief.md`   | 24    | --     | OK (unchanged) |
+| File | Before (lines) | After (lines) | Target | Status |
+| --- | ---: | ---: | ---: | --- |
+| `activeContext.md` | 55 | 55 | 180 | OK |
+| `progress.md` | 79 | 86 | 240 | OK |
+| `systemPatterns.md` | 112 | 127 | 360 | OK |
+| `techContext.md` | 109 | 112 | 260 | OK |
 
-## Drift Detected and Fixed
+Section fragmentation check:
+- `activeContext.md`: 5 sections (`##`) — within guidance
+- `progress.md`: 4 sections (`##`) — within guidance
 
-| Category       | Finding                                               | Severity | Action                                         |
-| -------------- | ----------------------------------------------------- | -------- | ---------------------------------------------- |
-| activeContext  | Missing entire CI/CD pipeline setup (PR #1)           | Medium   | Fixed: added CI/CD Pipeline section            |
-| activeContext  | Missing repository governance (PR #1)                 | Medium   | Fixed: added Repository Governance section     |
-| activeContext  | Missing OpenClaw schema expansion (PR #10)            | Medium   | Fixed: added OpenClaw Schema Expansion section |
-| activeContext  | Missing channel intelligence (PR #10)                 | Medium   | Fixed: added Channel Intelligence section      |
-| activeContext  | Repo visibility not documented as public              | Low      | Fixed: noted in Current Focus                  |
-| progress       | Missing CI/CD and governance in What Works            | Medium   | Fixed: added both items                        |
-| progress       | Missing OpenClaw rich schema in What Works            | Medium   | Fixed: added with field list                   |
-| progress       | Missing channel intelligence in What Works            | Medium   | Fixed: added with capability list              |
-| progress       | Evolution stops at step 10 (should be 13)             | Low      | Fixed: added steps 11-13                       |
-| systemPatterns | No OpenClaw schema parsing pattern documented         | Medium   | Fixed: added full section                      |
-| systemPatterns | No channel intelligence pattern documented            | Medium   | Fixed: added full section                      |
-| systemPatterns | No CI/CD architecture documented                      | Medium   | Fixed: added full section                      |
-| systemPatterns | Architecture says 9 views (actual 10)                 | Low      | Fixed: updated to 10                           |
-| techContext    | Missing bridge-setup-manager.ts, ssh-config-parser.ts | Medium   | Fixed: added to file structure                 |
-| techContext    | Missing test files in file structure                  | Low      | Fixed: added 3 test files                      |
-| techContext    | Says 9 views (actual 10 including Channels)           | Low      | Fixed: updated to 10                           |
-| techContext    | Missing CI workflows table                            | Medium   | Fixed: added table                             |
-| techContext    | Missing bun, Node 22, pnpm 9.15.4                     | Low      | Fixed: updated stack section                   |
-| productContext | Missing channel risk blindness problem                | Low      | Fixed: added to Problems Solved                |
+## Drift Detected
 
-## Uncertain Items
+| Category | Finding | Severity | Action |
+| --- | --- | --- | --- |
+| `systemPatterns.md` | Missing current bridge deployment/restart resilience flow and config mirroring behavior | Medium | Synced with verified patterns from bridge manager, API sync payload parsing, and install script |
+| `systemPatterns.md` | Missing app-level target selection + polling contract (`selectedTargetId`, abortable smart polling) | Medium | Added frontend contract section |
+| `techContext.md` | Missing bridge bundle build/deploy workflow and parser regression test file | Low | Added dependency, command, and file-structure entry |
+| `progress.md` | Verification text could be misread as current-tree guarantee | Low | Reworded as historical baseline + re-run requirement |
 
-None. All findings verified against code evidence (git log, file listing, PR review).
+## Classification (Audit Step)
+
+- `invariant`: atomic write pattern, telemetry/event architecture, auth-sensitive bridge sync validation
+- `active`: bridge reliability hardening, target consistency contract, polling race guard behavior
+- `historical`: older tenacitOS rollout details and previous CI baseline
+- `duplicate`: none found in this run
+- `uncertain`: whether `AGENTS.md` should exist in this repo (file not present; left unchanged)
+
+## Safety Gates
+
+- Gate 1: Passed — no security/auth/invariant removals.
+- Gate 2: Passed — unresolved TODO/risk items preserved.
+- Gate 3: Passed — no age-based compaction on `AGENTS.md` (not present).
+- Gate 4: Passed — non-trivial edits tied to code evidence.
+- Gate 5: Passed — confidence high; no destructive compacting.

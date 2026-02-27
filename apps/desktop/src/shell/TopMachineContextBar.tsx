@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useToast } from '../components/Toast';
 import { NotificationCenter } from '../components/NotificationCenter';
 import type { UseNotificationsResult } from '../hooks/useNotifications';
+import type { OpenClawTargetInfo } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus } from '../types';
 import { IconSearch } from '../components/Icons';
+import { isSmokeTarget } from '../features/openclaw/selection/smoke-targets';
 
 export interface TopMachineContextBarProps {
   readonly baseUrl: string;
@@ -15,6 +18,11 @@ export interface TopMachineContextBarProps {
   readonly onDisconnect: () => void;
   readonly notifications: UseNotificationsResult;
   readonly onOpenPalette: () => void;
+  readonly openclawTargets: readonly OpenClawTargetInfo[];
+  readonly openclawTargetsIssue?: string | null;
+  readonly selectedTargetId: string | null;
+  readonly targetSelectionMode: 'auto' | 'manual';
+  readonly onSelectedTargetIdChange: (targetId: string | null) => void;
 }
 
 function toStatusLabel(status: ConnectionStatus): string {
@@ -40,8 +48,120 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
   const isConnecting = props.status === 'connecting';
   const isConnected = props.status === 'connected' || props.status === 'degraded';
   const [expanded, setExpanded] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
+  const { addToast } = useToast();
 
   const showCompact = isConnected && !expanded;
+  const tokenMissingForAuth = authRequired && props.token.trim().length === 0;
+  const hiddenSmokeTargetCount = useMemo(
+    () => props.openclawTargets.filter((target) => isSmokeTarget(target)).length,
+    [props.openclawTargets]
+  );
+  const targetOptions = useMemo(() => {
+    type TargetCandidate = OpenClawTargetInfo;
+    const groups = new Map<string, TargetCandidate[]>();
+
+    for (const target of props.openclawTargets) {
+      if (isSmokeTarget(target)) continue;
+      const key = `${target.type}::${target.label.trim().toLowerCase()}`;
+      const list = groups.get(key);
+      if (list) {
+        list.push(target);
+      } else {
+        groups.set(key, [target]);
+      }
+    }
+
+    const resolvedTargets: TargetCandidate[] = [];
+    for (const candidates of groups.values()) {
+      let chosen = candidates[0];
+      if (!chosen) continue;
+
+      for (const candidate of candidates) {
+        if (props.selectedTargetId && candidate.id === props.selectedTargetId) {
+          chosen = candidate;
+          break;
+        }
+        if (candidate.updatedAt > chosen.updatedAt) {
+          chosen = candidate;
+        }
+      }
+      resolvedTargets.push(chosen);
+    }
+
+    resolvedTargets.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'remote' ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+
+    return resolvedTargets.map((target) => ({
+      id: target.id,
+      value: target.id,
+      compactLabel: target.label,
+      expandedLabel: `${target.label} (${target.type})`,
+    }));
+  }, [props.openclawTargets, props.selectedTargetId]);
+  const hasTargetChoice = targetOptions.length > 1;
+  const singleTargetOption = targetOptions.length === 1 ? targetOptions[0] : null;
+  const compactSelectedValue =
+    props.targetSelectionMode === 'auto'
+      ? ''
+      : (props.selectedTargetId ?? singleTargetOption?.value ?? '');
+  const compactSelectedLabel =
+    targetOptions.find((option) => option.id === compactSelectedValue)?.compactLabel ?? 'No target';
+
+  useEffect(() => {
+    if (isConnected) {
+      setAuthRequired(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const probeAuthMode = async (): Promise<void> => {
+      try {
+        const response = await fetch(`${props.baseUrl}/health`, {
+          signal: AbortSignal.timeout(3_000),
+        });
+        if (!response.ok || cancelled) return;
+        const payload = (await response.json()) as {
+          authMode?: 'none' | 'token';
+          authRequired?: boolean;
+        };
+        if (cancelled) return;
+        setAuthRequired(payload.authMode === 'token' || payload.authRequired === true);
+      } catch {
+        if (!cancelled) {
+          setAuthRequired(false);
+        }
+      }
+    };
+
+    void probeAuthMode();
+    const interval = setInterval(() => {
+      void probeAuthMode();
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [props.baseUrl, isConnected]);
+
+  const handlePasteToken = async (): Promise<void> => {
+    try {
+      const clipboard = await navigator.clipboard.readText();
+      const nextToken = clipboard.trim();
+      if (nextToken.length === 0) {
+        addToast('warn', 'Clipboard is empty.');
+        return;
+      }
+      props.onTokenChange(nextToken);
+      addToast('success', 'Token pasted from clipboard.');
+    } catch {
+      addToast('error', 'Clipboard access denied. Paste manually into TOKEN field.');
+    }
+  };
 
   return (
     <header className="context-bar">
@@ -66,6 +186,36 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
           >
             Edit
           </button>
+          {targetOptions.length > 0 ? (
+            hasTargetChoice ? (
+              <select
+                aria-label="Active OpenClaw target"
+                value={compactSelectedValue}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  props.onSelectedTargetIdChange(value.length > 0 ? value : null);
+                }}
+                style={{ marginLeft: 8, fontSize: '0.72rem' }}
+              >
+                <option value="">Auto</option>
+                {targetOptions.map((option) => (
+                  <option key={option.id} value={option.value}>
+                    {option.compactLabel}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span
+                className="badge tone-info"
+                style={{ marginLeft: 8, fontSize: '0.68rem' }}
+                title="Auto-selected target"
+              >
+                {props.targetSelectionMode === 'auto'
+                  ? `Auto: ${singleTargetOption?.compactLabel ?? compactSelectedLabel}`
+                  : compactSelectedLabel}
+              </span>
+            )
+          ) : null}
         </div>
       ) : (
         <div className="context-controls">
@@ -76,7 +226,7 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
               data-field="url"
               aria-label="Control plane endpoint URL"
               value={props.baseUrl}
-              placeholder="http://127.0.0.1:9700"
+              placeholder="http://localhost:9700"
               onChange={(event) => {
                 props.onBaseUrlChange(event.target.value);
               }}
@@ -85,23 +235,59 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
           </div>
           <div className="context-field">
             <span className="context-field-label">Token</span>
-            <input
-              type="password"
-              data-field="token"
-              aria-label="Authentication token"
-              value={props.token}
-              placeholder="optional"
-              onChange={(event) => {
-                props.onTokenChange(event.target.value);
-              }}
-              disabled={isConnecting}
-            />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="password"
+                data-field="token"
+                aria-label="Authentication token"
+                value={props.token}
+                placeholder="optional"
+                onChange={(event) => {
+                  props.onTokenChange(event.target.value);
+                }}
+                disabled={isConnecting}
+              />
+              <button
+                className="btn-ghost"
+                type="button"
+                onClick={() => {
+                  void handlePasteToken();
+                }}
+                disabled={isConnecting}
+                title="Paste token from clipboard"
+                style={{ height: 28, padding: '0 8px', fontSize: '0.72rem' }}
+              >
+                Paste
+              </button>
+            </div>
           </div>
+          {targetOptions.length > 0 ? (
+            <div className="context-field">
+              <span className="context-field-label">OpenClaw Target</span>
+              <select
+                aria-label="Active OpenClaw target"
+                value={props.targetSelectionMode === 'auto' ? '' : (props.selectedTargetId ?? '')}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  props.onSelectedTargetIdChange(value.length > 0 ? value : null);
+                }}
+                disabled={isConnecting}
+              >
+                <option value="">Auto</option>
+                {targetOptions.map((option) => (
+                  <option key={option.id} value={option.value}>
+                    {option.expandedLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div className="context-actions">
             <button
               className="btn-primary"
               onClick={props.onConnect}
-              disabled={isConnecting || isConnected}
+              disabled={isConnecting || isConnected || tokenMissingForAuth}
+              title={tokenMissingForAuth ? 'Token is required by server auth mode.' : undefined}
             >
               {isConnecting ? 'Connecting…' : 'Connect'}
             </button>
@@ -124,6 +310,11 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
               </button>
             ) : null}
           </div>
+          {tokenMissingForAuth ? (
+            <span className="error-hint" title="Server requires token authentication.">
+              Token required by server auth mode
+            </span>
+          ) : null}
         </div>
       )}
 
@@ -141,6 +332,16 @@ export function TopMachineContextBar(props: TopMachineContextBarProps): JSX.Elem
         <span className="context-divider" style={{ height: 18, margin: '0 6px' }} />
         <span className="status-dot" data-status={props.status} />
         <span className="status-label">{toStatusLabel(props.status)}</span>
+        {props.openclawTargetsIssue ? (
+          <span className="badge tone-warn" title={props.openclawTargetsIssue}>
+            OpenClaw targets degraded
+          </span>
+        ) : null}
+        {hiddenSmokeTargetCount > 0 ? (
+          <span className="badge tone-muted" title="UI Smoke targets hidden from selector">
+            hidden test targets: {hiddenSmokeTargetCount}
+          </span>
+        ) : null}
         {props.errorMessage ? (
           <span className="error-hint" title={props.errorMessage}>
             {props.errorMessage}

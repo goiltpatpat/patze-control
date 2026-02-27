@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FilterTabs, type FilterTab } from '../../components/FilterTabs';
-import { IconClock } from '../../components/Icons';
+import { useRequiredTarget } from '../../features/openclaw/selection/useRequiredTarget';
+import { isSmokeTarget } from '../../features/openclaw/selection/smoke-targets';
+import { OpenClawPageState } from '../../features/openclaw/ui/OpenClawPageState';
+import { TargetLockBadge } from '../../features/openclaw/ui/TargetLockBadge';
+import { navigate } from '../../shell/routes';
 import { emitConfigChanged } from '../../utils/openclaw-events';
 import { TaskTimeline, type TimelineTask } from '../../components/TaskTimeline';
 import { AddTargetForm } from './AddTargetForm';
@@ -32,19 +37,31 @@ export function TasksView(props: TasksViewProps): JSX.Element {
   const [openclawJobs, setOpenclawJobs] = useState<OpenClawCronJob[]>([]);
   const [openclawSyncStatus, setOpenclawSyncStatus] = useState<OpenClawSyncStatus | null>(null);
   const [openclawHealth, setOpenclawHealth] = useState<OpenClawHealthCheck | null>(null);
+  const [controlCounts, setControlCounts] = useState<Record<string, number>>({});
   const openclawTargets = props.openclawTargets.entries;
   const refreshTargets = props.openclawTargets.refresh;
-  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  const selectedTargetId = props.selectedTargetId;
+  const setSelectedTargetId = props.onSelectedTargetIdChange;
   const [snapshots, setSnapshots] = useState<TaskSnapshot[]>([]);
   const [filter, setFilter] = useState<TaskFilter>(
     props.initialFilter === 'openclaw' ? 'openclaw' : 'all'
   );
   const [showCreate, setShowCreate] = useState(false);
   const [showAddTarget, setShowAddTarget] = useState(false);
+  const [showTestTargets, setShowTestTargets] = useState(false);
+  const [targetVisibilityMode, setTargetVisibilityMode] = useState<'focus' | 'all'>('focus');
+  const [editTarget, setEditTarget] = useState<OpenClawTarget | null>(null);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    message: string;
+    variant?: 'default' | 'danger' | 'warn';
+    confirmLabel?: string;
+    onConfirm: () => void;
+  } | null>(null);
   const sseConnectedRef = useRef(false);
   const fetchTasksRef = useRef<(() => Promise<void>) | null>(null);
   const fetchHistoryRef = useRef<(() => Promise<void>) | null>(null);
@@ -63,8 +80,16 @@ export function TasksView(props: TasksViewProps): JSX.Element {
     history: 0,
     openclawJobs: 0,
   });
+  const healthFetchVersionRef = useRef(0);
+  const healthFetchControllerRef = useRef<AbortController | null>(null);
+  const selectedTargetIdRef = useRef<string | null>(selectedTargetId);
+  selectedTargetIdRef.current = selectedTargetId;
 
   const isConnected = props.status === 'connected' || props.status === 'degraded';
+  const openclawTargetContext = useRequiredTarget({
+    connected: isConnected,
+    selectedTargetId,
+  });
   const headers = useMemo(() => authHeaders(props.token), [props.token]);
 
   useEffect(() => {
@@ -124,13 +149,17 @@ export function TasksView(props: TasksViewProps): JSX.Element {
 
   const fetchOpenClawJobs = useCallback(async () => {
     if (!isConnected) return;
+    if (!selectedTargetId) {
+      setOpenclawJobs([]);
+      setOpenclawSyncStatus(null);
+      return;
+    }
     const requestVersion = ++fetchVersionsRef.current.openclawJobs;
+    const requestTargetId = selectedTargetId;
     fetchControllersRef.current.openclawJobs?.abort();
     const { controller, timeoutId } = createTimedAbortController(10_000);
     fetchControllersRef.current.openclawJobs = controller;
-    const jobsUrl = selectedTargetId
-      ? `${props.baseUrl}/openclaw/targets/${selectedTargetId}/jobs`
-      : `${props.baseUrl}/openclaw/cron/jobs`;
+    const jobsUrl = `${props.baseUrl}/openclaw/targets/${encodeURIComponent(requestTargetId)}/jobs`;
     try {
       const res = await fetch(jobsUrl, { headers, signal: controller.signal });
       if (!res.ok || controller.signal.aborted) return;
@@ -139,7 +168,11 @@ export function TasksView(props: TasksViewProps): JSX.Element {
         jobs: OpenClawCronJob[];
         syncStatus?: OpenClawSyncStatus;
       };
-      if (!controller.signal.aborted && requestVersion === fetchVersionsRef.current.openclawJobs) {
+      if (
+        !controller.signal.aborted &&
+        requestVersion === fetchVersionsRef.current.openclawJobs &&
+        requestTargetId === selectedTargetIdRef.current
+      ) {
         setOpenclawJobs(data.jobs ?? []);
         setOpenclawSyncStatus(data.syncStatus ?? null);
       }
@@ -153,24 +186,36 @@ export function TasksView(props: TasksViewProps): JSX.Element {
     }
   }, [props.baseUrl, isConnected, headers, selectedTargetId]);
 
-  useEffect(() => {
-    if (openclawTargets.length > 0 && !selectedTargetId) {
-      setSelectedTargetId(openclawTargets[0]!.target.id);
-    }
-  }, [openclawTargets, selectedTargetId]);
-
   const fetchOpenClawHealth = useCallback(async () => {
     if (!isConnected) return;
-    const healthUrl = selectedTargetId
-      ? `${props.baseUrl}/openclaw/targets/${selectedTargetId}/health`
-      : `${props.baseUrl}/openclaw/health`;
+    if (!selectedTargetId) {
+      setOpenclawHealth(null);
+      return;
+    }
+    const requestVersion = ++healthFetchVersionRef.current;
+    const requestTargetId = selectedTargetId;
+    healthFetchControllerRef.current?.abort();
+    const { controller, timeoutId } = createTimedAbortController(8_000);
+    healthFetchControllerRef.current = controller;
+    const healthUrl = `${props.baseUrl}/openclaw/targets/${encodeURIComponent(requestTargetId)}/health`;
     try {
-      const res = await fetch(healthUrl, { headers, signal: AbortSignal.timeout(8_000) });
+      const res = await fetch(healthUrl, { headers, signal: controller.signal });
       if (!res.ok) return;
       const data = (await res.json()) as OpenClawHealthCheck;
-      setOpenclawHealth(data);
+      if (
+        !controller.signal.aborted &&
+        requestVersion === healthFetchVersionRef.current &&
+        requestTargetId === selectedTargetIdRef.current
+      ) {
+        setOpenclawHealth(data);
+      }
     } catch {
       /* connection lost */
+    } finally {
+      clearTimeout(timeoutId);
+      if (healthFetchControllerRef.current === controller) {
+        healthFetchControllerRef.current = null;
+      }
     }
   }, [props.baseUrl, isConnected, headers, selectedTargetId]);
 
@@ -189,6 +234,53 @@ export function TasksView(props: TasksViewProps): JSX.Element {
       /* connection lost */
     }
   }, [props.baseUrl, isConnected, headers]);
+
+  const fetchControlCounts = useCallback(async () => {
+    if (!isConnected || !selectedTargetId) {
+      setControlCounts({});
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/control/commands?limit=100`,
+        {
+          headers,
+          signal: AbortSignal.timeout(8_000),
+        }
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as { counts?: Record<string, number> };
+      setControlCounts(data.counts ?? {});
+    } catch {
+      /* ignore */
+    }
+  }, [props.baseUrl, headers, isConnected, selectedTargetId]);
+
+  const createBridgeCommand = useCallback(
+    async (intent: string, args: Record<string, unknown>): Promise<boolean> => {
+      if (!selectedTargetId) return false;
+      try {
+        const response = await fetch(
+          `${props.baseUrl}/openclaw/targets/${encodeURIComponent(selectedTargetId)}/control/commands`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify({
+              intent,
+              args,
+              createdBy: 'ui-tasks',
+              policyVersion: 'bridge-control-v1',
+            }),
+            signal: AbortSignal.timeout(10_000),
+          }
+        );
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
+    [props.baseUrl, headers, selectedTargetId]
+  );
 
   useEffect(() => {
     fetchTasksRef.current = fetchTasks;
@@ -314,15 +406,21 @@ export function TasksView(props: TasksViewProps): JSX.Element {
 
   useEffect(() => {
     if (!isConnected) return;
+    setOpenclawJobs([]);
+    setOpenclawSyncStatus(null);
+    setOpenclawHealth(null);
+    setControlCounts({});
     void fetchOpenClawJobs();
     void fetchOpenClawHealth();
-  }, [isConnected, selectedTargetId, fetchOpenClawJobs, fetchOpenClawHealth]);
+    void fetchControlCounts();
+  }, [isConnected, selectedTargetId, fetchOpenClawJobs, fetchOpenClawHealth, fetchControlCounts]);
 
   useEffect(
     () => () => {
       fetchControllersRef.current.tasks?.abort();
       fetchControllersRef.current.history?.abort();
       fetchControllersRef.current.openclawJobs?.abort();
+      healthFetchControllerRef.current?.abort();
       runAbortRef.current?.abort();
     },
     []
@@ -332,6 +430,7 @@ export function TasksView(props: TasksViewProps): JSX.Element {
     async (input: {
       label: string;
       type: 'local' | 'remote';
+      purpose: 'production' | 'test';
       openclawDir: string;
       pollIntervalMs: number;
     }) => {
@@ -359,27 +458,68 @@ export function TasksView(props: TasksViewProps): JSX.Element {
     [props.baseUrl, headers, refreshTargets]
   );
 
-  const handleDeleteTarget = useCallback(
-    async (targetId: string) => {
-      if (!window.confirm('Remove this OpenClaw target? Sync will stop.')) return;
+  const handleEditTarget = useCallback(
+    async (input: {
+      label: string;
+      type: 'local' | 'remote';
+      purpose: 'production' | 'test';
+      openclawDir: string;
+      pollIntervalMs: number;
+    }) => {
+      if (!editTarget) return;
       setError(null);
       try {
-        const res = await fetch(`${props.baseUrl}/openclaw/targets/${targetId}`, {
-          method: 'DELETE',
-          headers,
-          signal: AbortSignal.timeout(10_000),
-        });
+        const res = await fetch(
+          `${props.baseUrl}/openclaw/targets/${encodeURIComponent(editTarget.id)}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify(input),
+            signal: AbortSignal.timeout(10_000),
+          }
+        );
         if (!res.ok) {
-          setError(`Delete target failed: HTTP ${res.status}`);
+          const body = (await res.json().catch(() => null)) as Record<string, string> | null;
+          setError(body?.error ?? `Edit target failed: HTTP ${res.status}`);
           return;
         }
-        if (selectedTargetId === targetId) {
-          setSelectedTargetId(null);
-        }
+        setEditTarget(null);
         await refreshTargets();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Delete target failed');
+        setError(err instanceof Error ? err.message : 'Edit target failed');
       }
+    },
+    [editTarget, headers, props.baseUrl, refreshTargets]
+  );
+
+  const handleDeleteTarget = useCallback(
+    (targetId: string) => {
+      setConfirmState({
+        title: 'Remove Target',
+        message: 'Remove this OpenClaw target? Sync will stop.',
+        variant: 'danger',
+        confirmLabel: 'Remove',
+        onConfirm: () => {
+          setConfirmState(null);
+          setError(null);
+          void (async () => {
+            try {
+              const res = await fetch(
+                `${props.baseUrl}/openclaw/targets/${encodeURIComponent(targetId)}`,
+                { method: 'DELETE', headers, signal: AbortSignal.timeout(10_000) }
+              );
+              if (!res.ok) {
+                setError(`Delete target failed: HTTP ${res.status}`);
+                return;
+              }
+              if (selectedTargetId === targetId) setSelectedTargetId(null);
+              await refreshTargets();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Delete target failed');
+            }
+          })();
+        },
+      });
     },
     [props.baseUrl, headers, selectedTargetId, refreshTargets]
   );
@@ -388,12 +528,15 @@ export function TasksView(props: TasksViewProps): JSX.Element {
     async (targetId: string, enabled: boolean) => {
       setError(null);
       try {
-        const res = await fetch(`${props.baseUrl}/openclaw/targets/${targetId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', ...headers },
-          body: JSON.stringify({ enabled }),
-          signal: AbortSignal.timeout(10_000),
-        });
+        const res = await fetch(
+          `${props.baseUrl}/openclaw/targets/${encodeURIComponent(targetId)}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify({ enabled }),
+            signal: AbortSignal.timeout(10_000),
+          }
+        );
         if (!res.ok) setError(`Toggle target failed: HTTP ${res.status}`);
         await refreshTargets();
       } catch (err) {
@@ -403,9 +546,118 @@ export function TasksView(props: TasksViewProps): JSX.Element {
     [props.baseUrl, headers, refreshTargets]
   );
 
+  const smokeTargetIds = useMemo(
+    () =>
+      openclawTargets
+        .map((entry) => entry.target)
+        .filter((target) => isSmokeTarget(target))
+        .map((target) => target.id),
+    [openclawTargets]
+  );
+  const visibleOpenclawTargets = useMemo(() => {
+    const candidates = showTestTargets
+      ? [...openclawTargets]
+      : openclawTargets.filter((entry) => !isSmokeTarget(entry.target));
+
+    // Keep the most relevant cards first: selected -> active/healthy -> recent.
+    const selectedId = selectedTargetId;
+    candidates.sort((a, b) => {
+      const aSelected = selectedId != null && a.target.id === selectedId;
+      const bSelected = selectedId != null && b.target.id === selectedId;
+      if (aSelected !== bSelected) {
+        return aSelected ? -1 : 1;
+      }
+
+      const aActiveScore = (a.target.enabled ? 2 : 0) + (a.syncStatus.available ? 1 : 0);
+      const bActiveScore = (b.target.enabled ? 2 : 0) + (b.syncStatus.available ? 1 : 0);
+      if (aActiveScore !== bActiveScore) {
+        return bActiveScore - aActiveScore;
+      }
+
+      const aTime = Date.parse(a.target.createdAt);
+      const bTime = Date.parse(b.target.createdAt);
+      if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) {
+        return bTime - aTime;
+      }
+      return a.target.label.localeCompare(b.target.label);
+    });
+
+    return candidates;
+  }, [openclawTargets, selectedTargetId, showTestTargets]);
+  const focusOpenclawTargets = useMemo(() => {
+    if (targetVisibilityMode === 'all') return visibleOpenclawTargets;
+    return visibleOpenclawTargets.filter((entry) => {
+      if (entry.target.id === selectedTargetId) return true;
+      if (entry.syncStatus.running || entry.syncStatus.jobsCount > 0) return true;
+      if (!entry.target.enabled) return false;
+      if (!entry.syncStatus.available || entry.syncStatus.stale) return false;
+      if (entry.syncStatus.lastError || entry.syncStatus.consecutiveFailures > 0) return false;
+      return true;
+    });
+  }, [selectedTargetId, targetVisibilityMode, visibleOpenclawTargets]);
+  const focusHiddenCount = visibleOpenclawTargets.length - focusOpenclawTargets.length;
+  const targetCardsEmptyMessage = useMemo(() => {
+    if (targetVisibilityMode === 'focus' && visibleOpenclawTargets.length > 0) {
+      return 'No targets match Focus mode. Switch to "Show All Targets" to view everything.';
+    }
+    return 'No OpenClaw targets configured.';
+  }, [targetVisibilityMode, visibleOpenclawTargets.length]);
+
+  useEffect(() => {
+    if (showTestTargets || !selectedTargetId) return;
+    const selectedEntry = openclawTargets.find((entry) => entry.target.id === selectedTargetId);
+    if (!selectedEntry) return;
+    if (isSmokeTarget(selectedEntry.target)) {
+      setSelectedTargetId(null);
+    }
+  }, [openclawTargets, selectedTargetId, setSelectedTargetId, showTestTargets]);
+
+  const handleDeleteSmokeTargets = useCallback(() => {
+    if (smokeTargetIds.length === 0) return;
+    setConfirmState({
+      title: 'Delete Test Targets',
+      message: `Delete ${String(smokeTargetIds.length)} test targets detected from smoke/ui fixtures?`,
+      variant: 'danger',
+      confirmLabel: 'Delete All',
+      onConfirm: () => {
+        setConfirmState(null);
+        setError(null);
+        void (async () => {
+          try {
+            const res = await fetch(
+              `${props.baseUrl}/openclaw/targets?ids=${encodeURIComponent(smokeTargetIds.join(','))}&purpose=test`,
+              {
+                method: 'DELETE',
+                headers,
+                signal: AbortSignal.timeout(10_000),
+              }
+            );
+            if (!res.ok) {
+              setError(`Delete smoke targets failed: HTTP ${res.status}`);
+              return;
+            }
+            if (selectedTargetId && smokeTargetIds.includes(selectedTargetId)) {
+              setSelectedTargetId(null);
+            }
+            await refreshTargets();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Delete smoke targets failed');
+          }
+        })();
+      },
+    });
+  }, [
+    headers,
+    props.baseUrl,
+    refreshTargets,
+    selectedTargetId,
+    setSelectedTargetId,
+    smokeTargetIds,
+  ]);
+
   const runAbortRef = useRef<AbortController | null>(null);
 
-  const handleRunNow = useCallback(
+  const doRunTask = useCallback(
     async (taskId: string) => {
       runAbortRef.current?.abort();
       const controller = new AbortController();
@@ -428,7 +680,57 @@ export function TasksView(props: TasksViewProps): JSX.Element {
       }
       if (!controller.signal.aborted) setRunningTaskId(null);
     },
-    [props.baseUrl, headers, fetchTasks, fetchHistory]
+    [props.baseUrl, headers, fetchTasks, fetchHistory, runningTaskId]
+  );
+
+  const handleRunNow = useCallback(
+    (taskId: string) => {
+      if (runningTaskId && runningTaskId !== taskId) {
+        setConfirmState({
+          title: 'Task Running',
+          message: 'Another task run is still pending. Cancel it and run this task instead?',
+          variant: 'warn',
+          confirmLabel: 'Replace',
+          onConfirm: () => {
+            setConfirmState(null);
+            void doRunTask(taskId);
+          },
+        });
+        return;
+      }
+      void doRunTask(taskId);
+    },
+    [runningTaskId, doRunTask]
+  );
+
+  const handleDoctorRunHealthCheck = useCallback(() => {
+    void fetchOpenClawHealth();
+  }, [fetchOpenClawHealth]);
+
+  const handleDoctorReconnect = useCallback(() => {
+    void refreshTargets();
+    void fetchOpenClawJobs();
+    void fetchOpenClawHealth();
+  }, [refreshTargets, fetchOpenClawJobs, fetchOpenClawHealth]);
+
+  const handleDoctorOpenTargetSettings = useCallback(() => {
+    navigate('settings');
+  }, []);
+
+  const handleDoctorViewLogs = useCallback(() => {
+    navigate('logs');
+  }, []);
+
+  const handleTriggerJob = useCallback(
+    async (jobId: string) => {
+      if (!selectedTargetId) return;
+      const queued = await createBridgeCommand('trigger_job', { jobId });
+      if (!queued) {
+        setError('Queue bridge command failed for trigger job.');
+      }
+      await Promise.all([fetchOpenClawJobs(), fetchControlCounts()]);
+    },
+    [createBridgeCommand, fetchControlCounts, fetchOpenClawJobs, selectedTargetId]
   );
 
   const handleToggle = useCallback(
@@ -452,20 +754,30 @@ export function TasksView(props: TasksViewProps): JSX.Element {
   );
 
   const handleDelete = useCallback(
-    async (taskId: string) => {
-      if (!window.confirm('Delete this task? This cannot be undone.')) return;
-      setError(null);
-      try {
-        const res = await fetch(`${props.baseUrl}/tasks/${taskId}`, {
-          method: 'DELETE',
-          headers,
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (!res.ok) setError(`Delete failed: HTTP ${res.status}`);
-        await fetchTasks();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Delete failed');
-      }
+    (taskId: string) => {
+      setConfirmState({
+        title: 'Delete Task',
+        message: 'Delete this task? This cannot be undone.',
+        variant: 'danger',
+        confirmLabel: 'Delete',
+        onConfirm: () => {
+          setConfirmState(null);
+          setError(null);
+          void (async () => {
+            try {
+              const res = await fetch(`${props.baseUrl}/tasks/${taskId}`, {
+                method: 'DELETE',
+                headers,
+                signal: AbortSignal.timeout(10_000),
+              });
+              if (!res.ok) setError(`Delete failed: HTTP ${res.status}`);
+              await fetchTasks();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Delete failed');
+            }
+          })();
+        },
+      });
     },
     [props.baseUrl, headers, fetchTasks]
   );
@@ -495,21 +807,31 @@ export function TasksView(props: TasksViewProps): JSX.Element {
   );
 
   const handleRollback = useCallback(
-    async (snapshotId: string) => {
-      if (!window.confirm('Rollback to this snapshot? Current tasks will be replaced.')) return;
-      setError(null);
-      try {
-        const res = await fetch(`${props.baseUrl}/tasks/rollback/${snapshotId}`, {
-          method: 'POST',
-          headers,
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (!res.ok) setError(`Rollback failed: HTTP ${res.status}`);
-        await fetchTasks();
-        await fetchSnapshots();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Rollback failed');
-      }
+    (snapshotId: string) => {
+      setConfirmState({
+        title: 'Rollback Tasks',
+        message: 'Rollback to this snapshot? Current tasks will be replaced.',
+        variant: 'warn',
+        confirmLabel: 'Rollback',
+        onConfirm: () => {
+          setConfirmState(null);
+          setError(null);
+          void (async () => {
+            try {
+              const res = await fetch(`${props.baseUrl}/tasks/rollback/${snapshotId}`, {
+                method: 'POST',
+                headers,
+                signal: AbortSignal.timeout(10_000),
+              });
+              if (!res.ok) setError(`Rollback failed: HTTP ${res.status}`);
+              await fetchTasks();
+              await fetchSnapshots();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Rollback failed');
+            }
+          })();
+        },
+      });
     },
     [props.baseUrl, headers, fetchTasks, fetchSnapshots]
   );
@@ -526,11 +848,11 @@ export function TasksView(props: TasksViewProps): JSX.Element {
 
   const openclawJobCount = useMemo(() => {
     let total = 0;
-    for (const entry of openclawTargets) {
+    for (const entry of focusOpenclawTargets) {
       total += entry.syncStatus.jobsCount;
     }
     return total > 0 ? total : openclawJobs.length;
-  }, [openclawTargets, openclawJobs.length]);
+  }, [focusOpenclawTargets, openclawJobs.length]);
 
   const tabs: ReadonlyArray<FilterTab<TaskFilter>> = useMemo(
     () => [
@@ -580,12 +902,7 @@ export function TasksView(props: TasksViewProps): JSX.Element {
         <div className="view-header">
           <h2 className="view-title">Scheduled Tasks</h2>
         </div>
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <IconClock width={28} height={28} />
-          </div>
-          <p>Connect to the control plane to manage scheduled tasks.</p>
-        </div>
+        <OpenClawPageState kind="notReady" featureName="scheduled tasks" />
       </section>
     );
   }
@@ -596,55 +913,110 @@ export function TasksView(props: TasksViewProps): JSX.Element {
         <div className="view-header">
           <h2 className="view-title">Scheduled Tasks</h2>
         </div>
-        <div className="empty-state">
-          <span className="mini-spinner" style={{ width: 20, height: 20 }} />
-          <p style={{ marginTop: 8, color: 'var(--text-muted)' }}>Loading tasks…</p>
-        </div>
+        <OpenClawPageState kind="loading" featureName="scheduled tasks" />
       </section>
     );
   }
 
   return (
     <section className="view-panel">
-      <div className="view-header">
-        <h2 className="view-title">Scheduled Tasks</h2>
-        <FilterTabs tabs={tabs} active={filter} onChange={setFilter} />
-        <div className="actions" style={{ marginLeft: 'auto' }}>
+      <div className="view-header tasks-view-header">
+        <div className="tasks-view-title-block">
+          <h2 className="view-title">Scheduled Tasks</h2>
+          <p className="tasks-view-subtitle">
+            Manage Patze schedules and OpenClaw native cron jobs from one control surface.
+          </p>
+        </div>
+        <div className="tasks-view-toolbar">
+          <FilterTabs tabs={tabs} active={filter} onChange={setFilter} />
+          {filter === 'openclaw' ? <TargetLockBadge targetId={selectedTargetId} /> : null}
           {filter === 'openclaw' ? (
-            <button
-              className="btn-primary"
-              onClick={() => {
-                setShowAddTarget(!showAddTarget);
-              }}
-            >
-              {showAddTarget ? 'Cancel' : '+ Target'}
-            </button>
-          ) : (
-            <>
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  setShowSnapshots(!showSnapshots);
-                  if (!showSnapshots) void fetchSnapshots();
-                }}
-              >
-                {showSnapshots ? 'Close' : 'Snapshots'}
-              </button>
+            <span className="badge tone-neutral">
+              control q/r/f {(controlCounts.queued ?? 0).toString()}/
+              {(controlCounts.running ?? 0).toString()}/{(controlCounts.failed ?? 0).toString()}
+            </span>
+          ) : null}
+          <div className="actions tasks-view-actions">
+            {filter === 'openclaw' ? (
               <button
                 className="btn-primary"
                 onClick={() => {
-                  setShowCreate(!showCreate);
+                  if (showAddTarget || editTarget) {
+                    setShowAddTarget(false);
+                    setEditTarget(null);
+                    return;
+                  }
+                  setEditTarget(null);
+                  setShowAddTarget(true);
                 }}
               >
-                {showCreate ? 'Cancel' : '+ New'}
+                {showAddTarget || editTarget ? 'Cancel' : '+ Target'}
               </button>
-            </>
-          )}
+            ) : (
+              <>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowSnapshots(!showSnapshots);
+                    if (!showSnapshots) void fetchSnapshots();
+                  }}
+                >
+                  {showSnapshots ? 'Close' : 'Snapshots'}
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    setShowCreate(!showCreate);
+                  }}
+                >
+                  {showCreate ? 'Cancel' : '+ New'}
+                </button>
+              </>
+            )}
+            {filter === 'openclaw' && smokeTargetIds.length > 0 ? (
+              <span className="badge tone-muted">hidden test targets: {smokeTargetIds.length}</span>
+            ) : null}
+            {filter === 'openclaw' ? (
+              <span className="badge tone-neutral">
+                view: {targetVisibilityMode}
+                {targetVisibilityMode === 'focus' && focusHiddenCount > 0
+                  ? ` (${focusHiddenCount.toString()} hidden)`
+                  : ''}
+              </span>
+            ) : null}
+            {filter === 'openclaw' ? (
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setTargetVisibilityMode((prev) => (prev === 'focus' ? 'all' : 'focus'));
+                }}
+              >
+                {targetVisibilityMode === 'focus' ? 'Show All Targets' : 'Focus Targets'}
+              </button>
+            ) : null}
+            {filter === 'openclaw' && smokeTargetIds.length > 0 ? (
+              <button className="btn-danger" onClick={handleDeleteSmokeTargets}>
+                Clean Test Targets ({smokeTargetIds.length})
+              </button>
+            ) : null}
+            {filter === 'openclaw' && smokeTargetIds.length > 0 ? (
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowTestTargets((prev) => !prev);
+                }}
+              >
+                {showTestTargets ? 'Hide Test Targets' : 'Show Test Targets'}
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
       {/* Stats Bar */}
-      <TaskStatsBar tasks={tasks} targets={openclawTargets} filter={filter} />
+      {filter === 'openclaw' && openclawTargetContext.state !== 'ready' ? null : (
+        <TaskStatsBar tasks={tasks} targets={focusOpenclawTargets} filter={filter} />
+      )}
 
       {error ? (
         <div className="task-error-banner" role="alert">
@@ -660,6 +1032,20 @@ export function TasksView(props: TasksViewProps): JSX.Element {
           </button>
         </div>
       ) : null}
+      {!error && props.openclawTargets.lastError && filter === 'openclaw' ? (
+        <div className="task-error-banner" role="alert">
+          <span>OpenClaw targets degraded: {props.openclawTargets.lastError}</span>
+          <button
+            className="btn-ghost"
+            style={{ marginLeft: 'auto', height: 24, padding: '0 8px' }}
+            onClick={() => {
+              void props.openclawTargets.refresh();
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       {showSnapshots ? <SnapshotPanel snapshots={snapshots} onRollback={handleRollback} /> : null}
       {showCreate ? <CreateTaskForm onCreate={handleCreate} openclawJobs={openclawJobs} /> : null}
@@ -668,29 +1054,62 @@ export function TasksView(props: TasksViewProps): JSX.Element {
         <TaskTimeline tasks={timelineTasks} />
       ) : filter === 'openclaw' ? (
         <>
-          {showAddTarget ? (
-            <AddTargetForm
-              onAdd={handleAddTarget}
-              onCancel={() => {
-                setShowAddTarget(false);
-              }}
-            />
-          ) : null}
-          <TargetCardsBar
-            targets={openclawTargets}
-            selectedTargetId={selectedTargetId}
-            onSelect={setSelectedTargetId}
-            onToggle={handleToggleTarget}
-            onDelete={handleDeleteTarget}
-          />
-          <OpenClawJobsPanel
-            jobs={openclawJobs}
-            syncStatus={openclawSyncStatus}
-            health={openclawHealth}
-            baseUrl={props.baseUrl}
-            headers={headers}
-            selectedTargetId={selectedTargetId}
-          />
+          {openclawTargetContext.state === 'ready' ? (
+            <>
+              {showAddTarget ? (
+                <AddTargetForm
+                  onSubmit={handleAddTarget}
+                  onCancel={() => {
+                    setShowAddTarget(false);
+                  }}
+                />
+              ) : null}
+              {editTarget ? (
+                <AddTargetForm
+                  title="Edit OpenClaw Target"
+                  submitLabel="Save Changes"
+                  initialValues={{
+                    label: editTarget.label,
+                    type: editTarget.type,
+                    purpose: editTarget.purpose,
+                    openclawDir: editTarget.openclawDir,
+                    pollIntervalMs: editTarget.pollIntervalMs,
+                  }}
+                  onSubmit={handleEditTarget}
+                  onCancel={() => {
+                    setEditTarget(null);
+                  }}
+                />
+              ) : null}
+              <TargetCardsBar
+                targets={focusOpenclawTargets}
+                selectedTargetId={selectedTargetId}
+                onSelect={setSelectedTargetId}
+                onToggle={handleToggleTarget}
+                onEdit={(entry) => {
+                  setShowAddTarget(false);
+                  setEditTarget(entry.target);
+                }}
+                onDelete={handleDeleteTarget}
+                emptyMessage={targetCardsEmptyMessage}
+              />
+              <OpenClawJobsPanel
+                jobs={openclawJobs}
+                syncStatus={openclawSyncStatus}
+                health={openclawHealth}
+                baseUrl={props.baseUrl}
+                headers={headers}
+                selectedTargetId={selectedTargetId}
+                onRunHealthCheck={handleDoctorRunHealthCheck}
+                onReconnect={handleDoctorReconnect}
+                onOpenTargetSettings={handleDoctorOpenTargetSettings}
+                onViewLogs={handleDoctorViewLogs}
+                onTriggerJob={handleTriggerJob}
+              />
+            </>
+          ) : (
+            <OpenClawPageState kind="noTarget" featureName="OpenClaw jobs" />
+          )}
         </>
       ) : (
         <TaskTable
@@ -704,6 +1123,17 @@ export function TasksView(props: TasksViewProps): JSX.Element {
 
       {filter !== 'openclaw' && recentHistory.length > 0 ? (
         <RunHistoryPanel history={recentHistory} tasks={tasks} />
+      ) : null}
+
+      {confirmState ? (
+        <ConfirmDialog
+          title={confirmState.title}
+          message={confirmState.message}
+          variant={confirmState.variant}
+          confirmLabel={confirmState.confirmLabel}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       ) : null}
     </section>
   );

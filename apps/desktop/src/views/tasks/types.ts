@@ -116,6 +116,8 @@ export interface OpenClawTarget {
   id: string;
   label: string;
   type: 'local' | 'remote';
+  origin: 'user' | 'auto' | 'smoke';
+  purpose: 'production' | 'test';
   openclawDir: string;
   pollIntervalMs: number;
   enabled: boolean;
@@ -141,6 +143,8 @@ export interface TasksViewProps {
   readonly token: string;
   readonly status: ConnectionStatus;
   readonly openclawTargets: UseOpenClawTargetsResult;
+  readonly selectedTargetId: string | null;
+  readonly onSelectedTargetIdChange: (targetId: string | null) => void;
   readonly initialFilter?: 'openclaw';
 }
 

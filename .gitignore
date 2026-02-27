@@ -63,3 +63,4 @@ yarn-error.log*
 
 # Memory Bank (project-local AI context — optional: remove if you want to track)
 # memory-bank/
+memory-bank/

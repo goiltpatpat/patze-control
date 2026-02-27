@@ -18,6 +18,7 @@ export interface WorkspaceViewProps {
   readonly baseUrl: string;
   readonly token: string;
   readonly connected: boolean;
+  readonly selectedTargetId: string | null;
   readonly initialFilePath?: string;
   readonly initialLine?: string;
 }
@@ -178,7 +179,7 @@ function TreeEntry(props: {
 }
 
 export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
-  const { baseUrl, token, connected, initialFilePath } = props;
+  const { baseUrl, token, connected, selectedTargetId, initialFilePath } = props;
   const [roots, setRoots] = useState<WorkspaceRoot[]>([]);
   const [trees, setTrees] = useState<Map<string, TreeNode[]>>(new Map());
   const [selectedFile, setSelectedFile] = useState<FileContent | null>(null);
@@ -200,7 +201,8 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
 
   const fetchRoots = useCallback(async () => {
     try {
-      const res = await fetch(`${baseUrl}/workspace/roots`, {
+      const suffix = selectedTargetId ? `?targetId=${encodeURIComponent(selectedTargetId)}` : '';
+      const res = await fetch(`${baseUrl}/workspace/roots${suffix}`, {
         headers: buildAuthHeaders(token),
         signal: AbortSignal.timeout(5_000),
       });
@@ -210,15 +212,21 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
     } catch {
       /* silent */
     }
-  }, [baseUrl, token]);
+  }, [baseUrl, selectedTargetId, token]);
 
   const fetchTree = useCallback(
     async (dirPath: string): Promise<TreeNode[]> => {
       try {
-        const res = await fetch(`${baseUrl}/workspace/tree?path=${encodeURIComponent(dirPath)}`, {
-          headers: buildAuthHeaders(token),
-          signal: AbortSignal.timeout(8_000),
-        });
+        const targetQuery = selectedTargetId
+          ? `&targetId=${encodeURIComponent(selectedTargetId)}`
+          : '';
+        const res = await fetch(
+          `${baseUrl}/workspace/tree?path=${encodeURIComponent(dirPath)}${targetQuery}`,
+          {
+            headers: buildAuthHeaders(token),
+            signal: AbortSignal.timeout(8_000),
+          }
+        );
         if (!res.ok) return [];
         const data = (await res.json()) as { entries?: WorkspaceEntry[] };
         return (data.entries ?? []).map((entry) => ({
@@ -231,13 +239,19 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
         return [];
       }
     },
-    [baseUrl, token]
+    [baseUrl, selectedTargetId, token]
   );
 
   useEffect(() => {
     if (!connected) return;
     void fetchRoots();
   }, [connected, fetchRoots]);
+
+  useEffect(() => {
+    setSelectedFile(null);
+    setEditing(false);
+    setSaveMessage(null);
+  }, [selectedTargetId]);
 
   useEffect(() => {
     if (roots.length === 0) return;
@@ -288,10 +302,16 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
       setEditing(false);
       setSaveMessage(null);
       try {
-        const res = await fetch(`${baseUrl}/workspace/file?path=${encodeURIComponent(filePath)}`, {
-          headers: buildAuthHeaders(token),
-          signal: AbortSignal.timeout(10_000),
-        });
+        const targetQuery = selectedTargetId
+          ? `&targetId=${encodeURIComponent(selectedTargetId)}`
+          : '';
+        const res = await fetch(
+          `${baseUrl}/workspace/file?path=${encodeURIComponent(filePath)}${targetQuery}`,
+          {
+            headers: buildAuthHeaders(token),
+            signal: AbortSignal.timeout(10_000),
+          }
+        );
         if (!res.ok) {
           if (mountedRef.current) setSelectedFile(null);
           return;
@@ -304,7 +324,7 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
         if (mountedRef.current) setFileLoading(false);
       }
     },
-    [baseUrl, token]
+    [baseUrl, selectedTargetId, token]
   );
 
   useEffect(() => {
@@ -326,7 +346,11 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
       const res = await fetch(`${baseUrl}/workspace/file`, {
         method: 'PUT',
         headers: buildAuthHeaders(token, true),
-        body: JSON.stringify({ path: selectedFile.path, content: editContent }),
+        body: JSON.stringify({
+          path: selectedFile.path,
+          content: editContent,
+          targetId: selectedTargetId,
+        }),
         signal: AbortSignal.timeout(10_000),
       });
       if (res.ok && mountedRef.current) {
@@ -342,7 +366,7 @@ export function WorkspaceView(props: WorkspaceViewProps): JSX.Element {
     } finally {
       if (mountedRef.current) setSaving(false);
     }
-  }, [baseUrl, token, selectedFile, editContent]);
+  }, [baseUrl, token, selectedFile, editContent, selectedTargetId]);
 
   const renderTree = (nodes: TreeNode[], depth: number): JSX.Element[] =>
     nodes

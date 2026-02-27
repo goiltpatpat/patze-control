@@ -134,21 +134,52 @@ sudo apt install -y pkg-config libsoup-3.0-dev libwebkit2gtk-4.1-dev libjavascri
 
 ```bash
 pnpm install
-pnpm dev          # API server + desktop UI concurrently
+pnpm dev          # Daily dev (auth disabled, isolated local settings)
 ```
 
 Open `http://localhost:1420` in your browser, or run `pnpm dev:desktop:tauri` for the native window.
 
 ### Dev Targets
 
-| Command                    | What it runs                        |
-| -------------------------- | ----------------------------------- |
-| `pnpm dev`                 | API + desktop concurrently          |
-| `pnpm dev:all`             | API + bridge + desktop concurrently |
-| `pnpm dev:api-server`      | API server only                     |
-| `pnpm dev:desktop`         | Desktop (Vite) only                 |
-| `pnpm dev:desktop:tauri`   | Desktop with native Tauri shell     |
-| `pnpm dev:openclaw-bridge` | OpenClaw bridge only                |
+- `pnpm dev*` uses isolated settings (`PATZE_SETTINGS_DIR=.patze-control-dev`) with `TELEMETRY_AUTH_MODE=none` for frictionless local work.
+- `pnpm dev:secure*` uses normal API auth behavior (`none`/`token`) for security-flow verification.
+
+| Command                      | What it runs                         |
+| ---------------------------- | ------------------------------------ |
+| `pnpm dev`                   | API + desktop (dev-safe auth off)    |
+| `pnpm dev:all`               | API + bridge + desktop (auth off)    |
+| `pnpm dev:api-server`        | API server only (auth off)           |
+| `pnpm dev:secure`            | API + desktop with normal auth flow  |
+| `pnpm dev:secure:all`        | API + bridge + desktop (normal auth) |
+| `pnpm dev:secure:api-server` | API server only (normal auth)        |
+| `pnpm dev:desktop`           | Desktop (Vite) only                  |
+| `pnpm dev:desktop:tauri`     | Desktop with native Tauri shell      |
+| `pnpm dev:openclaw-bridge`   | OpenClaw bridge only                 |
+
+### Troubleshooting Connect/Auth
+
+If the app UI loads but stays at `Connecting...` or keeps failing to connect:
+
+1. Verify API mode:
+   ```bash
+   curl -s http://127.0.0.1:9700/health
+   ```
+   If `authMode` is `token`, you must provide a valid bearer token in the top bar.
+2. Verify your token quickly:
+   ```bash
+   curl -i -H "Authorization: Bearer <your-token>" http://127.0.0.1:9700/snapshot
+   ```
+   `200` means token is valid. `401` means token is wrong/missing.
+3. For daily local dev, prefer:
+   ```bash
+   pnpm dev
+   ```
+   This runs with isolated dev settings and `TELEMETRY_AUTH_MODE=none` to avoid auth drift from `~/.patze-control/auth.json`.
+4. For auth/security testing, use:
+   ```bash
+   pnpm dev:secure
+   ```
+   This keeps normal auth behavior (`none`/`token`) and is intended for auth flow verification.
 
 ### Build & Quality
 

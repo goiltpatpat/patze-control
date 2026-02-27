@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useSmartPoll } from './useSmartPoll';
+import { shouldPausePollWhenHidden } from '../utils/runtime';
 
 const STORAGE_KEY = 'patze_endpoints';
 const POLL_INTERVAL_MS = 15_000;
@@ -34,7 +35,7 @@ interface ServerAttachment {
   host: string;
   port: number;
   sshUser: string;
-  status: string;
+  status: 'connected' | 'degraded';
 }
 
 function loadPersistedEndpoints(): PersistedEndpoint[] {
@@ -231,44 +232,52 @@ export function useEndpointManager(
     [primaryBaseUrl, token, updateEndpoint]
   );
 
-  const syncAttachments = useCallback(async (): Promise<boolean> => {
-    if (endpointsRef.current.length === 0) return true;
-    try {
-      const res = await fetch(`${primaryBaseUrl}/remote/attachments`, {
-        headers: buildAuthHeaders(token),
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!res.ok) return false;
-      const data = (await res.json()) as ServerAttachment[];
-
-      setEndpoints((prev) =>
-        prev.map((ep): ManagedEndpoint => {
-          const match = data.find(
-            (a) => a.host === ep.host && a.port === ep.port && a.sshUser === ep.sshUser
-          );
-          if (match) {
-            const status: EndpointStatus =
-              match.status === 'connected' ? 'connected' : 'disconnected';
-            return patchEndpoint(ep, { attachmentId: match.id, status });
-          }
-          if (ep.status === 'connected') {
-            return patchEndpoint(ep, { status: 'disconnected', clearAttachmentId: true });
-          }
-          return ep;
-        })
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  }, [primaryBaseUrl, token]);
+  const requestVersionRef = useRef(0);
+  const pauseOnHidden = shouldPausePollWhenHidden();
 
   const hasEndpoints = endpoints.length > 0;
 
-  useSmartPoll(syncAttachments, {
+  const pollAttachments = useCallback(
+    async (context?: { signal: AbortSignal }): Promise<boolean> => {
+      const requestVersion = ++requestVersionRef.current;
+      if (endpointsRef.current.length === 0) return true;
+      try {
+        const res = await fetch(`${primaryBaseUrl}/remote/attachments`, {
+          headers: buildAuthHeaders(token),
+          signal: context?.signal ?? AbortSignal.timeout(10_000),
+        });
+        if (!res.ok) return false;
+        const data = (await res.json()) as ServerAttachment[];
+        if (requestVersion !== requestVersionRef.current) return false;
+
+        setEndpoints((prev) =>
+          prev.map((ep): ManagedEndpoint => {
+            const match = data.find(
+              (a) => a.host === ep.host && a.port === ep.port && a.sshUser === ep.sshUser
+            );
+            if (match) {
+              const status: EndpointStatus = match.status === 'connected' ? 'connected' : 'error';
+              return patchEndpoint(ep, { attachmentId: match.id, status });
+            }
+            if (ep.status === 'connected') {
+              return patchEndpoint(ep, { status: 'disconnected', clearAttachmentId: true });
+            }
+            return ep;
+          })
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [primaryBaseUrl, token]
+  );
+
+  useSmartPoll(pollAttachments, {
     enabled: hasEndpoints,
     baseIntervalMs: POLL_INTERVAL_MS,
     maxIntervalMs: 60_000,
+    pauseOnHidden,
   });
 
   return { endpoints, addEndpoint, removeEndpoint, connectEndpoint, disconnectEndpoint };
