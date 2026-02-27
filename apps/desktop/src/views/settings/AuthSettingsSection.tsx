@@ -163,12 +163,12 @@ export function AuthSettingsSection(props: {
         void probe();
       }
     };
-    window.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
-      window.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [props.baseUrl, props.connected]);
 

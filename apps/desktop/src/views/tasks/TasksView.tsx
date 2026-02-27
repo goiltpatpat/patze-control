@@ -554,6 +554,7 @@ export function TasksView(props: TasksViewProps): JSX.Element {
         .map((target) => target.id),
     [openclawTargets]
   );
+  const showSmokeTools = import.meta.env.DEV;
   const visibleOpenclawTargets = useMemo(() => {
     const candidates = showTestTargets
       ? [...openclawTargets]
@@ -973,7 +974,7 @@ export function TasksView(props: TasksViewProps): JSX.Element {
                 </button>
               </>
             )}
-            {filter === 'openclaw' && smokeTargetIds.length > 0 ? (
+            {showSmokeTools && filter === 'openclaw' && smokeTargetIds.length > 0 ? (
               <span className="badge tone-muted">hidden test targets: {smokeTargetIds.length}</span>
             ) : null}
             {filter === 'openclaw' ? (
@@ -994,12 +995,12 @@ export function TasksView(props: TasksViewProps): JSX.Element {
                 {targetVisibilityMode === 'focus' ? 'Show All Targets' : 'Focus Targets'}
               </button>
             ) : null}
-            {filter === 'openclaw' && smokeTargetIds.length > 0 ? (
+            {showSmokeTools && filter === 'openclaw' && smokeTargetIds.length > 0 ? (
               <button className="btn-danger" onClick={handleDeleteSmokeTargets}>
                 Clean Test Targets ({smokeTargetIds.length})
               </button>
             ) : null}
-            {filter === 'openclaw' && smokeTargetIds.length > 0 ? (
+            {showSmokeTools && filter === 'openclaw' && smokeTargetIds.length > 0 ? (
               <button
                 className="btn-secondary"
                 onClick={() => {
