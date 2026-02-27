@@ -87,9 +87,18 @@ export interface RecipeDefinition {
   readonly name: string;
   readonly description: string;
   readonly difficulty: 'beginner' | 'intermediate' | 'advanced';
+  readonly compatibility?: RecipeCompatibility | undefined;
+  readonly riskLevel?: 'low' | 'medium' | 'high' | undefined;
+  readonly allowedPaths?: readonly string[] | undefined;
+  readonly requiresConfirm?: boolean | undefined;
   readonly tags: readonly string[];
   readonly params: readonly RecipeParam[];
   readonly steps: readonly RecipeStep[];
+}
+
+export interface RecipeCompatibility {
+  readonly minOpenClawVersion?: string | undefined;
+  readonly maxOpenClawVersion?: string | undefined;
 }
 
 export interface RecipeParam {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 export interface CreateModelDialogProps {
   readonly onSubmit: (data: {
@@ -10,10 +10,13 @@ export interface CreateModelDialogProps {
     baseUrl: string;
     enabled: boolean;
   }) => void;
+  readonly initialProvider?: string | undefined;
+  readonly initialModel?: string | undefined;
+  readonly initialName?: string | undefined;
   readonly onClose: () => void;
 }
 
-const PROVIDERS = ['openai', 'anthropic', 'google', 'custom'] as const;
+const PROVIDERS = ['openai', 'anthropic', 'google', 'moonshot', 'xai', 'custom'] as const;
 
 const MODEL_CATALOG: Record<string, readonly string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo', 'o1-preview', 'o1-mini'],
@@ -24,14 +27,23 @@ const MODEL_CATALOG: Record<string, readonly string[]> = {
     'claude-3-opus-20240229',
   ],
   google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+  moonshot: ['kimi-k2.5'],
+  xai: ['grok-4', 'grok-4-fast'],
 };
 
 export function CreateModelDialog(props: CreateModelDialogProps): JSX.Element {
-  const [id, setId] = useState('');
-  const [name, setName] = useState('');
-  const [provider, setProvider] = useState<string>('openai');
+  const initialProvider =
+    typeof props.initialProvider === 'string' && props.initialProvider.trim().length > 0
+      ? props.initialProvider.trim()
+      : 'openai';
+  const initialModel =
+    typeof props.initialModel === 'string' && props.initialModel.trim().length > 0
+      ? props.initialModel.trim()
+      : '';
+  const [name, setName] = useState(props.initialName ?? '');
+  const [provider, setProvider] = useState<string>(initialProvider);
   const [modelSelect, setModelSelect] = useState('');
-  const [customModel, setCustomModel] = useState('');
+  const [customModel, setCustomModel] = useState(initialModel);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [enabled, setEnabled] = useState(true);
@@ -41,26 +53,34 @@ export function CreateModelDialog(props: CreateModelDialogProps): JSX.Element {
   const isCustom = modelSelect === '__custom';
   const effectiveModel = catalog.length === 0 ? customModel : isCustom ? customModel : modelSelect;
 
+  useEffect(() => {
+    if (provider !== initialProvider) {
+      return;
+    }
+    const providerCatalog = MODEL_CATALOG[provider] ?? [];
+    if (providerCatalog.includes(initialModel)) {
+      setModelSelect(initialModel);
+      setCustomModel('');
+      return;
+    }
+    if (initialModel.length > 0) {
+      setModelSelect('__custom');
+      setCustomModel(initialModel);
+    }
+  }, [initialModel, initialProvider, provider]);
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      const trimmedId = id.trim();
-      if (!trimmedId) {
-        setError('Profile ID is required');
-        return;
-      }
-      if (!/^[a-zA-Z0-9_-]+$/.test(trimmedId)) {
-        setError('ID must be alphanumeric');
-        return;
-      }
       if (!effectiveModel.trim()) {
         setError('Model name is required');
         return;
       }
       setError(null);
+      const normalizedId = `${provider}/${effectiveModel.trim()}`;
       props.onSubmit({
-        id: trimmedId,
-        name: name || trimmedId,
+        id: normalizedId,
+        name: name || normalizedId,
         provider,
         model: effectiveModel.trim(),
         apiKey,
@@ -68,7 +88,7 @@ export function CreateModelDialog(props: CreateModelDialogProps): JSX.Element {
         enabled,
       });
     },
-    [id, name, provider, effectiveModel, apiKey, baseUrl, enabled, props.onSubmit]
+    [name, provider, effectiveModel, apiKey, baseUrl, enabled, props.onSubmit]
   );
 
   return (
@@ -96,17 +116,6 @@ export function CreateModelDialog(props: CreateModelDialogProps): JSX.Element {
             </div>
           ) : null}
           <label className="dialog-form-label">
-            Profile ID *
-            <input
-              type="text"
-              className="dialog-form-input"
-              value={id}
-              onChange={(e) => setId(e.target.value)}
-              placeholder="my-model"
-              autoFocus
-            />
-          </label>
-          <label className="dialog-form-label">
             Display Name
             <input
               type="text"
@@ -114,6 +123,7 @@ export function CreateModelDialog(props: CreateModelDialogProps): JSX.Element {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Model"
+              autoFocus
             />
           </label>
           <label className="dialog-form-label">

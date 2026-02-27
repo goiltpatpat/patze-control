@@ -31,7 +31,8 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm ci:verify
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm ci:verify:clawpal
 
   build:
     name: monorepo-build

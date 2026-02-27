@@ -53,6 +53,7 @@ export interface MachineHeartbeatPayload {
     ResourceUsage,
     'cpuPct' | 'memoryBytes' | 'memoryPct' | 'netRxBytes' | 'netTxBytes'
   > & {
+    memoryTotalBytes?: number;
     diskUsageBytes?: number;
     diskTotalBytes?: number;
     diskPct?: number;

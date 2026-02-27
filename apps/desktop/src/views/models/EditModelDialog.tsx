@@ -15,7 +15,7 @@ export interface EditModelDialogProps {
   readonly onClose: () => void;
 }
 
-const PROVIDERS = ['openai', 'anthropic', 'google', 'custom'] as const;
+const BASE_PROVIDERS = ['openai', 'anthropic', 'google', 'moonshot', 'xai', 'custom'] as const;
 
 const MODEL_CATALOG: Record<string, readonly string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo', 'o1-preview', 'o1-mini'],
@@ -26,10 +26,15 @@ const MODEL_CATALOG: Record<string, readonly string[]> = {
     'claude-3-opus-20240229',
   ],
   google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+  moonshot: ['kimi-k2.5'],
+  xai: ['grok-4', 'grok-4-fast'],
 };
 
 export function EditModelDialog(props: EditModelDialogProps): JSX.Element {
   const { model } = props;
+  const providerOptions = BASE_PROVIDERS.includes(model.provider as (typeof BASE_PROVIDERS)[number])
+    ? BASE_PROVIDERS
+    : [model.provider, ...BASE_PROVIDERS];
   const [name, setName] = useState(model.name || model.id);
   const [provider, setProvider] = useState(model.provider);
   const [apiKey, setApiKey] = useState('');
@@ -99,7 +104,7 @@ export function EditModelDialog(props: EditModelDialogProps): JSX.Element {
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
             >
-              {PROVIDERS.map((p) => (
+              {providerOptions.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>

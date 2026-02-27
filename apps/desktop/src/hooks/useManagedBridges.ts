@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useSmartPoll } from './useSmartPoll';
+import { shouldPausePollWhenHidden } from '../utils/runtime';
 
 const POLL_ACTIVE_MS = 3_000;
 const POLL_IDLE_MS = 15_000;
@@ -9,10 +10,13 @@ export type BridgeSetupPhase =
   | 'ssh_test'
   | 'tunnel_open'
   | 'installing'
+  | 'needs_sudo_password'
   | 'running'
   | 'telemetry_active'
   | 'error'
   | 'disconnected';
+
+export type BridgeInstallMode = 'system' | 'user' | undefined;
 
 export interface ManagedBridgeState {
   readonly id: string;
@@ -26,6 +30,7 @@ export interface ManagedBridgeState {
   readonly logs: readonly string[];
   readonly machineId: string | undefined;
   readonly connectedAt: string | undefined;
+  readonly installMode: BridgeInstallMode;
 }
 
 export interface BridgeSetupInput {
@@ -46,6 +51,8 @@ const ACTIVE_STATUSES = new Set<BridgeSetupPhase>([
   'ssh_test',
   'tunnel_open',
   'installing',
+  'needs_sudo_password',
+  'running',
 ]);
 
 function buildHeaders(token: string, json?: boolean): Record<string, string> {
@@ -60,28 +67,37 @@ export function useManagedBridges(baseUrl: string, token: string, connected: boo
   const [loading, setLoading] = useState(false);
   const bridgesRef = useRef(bridges);
   bridgesRef.current = bridges;
+  const requestVersionRef = useRef(0);
 
-  const fetchBridges = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await fetch(`${baseUrl}/bridge/managed`, {
-        headers: buildHeaders(token),
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) return false;
-      const data = (await res.json()) as { bridges: ManagedBridgeState[] };
-      setBridges(data.bridges ?? []);
-      return true;
-    } catch {
-      return false;
-    }
-  }, [baseUrl, token]);
+  const fetchBridges = useCallback(
+    async (context?: { signal: AbortSignal }): Promise<boolean> => {
+      const requestVersion = ++requestVersionRef.current;
+      try {
+        const res = await fetch(`${baseUrl}/bridge/managed`, {
+          headers: buildHeaders(token),
+          signal: context?.signal ?? AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) return false;
+        const data = (await res.json()) as { bridges: ManagedBridgeState[] };
+        if (requestVersion === requestVersionRef.current) {
+          setBridges(data.bridges ?? []);
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [baseUrl, token]
+  );
 
   const hasActive = bridgesRef.current.some((b) => ACTIVE_STATUSES.has(b.status));
+  const pauseOnHidden = shouldPausePollWhenHidden();
 
   useSmartPoll(fetchBridges, {
     enabled: connected,
     baseIntervalMs: hasActive ? POLL_ACTIVE_MS : POLL_IDLE_MS,
     maxIntervalMs: 60_000,
+    pauseOnHidden,
   });
 
   const setupBridge = useCallback(
@@ -141,12 +157,54 @@ export function useManagedBridges(baseUrl: string, token: string, connected: boo
     [baseUrl, fetchBridges, token]
   );
 
+  const submitSudoPassword = useCallback(
+    async (id: string, password: string): Promise<ManagedBridgeState | null> => {
+      try {
+        const res = await fetch(
+          `${baseUrl}/bridge/managed/${encodeURIComponent(id)}/sudo-password`,
+          {
+            method: 'POST',
+            headers: buildHeaders(token, true),
+            body: JSON.stringify({ password }),
+            signal: AbortSignal.timeout(60_000),
+          }
+        );
+        void fetchBridges();
+        if (!res.ok) return null;
+        return (await res.json()) as ManagedBridgeState;
+      } catch {
+        return null;
+      }
+    },
+    [baseUrl, fetchBridges, token]
+  );
+
+  const skipSudo = useCallback(
+    async (id: string): Promise<ManagedBridgeState | null> => {
+      try {
+        const res = await fetch(`${baseUrl}/bridge/managed/${encodeURIComponent(id)}/skip-sudo`, {
+          method: 'POST',
+          headers: buildHeaders(token),
+          signal: AbortSignal.timeout(60_000),
+        });
+        void fetchBridges();
+        if (!res.ok) return null;
+        return (await res.json()) as ManagedBridgeState;
+      } catch {
+        return null;
+      }
+    },
+    [baseUrl, fetchBridges, token]
+  );
+
   return {
     bridges,
     loading,
     setupBridge,
     disconnectBridge,
     removeBridge,
+    submitSudoPassword,
+    skipSudo,
     refresh: fetchBridges,
   } as const;
 }

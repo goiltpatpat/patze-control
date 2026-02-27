@@ -24,9 +24,59 @@ export interface ControlClient {
 const DEFAULT_RECONNECT_BASE_DELAY_MS = 1_000;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 10_000;
 const DEFAULT_MAX_SEEN_EVENT_IDS = 5_000;
+const SNAPSHOT_REQUEST_TIMEOUT_MS = 8_000;
+const SSE_CONNECT_TIMEOUT_MS = 8_000;
+const FETCH_TIMEOUT_ERROR_MESSAGE = 'Request timed out';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'AbortError';
+  }
+  return isRecord(error) && error['name'] === 'AbortError';
+}
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const onAbort = (): void => {
+    controller.abort();
+  };
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', onAbort);
+    }
+  }
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (timedOut && isAbortError(error)) {
+      throw new Error(FETCH_TIMEOUT_ERROR_MESSAGE);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    if (signal) {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
 }
 
 function deepFreeze<T>(value: T): Readonly<T> {
@@ -219,14 +269,29 @@ export function createControlClient(options: ControlClientOptions): ControlClien
   }
 
   async function fetchSnapshot(signal?: AbortSignal): Promise<FrontendUnifiedSnapshot> {
-    const response = await fetch(snapshotUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        ...buildAuthHeaders(options.token),
-      },
-      ...(signal ? { signal } : {}),
-    });
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(
+        snapshotUrl,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            ...buildAuthHeaders(options.token),
+          },
+        },
+        SNAPSHOT_REQUEST_TIMEOUT_MS,
+        signal
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === FETCH_TIMEOUT_ERROR_MESSAGE) {
+        throw new Error('Snapshot fetch timeout');
+      }
+      if (isAbortError(error)) {
+        throw new Error('Snapshot fetch aborted');
+      }
+      throw error;
+    }
 
     if (!response.ok) {
       throw new Error(`Snapshot fetch failed: ${String(response.status)}`);
@@ -237,11 +302,26 @@ export function createControlClient(options: ControlClientOptions): ControlClien
   }
 
   async function consumeSse(signal: AbortSignal): Promise<void> {
-    const response = await fetch(eventsUrl, {
-      method: 'GET',
-      headers: buildSseHeaders(options.token, lastEventId ?? undefined),
-      signal,
-    });
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(
+        eventsUrl,
+        {
+          method: 'GET',
+          headers: buildSseHeaders(options.token, lastEventId ?? undefined),
+        },
+        SSE_CONNECT_TIMEOUT_MS,
+        signal
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === FETCH_TIMEOUT_ERROR_MESSAGE) {
+        throw new Error('SSE connect timeout');
+      }
+      if (isAbortError(error)) {
+        throw new Error('SSE connect aborted');
+      }
+      throw error;
+    }
 
     if (!response.ok) {
       throw new Error(`SSE connect failed: ${String(response.status)}`);

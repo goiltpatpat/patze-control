@@ -2,6 +2,30 @@ import type { AnyTelemetryEvent } from './events.js';
 import type { BatchIngestResult, IngestFailure, IngestResult } from './ingestor.js';
 import type { TelemetryNodeLike } from './telemetry-node.js';
 
+interface NodePersistenceApis {
+  readonly fs: typeof import('node:fs/promises');
+  readonly path: typeof import('node:path');
+}
+
+let nodePersistenceApisPromise: Promise<NodePersistenceApis> | null = null;
+
+async function getNodePersistenceApis(): Promise<NodePersistenceApis> {
+  if (nodePersistenceApisPromise) {
+    return nodePersistenceApisPromise;
+  }
+  nodePersistenceApisPromise = (async () => {
+    const [fsPromises, nodePath] = await Promise.all([
+      import('node:fs/promises'),
+      import('node:path'),
+    ]);
+    return {
+      fs: fsPromises,
+      path: nodePath,
+    };
+  })();
+  return nodePersistenceApisPromise as Promise<NodePersistenceApis>;
+}
+
 export type TelemetryEventListener = (event: Readonly<AnyTelemetryEvent>) => void;
 
 export interface TelemetryEventSource {
@@ -310,6 +334,23 @@ export interface HttpSinkAdapterOptions {
   maxQueueSize?: number;
   circuitBreakerThreshold?: number;
   circuitBreakerCooldownMs?: number;
+  persistedQueueFilePath?: string;
+  persistDebounceMs?: number;
+}
+
+export interface HttpSinkAdapterStats {
+  readonly queueSize: number;
+  readonly maxQueueSize: number;
+  readonly consecutiveFailures: number;
+  readonly circuitOpenUntilMs: number;
+  readonly spool: {
+    readonly enabled: boolean;
+    readonly filePath: string | null;
+    readonly hydratedCount: number;
+    readonly droppedOnHydrate: number;
+    readonly lastPersistedAt: string | null;
+    readonly lastPersistError: string | null;
+  };
 }
 
 export class HttpSinkAdapter implements TelemetryEventSink {
@@ -332,6 +373,8 @@ export class HttpSinkAdapter implements TelemetryEventSink {
   private readonly circuitBreakerThreshold: number;
 
   private readonly circuitBreakerCooldownMs: number;
+  private readonly persistedQueueFilePath: string | null;
+  private readonly persistDebounceMs: number;
 
   private readonly queue: Readonly<AnyTelemetryEvent>[] = [];
 
@@ -342,6 +385,13 @@ export class HttpSinkAdapter implements TelemetryEventSink {
   private consecutiveFailures = 0;
 
   private circuitOpenUntilMs = 0;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  private persistInFlight: Promise<void> | null = null;
+  private persistRequestedDuringFlight = false;
+  private hydratedCount = 0;
+  private droppedOnHydrate = 0;
+  private lastPersistedAt: string | null = null;
+  private lastPersistError: string | null = null;
 
   public constructor(options: HttpSinkAdapterOptions) {
     this.options = options;
@@ -368,10 +418,16 @@ export class HttpSinkAdapter implements TelemetryEventSink {
     this.maxQueueSize = Math.max(this.batchSize, options.maxQueueSize ?? 10_000);
     this.circuitBreakerThreshold = Math.max(1, options.circuitBreakerThreshold ?? 5);
     this.circuitBreakerCooldownMs = Math.max(500, options.circuitBreakerCooldownMs ?? 15_000);
+    this.persistedQueueFilePath = options.persistedQueueFilePath ?? null;
+    this.persistDebounceMs = Math.max(50, options.persistDebounceMs ?? 250);
 
     this.flushTimer = setInterval(() => {
       void this.flush();
     }, this.flushIntervalMs);
+
+    if (this.persistedQueueFilePath) {
+      void this.hydrateQueueFromDisk();
+    }
   }
 
   private buildHeaders(): Record<string, string> {
@@ -418,6 +474,7 @@ export class HttpSinkAdapter implements TelemetryEventSink {
     }
 
     this.queue.push(event);
+    this.scheduleQueuePersist();
     if (this.queue.length >= this.batchSize) {
       void this.flush();
     }
@@ -426,6 +483,74 @@ export class HttpSinkAdapter implements TelemetryEventSink {
       ok: true,
       event,
     };
+  }
+
+  private scheduleQueuePersist(): void {
+    if (!this.persistedQueueFilePath) return;
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      void this.persistQueueToDisk();
+    }, this.persistDebounceMs);
+  }
+
+  private async hydrateQueueFromDisk(): Promise<void> {
+    if (!this.persistedQueueFilePath) return;
+    try {
+      const node = await getNodePersistenceApis();
+      const raw = await node.fs.readFile(this.persistedQueueFilePath, 'utf8');
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+      const valid = parsed.filter((item): item is Readonly<AnyTelemetryEvent> =>
+        this.isEnvelope(item)
+      );
+      if (valid.length === 0) {
+        return;
+      }
+      const limited = valid.slice(0, this.maxQueueSize);
+      this.queue.push(...limited);
+      this.hydratedCount = limited.length;
+      this.droppedOnHydrate = Math.max(0, valid.length - limited.length);
+    } catch {
+      // no-op: missing/corrupt spool file should not block startup
+    }
+  }
+
+  private async persistQueueToDisk(): Promise<void> {
+    if (!this.persistedQueueFilePath) return;
+    if (this.persistInFlight) {
+      this.persistRequestedDuringFlight = true;
+      await this.persistInFlight;
+      this.persistRequestedDuringFlight = false;
+    }
+
+    const filePath = this.persistedQueueFilePath;
+    const tmpPath = `${filePath}.tmp`;
+    const snapshot = [...this.queue];
+    this.persistInFlight = (async () => {
+      try {
+        const node = await getNodePersistenceApis();
+        await node.fs.mkdir(node.path.dirname(filePath), { recursive: true });
+        await node.fs.writeFile(tmpPath, JSON.stringify(snapshot), 'utf8');
+        await node.fs.rename(tmpPath, filePath);
+        this.lastPersistedAt = new Date().toISOString();
+        this.lastPersistError = null;
+      } catch (error) {
+        this.lastPersistError = error instanceof Error ? error.message : String(error);
+      }
+    })();
+
+    try {
+      await this.persistInFlight;
+    } finally {
+      this.persistInFlight = null;
+    }
+    if (this.persistRequestedDuringFlight) {
+      this.persistRequestedDuringFlight = false;
+      await this.persistQueueToDisk();
+    }
   }
 
   public ingest(event: unknown): IngestResult {
@@ -533,9 +658,11 @@ export class HttpSinkAdapter implements TelemetryEventSink {
         }
         // Requeue at the front to preserve ordering when delivery fails.
         this.queue.unshift(...chunk);
+        this.scheduleQueuePersist();
       } else {
         this.consecutiveFailures = 0;
         this.circuitOpenUntilMs = 0;
+        this.scheduleQueuePersist();
       }
     } finally {
       this.flushing = false;
@@ -556,6 +683,11 @@ export class HttpSinkAdapter implements TelemetryEventSink {
         break;
       }
     }
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    await this.persistQueueToDisk();
   }
 
   public ingestMany(events: readonly unknown[]): BatchIngestResult {
@@ -574,6 +706,23 @@ export class HttpSinkAdapter implements TelemetryEventSink {
     return {
       accepted,
       rejected,
+    };
+  }
+
+  public getStats(): HttpSinkAdapterStats {
+    return {
+      queueSize: this.queue.length,
+      maxQueueSize: this.maxQueueSize,
+      consecutiveFailures: this.consecutiveFailures,
+      circuitOpenUntilMs: this.circuitOpenUntilMs,
+      spool: {
+        enabled: Boolean(this.persistedQueueFilePath),
+        filePath: this.persistedQueueFilePath,
+        hydratedCount: this.hydratedCount,
+        droppedOnHydrate: this.droppedOnHydrate,
+        lastPersistedAt: this.lastPersistedAt,
+        lastPersistError: this.lastPersistError,
+      },
     };
   }
 }

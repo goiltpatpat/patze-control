@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBridgeConnections } from './hooks/useBridgeConnections';
 import { useEndpointManager } from './hooks/useEndpointManager';
 import { useManagedBridges } from './hooks/useManagedBridges';
+import { useSmartFleet } from './hooks/useSmartFleet';
 import { useEventToasts } from './hooks/useEventToasts';
 import { AppShell } from './shell/AppShell';
 import type { TunnelEndpointRow } from './views/TunnelsView';
 import { useControlMonitor } from './useControlMonitor';
+import { buildEndpointFallbackCandidates, normalizeEndpoint } from './utils/endpoint-fallback';
 
 function toForwardedPort(baseUrl: string): string {
   try {
@@ -34,7 +36,8 @@ async function detectSidecarPort(): Promise<number | null> {
 
 const STORAGE_KEY_URL = 'patze_base_url';
 const STORAGE_KEY_TOKEN = 'patze_token';
-const DEFAULT_BASE_URL = 'http://127.0.0.1:9700';
+const DEFAULT_BASE_URL = 'http://localhost:9700';
+const SMART_FLEET_V2_ENABLED = (import.meta.env.VITE_SMART_FLEET_V2_ENABLED ?? '1') !== '0';
 
 function loadPersistedString(key: string, fallback: string): string {
   try {
@@ -60,21 +63,21 @@ function persistString(key: string, value: string): void {
 let moduleAutoConnectDone = false;
 
 export function App(): JSX.Element {
-  const [baseUrl, setBaseUrl] = useState(() =>
-    loadPersistedString(STORAGE_KEY_URL, DEFAULT_BASE_URL)
-  );
+  const [baseUrl, setBaseUrl] = useState(() => {
+    const saved = loadPersistedString(STORAGE_KEY_URL, DEFAULT_BASE_URL);
+    return normalizeEndpoint(saved) ?? DEFAULT_BASE_URL;
+  });
   const [token, setToken] = useState(() => loadPersistedString(STORAGE_KEY_TOKEN, ''));
   const [isTunnelTransitioning, setIsTunnelTransitioning] = useState(false);
-  const [appReady, setAppReady] = useState(moduleAutoConnectDone);
   const transitionLockRef = useRef(false);
   const { state, connect, disconnect } = useControlMonitor();
+  const normalizedToken = token.trim();
 
   const connectRef = useRef(connect);
   connectRef.current = connect;
 
   useEffect(() => {
     if (moduleAutoConnectDone) {
-      setAppReady(true);
       return;
     }
     let cancelled = false;
@@ -86,22 +89,36 @@ export function App(): JSX.Element {
 
     const poll = async (): Promise<void> => {
       const port = await detectSidecarPort();
-      const url = port ? `http://127.0.0.1:${port}` : 'http://127.0.0.1:9700';
-      if (port && !cancelled) setBaseUrl(url);
+      const seedUrl = port
+        ? `http://127.0.0.1:${port}`
+        : loadPersistedString(STORAGE_KEY_URL, DEFAULT_BASE_URL);
+      const preferredPort = port ? String(port) : '9700';
+      const candidateUrls = buildEndpointFallbackCandidates(seedUrl, preferredPort);
+      if (candidateUrls.length === 0) {
+        candidateUrls.push(DEFAULT_BASE_URL);
+      }
 
-      const savedToken = loadPersistedString(STORAGE_KEY_TOKEN, '');
+      const savedToken = loadPersistedString(STORAGE_KEY_TOKEN, '').trim();
 
       while (!cancelled && !moduleAutoConnectDone) {
-        try {
-          const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(2000) });
-          if (res.ok && !cancelled && !moduleAutoConnectDone) {
-            moduleAutoConnectDone = true;
-            await connectRef.current({ baseUrl: url, token: savedToken });
-            if (!cancelled) setAppReady(true);
-            return;
+        for (const candidateUrl of candidateUrls) {
+          try {
+            const res = await fetch(`${candidateUrl}/health`, {
+              signal: AbortSignal.timeout(2000),
+            });
+            if (res.ok && !cancelled && !moduleAutoConnectDone) {
+              moduleAutoConnectDone = true;
+              setBaseUrl(candidateUrl);
+              persistString(STORAGE_KEY_URL, candidateUrl);
+              // Auto-connect in background only; shell renders immediately.
+              void connectRef.current({ baseUrl: candidateUrl, token: savedToken }).catch(() => {
+                /* user can reconnect manually from shell */
+              });
+              return;
+            }
+          } catch {
+            /* candidate unavailable, try next */
           }
-        } catch {
-          /* server not ready */
         }
 
         if (!cancelled) await sleep(2000);
@@ -120,14 +137,16 @@ export function App(): JSX.Element {
   };
 
   const handleTokenChange = (value: string): void => {
-    setToken(value);
-    persistString(STORAGE_KEY_TOKEN, value);
+    const nextToken = value.trim();
+    setToken(nextToken);
+    persistString(STORAGE_KEY_TOKEN, nextToken);
   };
 
-  const endpointManager = useEndpointManager(baseUrl, token);
+  const endpointManager = useEndpointManager(baseUrl, normalizedToken);
   const isConnected = state.status === 'connected' || state.status === 'degraded';
-  const bridgeConnections = useBridgeConnections(baseUrl, token, isConnected);
-  const managedBridges = useManagedBridges(baseUrl, token, isConnected);
+  const bridgeConnections = useBridgeConnections(baseUrl, normalizedToken, isConnected);
+  const managedBridges = useManagedBridges(baseUrl, normalizedToken, isConnected);
+  const smartFleet = useSmartFleet(baseUrl, normalizedToken, isConnected, SMART_FLEET_V2_ENABLED);
   useEventToasts(state.snapshot);
 
   const tunnelEndpoints = useMemo<readonly TunnelEndpointRow[]>(() => {
@@ -157,7 +176,12 @@ export function App(): JSX.Element {
 
   const handleConnect = (): void => {
     withTunnelTransitionLock(async () => {
-      await connect({ baseUrl, token });
+      const effectiveBaseUrl = normalizeEndpoint(baseUrl) ?? baseUrl.trim();
+      if (effectiveBaseUrl !== baseUrl) {
+        setBaseUrl(effectiveBaseUrl);
+        persistString(STORAGE_KEY_URL, effectiveBaseUrl);
+      }
+      await connect({ baseUrl: effectiveBaseUrl, token: normalizedToken });
     });
   };
 
@@ -169,35 +193,20 @@ export function App(): JSX.Element {
 
   const handleReconnect = (): void => {
     withTunnelTransitionLock(async () => {
+      const effectiveBaseUrl = normalizeEndpoint(baseUrl) ?? baseUrl.trim();
+      if (effectiveBaseUrl !== baseUrl) {
+        setBaseUrl(effectiveBaseUrl);
+        persistString(STORAGE_KEY_URL, effectiveBaseUrl);
+      }
       await disconnect();
-      await connect({ baseUrl, token });
+      await connect({ baseUrl: effectiveBaseUrl, token: normalizedToken });
     });
   };
-
-  if (!appReady) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          gap: 12,
-          color: 'var(--text-muted)',
-          fontSize: '0.88rem',
-        }}
-      >
-        <span className="mini-spinner" style={{ width: 20, height: 20 }} />
-        <span>Connecting to API server…</span>
-      </div>
-    );
-  }
 
   return (
     <AppShell
       baseUrl={baseUrl}
-      token={token}
+      token={normalizedToken}
       status={state.status}
       errorMessage={state.errorMessage}
       monitorState={state}
@@ -218,7 +227,16 @@ export function App(): JSX.Element {
       onSetupBridge={managedBridges.setupBridge}
       onDisconnectBridge={managedBridges.disconnectBridge}
       onRemoveBridge={managedBridges.removeBridge}
+      onSubmitSudoPassword={managedBridges.submitSudoPassword}
+      onSkipSudo={managedBridges.skipSudo}
       managedBridgesLoading={managedBridges.loading}
+      smartFleetTargets={smartFleet.targets}
+      smartFleetViolations={smartFleet.violations}
+      onReconcileFleetTarget={smartFleet.reconcileTarget}
+      onRefreshSmartFleet={async () => {
+        await smartFleet.refresh();
+      }}
+      smartFleetEnabled={SMART_FLEET_V2_ENABLED}
     />
   );
 }

@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { IconBook } from '../components/Icons';
+import { useState } from 'react';
+import { useTargetScopedQuery } from '../features/openclaw/data/useTargetScopedQuery';
+import { OpenClawPageState } from '../features/openclaw/ui/OpenClawPageState';
+import { TargetLockBadge } from '../features/openclaw/ui/TargetLockBadge';
+import { navigate } from '../shell/routes';
 import type { RecipeDefinition } from '@patze/telemetry-core';
 import { CookWizard } from './recipes/CookWizard';
 
@@ -10,39 +13,28 @@ export interface RecipesViewProps {
   readonly targetId: string | null;
 }
 
-const DIFFICULTY_COLORS: Record<string, string> = {
-  beginner: '#44bb77',
-  intermediate: '#dd9944',
-  advanced: '#dd4455',
-};
-
 export function RecipesView(props: RecipesViewProps): JSX.Element {
   const { baseUrl, token, connected } = props;
-  const [recipes, setRecipes] = useState<readonly RecipeDefinition[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeDefinition | null>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!connected) return;
-    let active = true;
-    void (async () => {
-      try {
-        const res = await fetch(`${baseUrl}/recipes`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok && active) {
-          const data = (await res.json()) as { recipes?: RecipeDefinition[] };
-          setRecipes(data.recipes ?? []);
-        }
-      } catch {
-        /* ignore */
+  const recipesQuery = useTargetScopedQuery<readonly RecipeDefinition[]>({
+    connected,
+    selectedTargetId: props.targetId,
+    queryFn: async ({ signal }) => {
+      const res = await fetch(`${baseUrl}/recipes`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load recipes (HTTP ${res.status})`);
       }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [baseUrl, token, connected]);
+      const data = (await res.json()) as { recipes?: RecipeDefinition[] };
+      return data.recipes ?? [];
+    },
+    isEmpty: (recipes) => recipes.length === 0,
+  });
+  const recipes = recipesQuery.data ?? [];
 
   const allTags = Array.from(new Set(recipes.flatMap((r) => r.tags)));
 
@@ -59,49 +51,27 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
     return true;
   });
 
-  const handleCook = useCallback(
-    async (recipeId: string, params: Record<string, unknown>) => {
-      if (!props.targetId) return;
-      try {
-        const resolveRes = await fetch(
-          `${baseUrl}/recipes/${encodeURIComponent(recipeId)}/resolve`,
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ params }),
-          }
-        );
-        if (!resolveRes.ok) return;
-        const resolved = (await resolveRes.json()) as {
-          commands?: { command: string; args: string[]; description: string }[];
-        };
-        const commands = resolved.commands ?? [];
-        await fetch(`${baseUrl}/openclaw/queue`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetId: props.targetId, commands }),
-        });
-      } catch {
-        /* ignore */
-      }
-      setSelectedRecipe(null);
-    },
-    [baseUrl, token, props.targetId]
-  );
-
   return (
     <section className="view-panel">
       <div className="view-header">
         <h2 className="view-title">Recipes</h2>
+        <TargetLockBadge targetId={props.targetId} />
       </div>
 
-      {!connected ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <IconBook width={28} height={28} />
-          </div>
-          <p>Connect to load recipes.</p>
-        </div>
+      {recipesQuery.state === 'notReady' ? (
+        <OpenClawPageState kind="notReady" featureName="recipes" />
+      ) : recipesQuery.state === 'noTarget' ? (
+        <OpenClawPageState kind="noTarget" featureName="recipes" />
+      ) : recipesQuery.state === 'loading' ? (
+        <OpenClawPageState kind="loading" featureName="recipes" />
+      ) : recipesQuery.state === 'error' ? (
+        <OpenClawPageState
+          kind="error"
+          featureName="recipes"
+          errorMessage={recipesQuery.errorMessage}
+        />
+      ) : recipesQuery.state === 'empty' ? (
+        <OpenClawPageState kind="empty" featureName="recipes" />
       ) : (
         <>
           <div className="recipes-toolbar">
@@ -144,10 +114,14 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
                   className="machine-card machine-card-clickable"
                   role="button"
                   tabIndex={0}
-                  onClick={() => setSelectedRecipe(recipe)}
+                  onClick={() => {
+                    if (!props.targetId) return;
+                    setSelectedRecipe(recipe);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
+                      if (!props.targetId) return;
                       setSelectedRecipe(recipe);
                     }
                   }}
@@ -156,13 +130,7 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
                     <div className="machine-card-title">
                       <span className="machine-card-name">{recipe.name}</span>
                     </div>
-                    <span
-                      className="badge"
-                      style={{
-                        background: DIFFICULTY_COLORS[recipe.difficulty] ?? '#888',
-                        color: '#fff',
-                      }}
-                    >
+                    <span className={`badge recipe-difficulty-${recipe.difficulty}`}>
                       {recipe.difficulty}
                     </span>
                   </div>
@@ -194,7 +162,10 @@ export function RecipesView(props: RecipesViewProps): JSX.Element {
       {selectedRecipe ? (
         <CookWizard
           recipe={selectedRecipe}
-          onCook={(params) => void handleCook(selectedRecipe.id, params)}
+          baseUrl={baseUrl}
+          token={token}
+          targetId={props.targetId}
+          onOpenRollback={() => navigate('tasks')}
           onClose={() => setSelectedRecipe(null)}
         />
       ) : null}

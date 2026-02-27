@@ -1,5 +1,6 @@
 import type { BridgeConnection } from '../../hooks/useBridgeConnections';
 import type { ManagedBridgeState, BridgeSetupInput } from '../../hooks/useManagedBridges';
+import type { FleetPolicyViolation, FleetTargetStatus } from '../../hooks/useSmartFleet';
 import type {
   ConnectCredentials,
   ManagedEndpoint,
@@ -36,7 +37,17 @@ export interface TunnelsViewProps {
   readonly onSetupBridge: (input: BridgeSetupInput) => Promise<ManagedBridgeState | null>;
   readonly onDisconnectBridge: (id: string) => Promise<boolean>;
   readonly onRemoveBridge: (id: string) => Promise<boolean>;
+  readonly onSubmitSudoPassword: (
+    id: string,
+    password: string
+  ) => Promise<ManagedBridgeState | null>;
+  readonly onSkipSudo: (id: string) => Promise<ManagedBridgeState | null>;
   readonly managedBridgesLoading: boolean;
+  readonly smartFleetTargets: readonly FleetTargetStatus[];
+  readonly smartFleetViolations: readonly FleetPolicyViolation[];
+  readonly onReconcileFleetTarget: (targetId: string) => Promise<boolean>;
+  readonly onRefreshSmartFleet: () => Promise<void>;
+  readonly smartFleetEnabled: boolean;
 }
 
 export const BRIDGE_STALE_THRESHOLD_MS = 120_000;
@@ -46,6 +57,7 @@ export const BRIDGE_PROGRESS_FLOW: readonly ManagedBridgeState['status'][] = [
   'ssh_test',
   'tunnel_open',
   'installing',
+  'needs_sudo_password',
   'running',
   'telemetry_active',
 ];
@@ -58,6 +70,7 @@ export const BRIDGE_PROGRESS_STEPS: ReadonlyArray<{
   { key: 'ssh_test', label: 'SSH Test' },
   { key: 'tunnel_open', label: 'Tunnel' },
   { key: 'installing', label: 'Install' },
+  { key: 'needs_sudo_password', label: 'Sudo' },
   { key: 'running', label: 'Bridge Up' },
   { key: 'telemetry_active', label: 'Telemetry' },
 ];

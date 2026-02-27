@@ -8,7 +8,13 @@ import type {
   PersistedEndpoint,
 } from '../hooks/useEndpointManager';
 import type { ManagedBridgeState, BridgeSetupInput } from '../hooks/useManagedBridges';
+import type { FleetPolicyViolation, FleetTargetStatus } from '../hooks/useSmartFleet';
 import { useNotifications } from '../hooks/useNotifications';
+import type {
+  OpenClawTargetsSummary,
+  TargetSyncStatusEntry,
+  UseOpenClawTargetsResult,
+} from '../hooks/useOpenClawTargets';
 import { useOpenClawTargets } from '../hooks/useOpenClawTargets';
 import type { ConnectionStatus } from '../types';
 import type { TunnelEndpointRow } from '../views/TunnelsView';
@@ -19,6 +25,7 @@ import { SidebarNav } from './SidebarNav';
 import { StatusStrip } from './StatusStrip';
 import { TopMachineContextBar } from './TopMachineContextBar';
 import { useAppRoute } from './useAppRoute';
+import { isSmokeTarget } from '../features/openclaw/selection/smoke-targets';
 
 export interface AppShellProps {
   readonly baseUrl: string;
@@ -43,7 +50,17 @@ export interface AppShellProps {
   readonly onSetupBridge: (input: BridgeSetupInput) => Promise<ManagedBridgeState | null>;
   readonly onDisconnectBridge: (id: string) => Promise<boolean>;
   readonly onRemoveBridge: (id: string) => Promise<boolean>;
+  readonly onSubmitSudoPassword: (
+    id: string,
+    password: string
+  ) => Promise<ManagedBridgeState | null>;
+  readonly onSkipSudo: (id: string) => Promise<ManagedBridgeState | null>;
   readonly managedBridgesLoading: boolean;
+  readonly smartFleetTargets: readonly FleetTargetStatus[];
+  readonly smartFleetViolations: readonly FleetPolicyViolation[];
+  readonly onReconcileFleetTarget: (targetId: string) => Promise<boolean>;
+  readonly onRefreshSmartFleet: () => Promise<void>;
+  readonly smartFleetEnabled: boolean;
 }
 
 const SHORTCUT_MAP: Readonly<Record<string, AppRoute>> = {
@@ -64,11 +81,197 @@ function isInputFocused(): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
+function computeOpenClawSummary(entries: readonly TargetSyncStatusEntry[]): OpenClawTargetsSummary {
+  if (entries.length === 0) {
+    return {
+      count: 0,
+      totalJobs: 0,
+      healthy: 0,
+      unhealthy: 0,
+      lastSyncAt: null,
+      overallHealth: 'none',
+    };
+  }
+
+  const totalJobs = entries.reduce((sum, e) => sum + e.syncStatus.jobsCount, 0);
+  const healthy = entries.filter(
+    (e) => e.syncStatus.available && e.syncStatus.consecutiveFailures === 0 && !e.syncStatus.stale
+  ).length;
+  const unhealthy = Math.max(0, entries.length - healthy);
+  const lastSyncAt =
+    entries
+      .map((e) => e.syncStatus.lastSuccessfulSyncAt ?? null)
+      .filter((v): v is string => v !== null)
+      .sort((a, b) => b.localeCompare(a))[0] ?? null;
+
+  return {
+    count: entries.length,
+    totalJobs,
+    healthy,
+    unhealthy,
+    lastSyncAt,
+    overallHealth: unhealthy === 0 ? 'healthy' : 'degraded',
+  };
+}
+
 export function AppShell(props: AppShellProps): JSX.Element {
   const { routeState } = useAppRoute();
   const openclawTargets = useOpenClawTargets(props.baseUrl, props.token, props.status);
+  const onlineMachineIds = useMemo(
+    () =>
+      new Set(props.bridgeConnections.map((conn) => conn.machineId).filter((id) => id.length > 0)),
+    [props.bridgeConnections]
+  );
+  const filteredTargetEntries = useMemo(() => {
+    const groups = new Map<string, TargetSyncStatusEntry[]>();
+    for (const entry of openclawTargets.entries) {
+      const target = entry.target;
+      const key =
+        target.type === 'remote'
+          ? `remote::${target.label.trim().toLowerCase()}`
+          : `local::${target.id}`;
+      const list = groups.get(key);
+      if (list) {
+        list.push(entry);
+      } else {
+        groups.set(key, [entry]);
+      }
+    }
+
+    const resolved: TargetSyncStatusEntry[] = [];
+    for (const entries of groups.values()) {
+      let selected = entries[0];
+      if (!selected) continue;
+
+      let selectedScore = -1;
+      for (const entry of entries) {
+        const target = entry.target;
+        let score = 0;
+        for (const machineId of onlineMachineIds) {
+          if (target.openclawDir.includes(machineId)) {
+            score = 2;
+            break;
+          }
+        }
+        if (score === 0 && entry.syncStatus.lastSuccessfulSyncAt) {
+          score = 1;
+        }
+        const selectedUpdatedAt = Date.parse(selected.target.updatedAt);
+        const currentUpdatedAt = Date.parse(target.updatedAt);
+        const newer =
+          Number.isNaN(currentUpdatedAt) || Number.isNaN(selectedUpdatedAt)
+            ? false
+            : currentUpdatedAt > selectedUpdatedAt;
+
+        if (score > selectedScore || (score === selectedScore && newer)) {
+          selected = entry;
+          selectedScore = score;
+        }
+      }
+      resolved.push(selected);
+    }
+
+    return resolved;
+  }, [onlineMachineIds, openclawTargets.entries]);
+  const effectiveOpenclawTargets = useMemo<UseOpenClawTargetsResult>(
+    () => ({
+      ...openclawTargets,
+      entries: filteredTargetEntries,
+      summary: computeOpenClawSummary(filteredTargetEntries),
+    }),
+    [filteredTargetEntries, openclawTargets]
+  );
+  const targets = useMemo(
+    () => effectiveOpenclawTargets.entries.map((entry) => entry.target),
+    [effectiveOpenclawTargets.entries]
+  );
+  const userTargets = useMemo(() => targets.filter((target) => !isSmokeTarget(target)), [targets]);
+  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  const [targetSelectionMode, setTargetSelectionMode] = useState<'auto' | 'manual'>('auto');
   const notifications = useNotifications();
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    if (targets.length === 0) {
+      if (selectedTargetId !== null) {
+        setSelectedTargetId(null);
+      }
+      if (targetSelectionMode !== 'auto') {
+        setTargetSelectionMode('auto');
+      }
+      return;
+    }
+    if (!selectedTargetId) {
+      return;
+    }
+    if (!targets.some((target) => target.id === selectedTargetId)) {
+      setSelectedTargetId(null);
+      setTargetSelectionMode('auto');
+    }
+  }, [selectedTargetId, targetSelectionMode, targets]);
+
+  useEffect(() => {
+    if (targets.length === 0) {
+      return;
+    }
+    const targetPool = userTargets.length > 0 ? userTargets : targets;
+
+    const score = (target: { type: 'local' | 'remote'; openclawDir: string }): number => {
+      if (target.type === 'remote') {
+        for (const machineId of onlineMachineIds) {
+          if (target.openclawDir.includes(machineId)) {
+            return 3;
+          }
+        }
+        return 2;
+      }
+      return 1;
+    };
+
+    const firstTarget = targetPool[0];
+    if (!firstTarget) {
+      return;
+    }
+    let preferred = firstTarget;
+    for (const target of targetPool) {
+      if (score(target) > score(preferred)) {
+        preferred = target;
+      }
+    }
+
+    if (targetSelectionMode === 'manual' && selectedTargetId !== null) {
+      return;
+    }
+
+    if (selectedTargetId === null || targetSelectionMode === 'auto') {
+      setSelectedTargetId(preferred.id);
+      return;
+    }
+
+    const current = targetPool.find((target) => target.id === selectedTargetId);
+    if (!current) {
+      setSelectedTargetId(preferred.id);
+      return;
+    }
+
+    if (
+      onlineMachineIds.size > 0 &&
+      score(preferred) > score(current) &&
+      preferred.id !== current.id
+    ) {
+      setSelectedTargetId(preferred.id);
+    }
+  }, [onlineMachineIds, selectedTargetId, targetSelectionMode, targets, userTargets]);
+
+  const handleSelectedTargetIdChange = useCallback((targetId: string | null) => {
+    if (targetId === null) {
+      setTargetSelectionMode('auto');
+      setSelectedTargetId(null);
+      return;
+    }
+    setTargetSelectionMode('manual');
+    setSelectedTargetId(targetId);
+  }, []);
 
   const closePalette = useCallback(() => {
     setPaletteOpen(false);
@@ -183,6 +386,11 @@ export function AppShell(props: AppShellProps): JSX.Element {
         onDisconnect={props.onDisconnect}
         notifications={notifications}
         onOpenPalette={openPalette}
+        openclawTargets={targets}
+        openclawTargetsIssue={effectiveOpenclawTargets.lastError}
+        selectedTargetId={selectedTargetId}
+        targetSelectionMode={targetSelectionMode}
+        onSelectedTargetIdChange={handleSelectedTargetIdChange}
       />
       <div className="shell-body">
         <SidebarNav
@@ -200,7 +408,9 @@ export function AppShell(props: AppShellProps): JSX.Element {
             isTunnelTransitioning={props.isTunnelTransitioning}
             baseUrl={props.baseUrl}
             token={props.token}
+            onTokenChange={props.onTokenChange}
             status={props.status}
+            onBaseUrlChange={props.onBaseUrlChange}
             onConnect={props.onConnect}
             onAttach={props.onConnect}
             onDetach={props.onDisconnect}
@@ -215,8 +425,17 @@ export function AppShell(props: AppShellProps): JSX.Element {
             onSetupBridge={props.onSetupBridge}
             onDisconnectBridge={props.onDisconnectBridge}
             onRemoveBridge={props.onRemoveBridge}
+            onSubmitSudoPassword={props.onSubmitSudoPassword}
+            onSkipSudo={props.onSkipSudo}
             managedBridgesLoading={props.managedBridgesLoading}
-            openclawTargets={openclawTargets}
+            smartFleetTargets={props.smartFleetTargets}
+            smartFleetViolations={props.smartFleetViolations}
+            onReconcileFleetTarget={props.onReconcileFleetTarget}
+            onRefreshSmartFleet={props.onRefreshSmartFleet}
+            smartFleetEnabled={props.smartFleetEnabled}
+            openclawTargets={effectiveOpenclawTargets}
+            selectedTargetId={selectedTargetId}
+            onSelectedTargetIdChange={handleSelectedTargetIdChange}
           />
         </section>
       </div>
@@ -224,12 +443,12 @@ export function AppShell(props: AppShellProps): JSX.Element {
         baseUrl={props.baseUrl}
         token={props.token}
         connected={props.status === 'connected' || props.status === 'degraded'}
-        targetId={openclawTargets.entries[0]?.target.id ?? null}
+        targetId={selectedTargetId}
       />
       <StatusStrip
         state={props.monitorState}
         bridgeCount={props.bridgeConnections.length}
-        openclawSummary={openclawTargets.summary}
+        openclawSummary={effectiveOpenclawTargets.summary}
       />
     </main>
   );

@@ -21,6 +21,7 @@ export function RunsView(props: RunsViewProps): JSX.Element {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const allRuns = props.snapshot?.runs ?? [];
   const runDetails = props.snapshot?.runDetails ?? {};
+  const machineCount = props.snapshot?.machines.length ?? 0;
 
   const routeFiltered = useMemo(() => {
     const rf = props.filter;
@@ -80,6 +81,15 @@ export function RunsView(props: RunsViewProps): JSX.Element {
               <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
                 Runs represent individual agent executions. They will appear here as agents complete
                 work.
+              </p>
+              {machineCount > 0 ? (
+                <p style={{ fontSize: '0.74rem', color: 'var(--text-dim)', margin: '6px 0 0' }}>
+                  {`Machines connected: ${String(machineCount)}. Waiting for telemetry events of type run.state.changed.`}
+                </p>
+              ) : null}
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-dim)', margin: '6px 0 0' }}>
+                OpenClaw cron run history is shown in Tasks view (OpenClaw Jobs panel), not in this
+                telemetry run timeline.
               </p>
             </>
           ) : props.filter.sessionId ? (

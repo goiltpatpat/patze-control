@@ -1,9 +1,10 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IconBuilding, IconBot } from '../components/Icons';
 import type { TargetSyncStatusEntry } from '../hooks/useOpenClawTargets';
+import type { OpenClawAgent } from '@patze/telemetry-core';
 import { navigate } from '../shell/routes';
-import { formatRelativeTime } from '../utils/time';
 import type { CameraMode } from './OfficeScene3D';
+import { isSmokeTarget } from '../features/openclaw/selection/smoke-targets';
 
 const OfficeScene3D = lazy(async () =>
   import('./OfficeScene3D').then((mod) => ({ default: mod.OfficeScene3D }))
@@ -11,6 +12,9 @@ const OfficeScene3D = lazy(async () =>
 
 export interface OfficeViewProps {
   readonly openclawTargets: readonly TargetSyncStatusEntry[];
+  readonly baseUrl: string;
+  readonly token: string;
+  readonly selectedTargetId: string | null;
 }
 
 type DeskStatus = 'active' | 'idle' | 'error' | 'offline';
@@ -25,31 +29,33 @@ interface OfficeDesk {
   readonly emoji: string;
 }
 
-function deriveDeskStatus(target: TargetSyncStatusEntry): DeskStatus {
-  if (!target.syncStatus.available || target.syncStatus.stale) {
-    return 'offline';
-  }
-  if (target.syncStatus.lastError || target.syncStatus.consecutiveFailures > 0) {
-    return 'error';
-  }
-  if (target.syncStatus.running && target.syncStatus.jobsCount > 0) {
-    return 'active';
-  }
-  return 'idle';
+const AGENT_EMOJIS: Record<string, string> = {
+  main: '🧠',
+  bob: '🤖',
+  must: '⚡',
+  'tf-planner': '📋',
+  'tf-worker': '🔧',
+  'tf-reviewer': '🔍',
+  'voice-rt': '🎙️',
+};
+
+function agentEmoji(agent: OpenClawAgent): string {
+  if (agent.emoji) return agent.emoji;
+  const known = AGENT_EMOJIS[agent.id];
+  if (known) return known;
+  const ch = agent.name.trim().charAt(0);
+  return ch.length > 0 ? ch.toUpperCase() : '🤖';
 }
 
-function deriveDesk(target: TargetSyncStatusEntry): OfficeDesk {
-  const status = deriveDeskStatus(target);
-  const first = target.target.label.trim().charAt(0);
-  const emoji = first.length > 0 ? first.toUpperCase() : 'O';
+function agentToDesk(agent: OpenClawAgent, targetType: 'local' | 'remote'): OfficeDesk {
   return {
-    id: target.target.id,
-    label: target.target.label,
-    type: target.target.type,
-    status,
-    activeRuns: status === 'active' ? Math.max(1, target.syncStatus.jobsCount) : 0,
-    lastSeen: target.syncStatus.lastSuccessfulSyncAt ?? null,
-    emoji,
+    id: agent.id,
+    label: agent.name,
+    type: targetType,
+    status: agent.enabled ? 'active' : 'idle',
+    activeRuns: 0,
+    lastSeen: null,
+    emoji: agentEmoji(agent),
   };
 }
 
@@ -57,7 +63,62 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
   const [mode, setMode] = useState<'3d' | 'classic'>('3d');
   const [cameraMode, setCameraMode] = useState<CameraMode>('orbit');
   const [supports3D, setSupports3D] = useState(true);
-  const desks = useMemo(() => props.openclawTargets.map(deriveDesk), [props.openclawTargets]);
+  const [agents, setAgents] = useState<readonly OpenClawAgent[]>([]);
+  const fetchVersionRef = useRef(0);
+
+  const selectedTarget = useMemo(
+    () =>
+      props.selectedTargetId
+        ? (props.openclawTargets.find((t) => t.target.id === props.selectedTargetId) ?? null)
+        : null,
+    [props.openclawTargets, props.selectedTargetId]
+  );
+  const selectedTargetIsTest = selectedTarget ? isSmokeTarget(selectedTarget.target) : false;
+  const selectedTargetConnected =
+    selectedTarget !== null &&
+    selectedTarget.syncStatus.available &&
+    !selectedTarget.syncStatus.stale &&
+    selectedTarget.syncStatus.running;
+  const selectedTargetReady =
+    selectedTarget !== null && !selectedTargetIsTest && selectedTargetConnected;
+
+  const targetType: 'local' | 'remote' = selectedTarget?.target.type ?? 'remote';
+
+  const fetchAgents = useCallback(async () => {
+    if (!props.baseUrl || !props.selectedTargetId || !selectedTargetReady) {
+      setAgents([]);
+      return;
+    }
+    const version = ++fetchVersionRef.current;
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (props.token) headers['Authorization'] = `Bearer ${props.token}`;
+
+    try {
+      const res = await fetch(
+        `${props.baseUrl}/openclaw/targets/${encodeURIComponent(props.selectedTargetId)}/agents`,
+        { headers, signal: AbortSignal.timeout(8000) }
+      );
+      if (version !== fetchVersionRef.current) return;
+      if (!res.ok) return;
+      const data = (await res.json()) as { agents?: OpenClawAgent[] };
+      if (version !== fetchVersionRef.current) return;
+      setAgents(data.agents ?? []);
+    } catch {
+      // ignore — keep previous agents
+    }
+  }, [props.baseUrl, props.selectedTargetId, props.token, selectedTargetReady]);
+
+  useEffect(() => {
+    void fetchAgents();
+    const interval = setInterval(() => void fetchAgents(), 30_000);
+    return () => clearInterval(interval);
+  }, [fetchAgents]);
+
+  const agentDesks = useMemo(
+    () => agents.map((a) => agentToDesk(a, targetType)),
+    [agents, targetType]
+  );
+  const desks = agentDesks;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -142,12 +203,33 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
         </div>
       </div>
 
-      {desks.length === 0 ? (
+      {!props.selectedTargetId ? (
         <div className="empty-state">
           <div className="empty-state-icon">
             <IconBuilding width={28} height={28} />
           </div>
-          <p>No OpenClaw targets found. Add targets in Connections/Tasks first.</p>
+          <p>Select an OpenClaw target first.</p>
+        </div>
+      ) : selectedTargetIsTest ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <IconBuilding width={28} height={28} />
+          </div>
+          <p>Test target selected. Office shows only real connected OpenClaw agents.</p>
+        </div>
+      ) : !selectedTargetConnected ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <IconBuilding width={28} height={28} />
+          </div>
+          <p>Selected target is not connected to OpenClaw yet. Connect/sync target first.</p>
+        </div>
+      ) : desks.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <IconBuilding width={28} height={28} />
+          </div>
+          <p>No agents found for this OpenClaw target yet.</p>
         </div>
       ) : mode === '3d' && supports3D ? (
         <Suspense
@@ -160,7 +242,7 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
           <OfficeScene3D
             desks={desks}
             onSelectDesk={() => {
-              navigate('tasks', { taskView: 'openclaw' });
+              navigate('agents');
             }}
             cameraMode={cameraMode}
           />
@@ -179,7 +261,7 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
                   key={desk.id}
                   className={`office-desk office-status-${desk.status}`}
                   onClick={() => {
-                    navigate('tasks', { taskView: 'openclaw' });
+                    navigate('agents');
                   }}
                   title={`${desk.label} (${desk.type})`}
                 >
@@ -193,9 +275,6 @@ export function OfficeView(props: OfficeViewProps): JSX.Element {
                     <span>
                       {desk.activeRuns > 0 ? `${desk.activeRuns.toString()} active` : desk.status}
                     </span>
-                  </div>
-                  <div className="office-desk-seen">
-                    {desk.lastSeen ? formatRelativeTime(desk.lastSeen) : 'never synced'}
                   </div>
                 </button>
               ))}

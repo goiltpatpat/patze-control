@@ -14,6 +14,7 @@ type ProjectionEventId = AnyTelemetryEvent['id'];
 export interface MachineResourceSnapshot {
   cpuPct: number;
   memoryBytes: number;
+  memoryTotalBytes?: number;
   memoryPct: number;
   netRxBytes?: number;
   netTxBytes?: number;
@@ -135,6 +136,9 @@ function reduceMachineEvent(state: ProjectionState, event: Readonly<AnyTelemetry
         cpuPct: payload.resource.cpuPct,
         memoryBytes: payload.resource.memoryBytes,
         memoryPct: payload.resource.memoryPct,
+        ...(payload.resource.memoryTotalBytes !== undefined
+          ? { memoryTotalBytes: payload.resource.memoryTotalBytes }
+          : {}),
         ...(payload.resource.netRxBytes !== undefined
           ? { netRxBytes: payload.resource.netRxBytes }
           : {}),

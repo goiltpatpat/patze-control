@@ -75,6 +75,7 @@ export type {
   OpenClawConfigDiffCommand,
   OpenClawConfigSnapshot,
   RecipeDefinition,
+  RecipeCompatibility,
   RecipeParam,
   RecipeOption,
   RecipeStep,

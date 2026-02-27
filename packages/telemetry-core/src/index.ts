@@ -77,6 +77,7 @@ export type {
   FrontendRecentEvent,
   FrontendUnifiedSnapshot,
 } from './frontend-snapshot.js';
+export type * from './fleet.js';
 
 export type {
   FrontendReducerState,
@@ -148,6 +149,7 @@ export type {
   OpenClawConfigDiffCommand,
   OpenClawConfigSnapshot,
   RecipeDefinition,
+  RecipeCompatibility,
   RecipeParam,
   RecipeOption,
   RecipeStep,

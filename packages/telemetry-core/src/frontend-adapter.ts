@@ -17,6 +17,7 @@ type ActiveRunState = Exclude<SessionRunLifecycleState, 'completed' | 'failed' |
 
 const EPOCH_ISO_UTC: IsoUtcTimestamp = '1970-01-01T00:00:00.000Z';
 const ACTIVE_STATE_SET: ReadonlySet<SessionRunLifecycleState> = new Set(FRONTEND_ACTIVE_STATES);
+const STALE_GHOST_MACHINE_PRUNE_MS = 2 * 60_000;
 
 function isActiveState(state: SessionRunLifecycleState): state is ActiveRunState {
   return ACTIVE_STATE_SET.has(state);
@@ -128,13 +129,15 @@ function deriveLastUpdated(
   return last;
 }
 
+function isGhostBridgeMachine(machine: FrontendMachineSnapshot): boolean {
+  return (
+    machine.machineId.startsWith('machine_') && (!machine.name || machine.name.trim().length === 0)
+  );
+}
+
 export function toFrontendUnifiedSnapshot(
   unified: UnifiedTelemetrySnapshot
 ): FrontendUnifiedSnapshot {
-  const machines: FrontendMachineSnapshot[] = Object.values(unified.machines)
-    .map((machine) => ({ ...machine }))
-    .sort(compareMachines);
-
   const sessions: FrontendSessionSnapshot[] = Object.values(unified.sessions)
     .map((session) => ({ ...session }))
     .sort(compareSessions);
@@ -142,6 +145,39 @@ export function toFrontendUnifiedSnapshot(
   const runs: FrontendRunSnapshot[] = Object.values(unified.runs)
     .map((run) => ({ ...run }))
     .sort(compareRuns);
+
+  const nowMs = Date.now();
+  const machineIdsWithRecentActivity = new Set<string>();
+  for (const session of sessions) {
+    const updatedAtMs = Date.parse(session.updatedAt);
+    if (!Number.isNaN(updatedAtMs) && nowMs - updatedAtMs <= STALE_GHOST_MACHINE_PRUNE_MS) {
+      machineIdsWithRecentActivity.add(session.machineId);
+    }
+  }
+  for (const run of runs) {
+    const updatedAtMs = Date.parse(run.updatedAt);
+    if (!Number.isNaN(updatedAtMs) && nowMs - updatedAtMs <= STALE_GHOST_MACHINE_PRUNE_MS) {
+      machineIdsWithRecentActivity.add(run.machineId);
+    }
+  }
+
+  const machines: FrontendMachineSnapshot[] = Object.values(unified.machines)
+    .map((machine) => ({ ...machine }))
+    .filter((machine) => {
+      if (!isGhostBridgeMachine(machine)) {
+        return true;
+      }
+      const lastSeenMs = Date.parse(machine.lastSeenAt);
+      if (Number.isNaN(lastSeenMs)) {
+        return true;
+      }
+      const stale = nowMs - lastSeenMs > STALE_GHOST_MACHINE_PRUNE_MS;
+      if (!stale) {
+        return true;
+      }
+      return machineIdsWithRecentActivity.has(machine.machineId);
+    })
+    .sort(compareMachines);
 
   const activeRuns: FrontendActiveRunSnapshot[] = runs
     .filter((run): run is FrontendRunSnapshot & { state: ActiveRunState } =>

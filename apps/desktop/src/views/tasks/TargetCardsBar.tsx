@@ -9,7 +9,9 @@ interface TargetCardsBarProps {
   readonly selectedTargetId: string | null;
   readonly onSelect: (id: string) => void;
   readonly onToggle: (id: string, enabled: boolean) => void;
+  readonly onEdit: (entry: TargetSyncStatusEntry) => void;
   readonly onDelete: (id: string) => void;
+  readonly emptyMessage?: string;
 }
 
 export function TargetCardsBar(props: TargetCardsBarProps): JSX.Element {
@@ -19,7 +21,7 @@ export function TargetCardsBar(props: TargetCardsBarProps): JSX.Element {
         <div className="empty-state-icon">
           <IconClock width={28} height={28} />
         </div>
-        <p>No OpenClaw targets configured.</p>
+        <p>{props.emptyMessage ?? 'No OpenClaw targets configured.'}</p>
         <p style={{ fontSize: 11, marginTop: 4 }}>
           Click "+ Target" to add a local or remote OpenClaw instance.
         </p>
@@ -60,6 +62,12 @@ export function TargetCardsBar(props: TargetCardsBarProps): JSX.Element {
                 style={{ fontSize: 9 }}
               >
                 {entry.target.type}
+              </span>
+              <span
+                className={`badge ${entry.target.purpose === 'test' ? 'tone-danger' : 'tone-muted'}`}
+                style={{ fontSize: 9 }}
+              >
+                {entry.target.purpose}
               </span>
             </div>
             <div className="target-card-meta">
@@ -106,6 +114,15 @@ export function TargetCardsBar(props: TargetCardsBarProps): JSX.Element {
                 }}
               >
                 {entry.target.enabled ? 'Pause' : 'Resume'}
+              </button>
+              <button
+                className="btn-ghost"
+                style={{ height: 22, padding: '0 8px', fontSize: 11 }}
+                onClick={() => {
+                  props.onEdit(entry);
+                }}
+              >
+                Edit
               </button>
               {props.targets.length > 1 ? (
                 <button

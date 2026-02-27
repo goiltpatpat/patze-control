@@ -15,7 +15,7 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && node --test dist/ingestor.test.js dist/cron/openclaw-reader.test.js dist/cron/openclaw-sync.test.js dist/cron/snapshot-rollback.test.js"
+    "test": "pnpm build && node --test dist/ingestor.test.js dist/transports.test.js dist/cron/openclaw-reader.test.js dist/cron/openclaw-sync.test.js dist/cron/snapshot-rollback.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.13.4"

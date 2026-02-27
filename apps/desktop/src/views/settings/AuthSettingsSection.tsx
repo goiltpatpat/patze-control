@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useToast } from '../../components/Toast';
 import { IconLock } from '../../components/Icons';
+import { buildEndpointFallbackCandidates, normalizeEndpoint } from '../../utils/endpoint-fallback';
 
 interface AuthState {
   mode: 'none' | 'token';
@@ -10,6 +12,11 @@ interface AuthState {
 interface HealthAuthInfo {
   authMode: 'none' | 'token';
   authRequired: boolean;
+}
+
+interface SuggestedEndpointInfo {
+  endpoint: string;
+  auth: HealthAuthInfo;
 }
 
 const TOKEN_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -26,16 +33,6 @@ function generateSecureToken(): string {
   return token;
 }
 
-const LOCALSTORAGE_TOKEN_KEY = 'patze_token';
-
-function getStoredToken(): string {
-  try {
-    return localStorage.getItem(LOCALSTORAGE_TOKEN_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
 function maskToken(token: string): string {
   if (token.length <= 8) return '••••••••';
   return token.slice(0, 6) + '••••' + token.slice(-4);
@@ -48,10 +45,26 @@ function buildAuthHeaders(token: string, json?: boolean): Record<string, string>
   return headers;
 }
 
+function isLocalEndpoint(baseUrl: string): boolean {
+  try {
+    const parsed = new URL(baseUrl);
+    return (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '::1'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function AuthSettingsSection(props: {
   readonly baseUrl: string;
   readonly token: string;
   readonly connected: boolean;
+  readonly onBaseUrlChange: (value: string) => void;
+  readonly onTokenChange: (value: string) => void;
+  readonly onConnect: () => void;
 }): JSX.Element {
   const [authState, setAuthState] = useState<AuthState | null>(null);
   const [healthAuth, setHealthAuth] = useState<HealthAuthInfo | null>(null);
@@ -61,7 +74,10 @@ export function AuthSettingsSection(props: {
   const [revealed, setRevealed] = useState(false);
   const [storedRevealed, setStoredRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [appTokenCopied, setAppTokenCopied] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestedEndpoint, setSuggestedEndpoint] = useState<SuggestedEndpointInfo | null>(null);
   const { addToast } = useToast();
   const mountedRef = useRef(true);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,26 +90,87 @@ export function AuthSettingsSection(props: {
   }, []);
 
   useEffect(() => {
+    if (props.connected) {
+      setSuggestedEndpoint(null);
+      return;
+    }
+
     let cancelled = false;
     const probe = async (): Promise<void> => {
+      setSuggestedEndpoint(null);
+      const currentNormalized = normalizeEndpoint(props.baseUrl);
+      let serverReachable = false;
+
       try {
         const res = await fetch(`${props.baseUrl}/health`, {
           signal: AbortSignal.timeout(3_000),
         });
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as Record<string, unknown>;
-        if (cancelled) return;
-        const mode = data.authMode === 'token' ? 'token' : 'none';
-        setHealthAuth({ authMode: mode, authRequired: mode === 'token' });
+        if (res.ok && !cancelled) {
+          const data = (await res.json()) as Record<string, unknown>;
+          if (cancelled) return;
+          const mode = data.authMode === 'token' ? 'token' : 'none';
+          setHealthAuth({ authMode: mode, authRequired: mode === 'token' });
+          serverReachable = true;
+        } else if (!cancelled) {
+          setHealthAuth(null);
+        }
       } catch {
         if (!cancelled) setHealthAuth(null);
       }
+
+      if (serverReachable || cancelled) {
+        return;
+      }
+
+      const candidates = buildEndpointFallbackCandidates(props.baseUrl, '9700');
+      for (const candidate of candidates) {
+        if (cancelled) {
+          return;
+        }
+        if (currentNormalized && candidate === currentNormalized) {
+          continue;
+        }
+
+        try {
+          const fallbackRes = await fetch(`${candidate}/health`, {
+            signal: AbortSignal.timeout(3_000),
+          });
+          if (!fallbackRes.ok || cancelled) {
+            continue;
+          }
+          const payload = (await fallbackRes.json()) as Record<string, unknown>;
+          const mode = payload.authMode === 'token' ? 'token' : 'none';
+          if (!cancelled) {
+            setSuggestedEndpoint({
+              endpoint: candidate,
+              auth: { authMode: mode, authRequired: mode === 'token' },
+            });
+          }
+          return;
+        } catch {
+          /* ignore fallback probe failures */
+        }
+      }
     };
+
     void probe();
+    const interval = setInterval(() => {
+      void probe();
+    }, 30_000);
+
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'visible') {
+        void probe();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
       cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [props.baseUrl]);
+  }, [props.baseUrl, props.connected]);
 
   const fetchAuthState = useCallback(async () => {
     try {
@@ -214,8 +291,47 @@ export function AuthSettingsSection(props: {
 
   const isValid = tokenInput.trim().length >= TOKEN_MIN_LENGTH;
   const isTokenMode = authState?.mode === 'token';
-  const storedToken = getStoredToken();
-  const hasStoredToken = isTokenMode && storedToken.length > 0;
+  const appToken = props.token.trim();
+  const hasSavedToken = appToken.length > 0;
+  const hasStoredToken = isTokenMode && appToken.length > 0;
+  const localEndpoint = isLocalEndpoint(props.baseUrl);
+  const openServerModeLabel = localEndpoint ? 'none (dev)' : 'none';
+  const appTokenLabel = hasSavedToken ? maskToken(appToken) : 'not saved';
+  const appTokenToneClass = hasSavedToken ? 'tone-good' : 'tone-warn';
+
+  const handleCopyAppToken = useCallback(async (): Promise<void> => {
+    if (!hasSavedToken) return;
+    try {
+      await navigator.clipboard.writeText(appToken);
+      setAppTokenCopied(true);
+      setTimeout(() => {
+        if (mountedRef.current) setAppTokenCopied(false);
+      }, 1800);
+      addToast('success', 'App token copied.');
+    } catch {
+      addToast('warn', 'Clipboard unavailable. Copy from reveal mode.');
+    }
+  }, [addToast, appToken, hasSavedToken]);
+
+  const handleGenerateAppToken = useCallback((): void => {
+    const nextToken = generateSecureToken();
+    props.onTokenChange(nextToken);
+    setStoredRevealed(true);
+    setAppTokenCopied(false);
+    addToast('success', 'New app token generated and saved.');
+  }, [addToast, props]);
+
+  const handleClearAppToken = useCallback((): void => {
+    setShowClearConfirm(true);
+  }, []);
+
+  const doClearAppToken = useCallback((): void => {
+    setShowClearConfirm(false);
+    props.onTokenChange('');
+    setStoredRevealed(false);
+    setAppTokenCopied(false);
+    addToast('info', 'App token cleared from this client.');
+  }, [addToast, props]);
 
   if (!props.connected) {
     const serverReachable = healthAuth !== null;
@@ -239,9 +355,41 @@ export function AuthSettingsSection(props: {
         </h3>
 
         {!serverReachable ? (
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-            Cannot reach the API server. Check that the server is running.
-          </p>
+          <div className="auth-disconnected-guide">
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+              Cannot reach the API server at <code>{props.baseUrl}</code>.
+            </p>
+            {suggestedEndpoint ? (
+              <div className="auth-info-hint" style={{ marginTop: 8 }}>
+                Reachable endpoint detected: <code>{suggestedEndpoint.endpoint}</code> (
+                {suggestedEndpoint.auth.authRequired ? 'token required' : 'open'}).
+                <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => {
+                      props.onBaseUrlChange(suggestedEndpoint.endpoint);
+                      addToast('info', `Endpoint switched to ${suggestedEndpoint.endpoint}`);
+                    }}
+                  >
+                    Use Suggested Endpoint
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      props.onBaseUrlChange(suggestedEndpoint.endpoint);
+                      setTimeout(() => {
+                        props.onConnect();
+                      }, 0);
+                    }}
+                  >
+                    Use + Connect
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : authRequired ? (
           <div className="auth-disconnected-guide">
             <div className="auth-status-banner auth-status-warn">
@@ -283,7 +431,7 @@ export function AuthSettingsSection(props: {
           className={`badge ${isTokenMode ? 'tone-good' : 'tone-warn'}`}
           style={{ fontWeight: 400 }}
         >
-          {isTokenMode ? 'Secured' : 'Open'}
+          {isTokenMode ? 'Secured' : localEndpoint ? 'Open (Dev)' : 'Open'}
         </span>
       </h3>
 
@@ -301,7 +449,7 @@ export function AuthSettingsSection(props: {
                   <span className="auth-token-label">Current Token</span>
                   <div className="auth-token-row">
                     <code className="auth-token-value">
-                      {storedRevealed ? storedToken : maskToken(storedToken)}
+                      {storedRevealed ? appToken : maskToken(appToken)}
                     </code>
                     <button
                       className="btn-ghost auth-token-btn"
@@ -315,7 +463,7 @@ export function AuthSettingsSection(props: {
                       className="btn-ghost auth-token-btn"
                       style={copied ? { color: 'var(--green)' } : undefined}
                       onClick={() => {
-                        void handleCopy(storedToken);
+                        void handleCopy(appToken);
                       }}
                     >
                       {copied ? 'Copied!' : 'Copy'}
@@ -327,6 +475,43 @@ export function AuthSettingsSection(props: {
               <div className="auth-info-hint">
                 Bridges authenticate via <code>Authorization: Bearer &lt;token&gt;</code> header.
                 Use the same token when setting up VPS bridge connections.
+              </div>
+
+              <div className="auth-app-token-card">
+                <div className="auth-open-row">
+                  <span className="auth-open-label">App Token</span>
+                  <code className="auth-app-token-value">
+                    {storedRevealed ? (hasSavedToken ? appToken : 'not saved') : appTokenLabel}
+                  </code>
+                </div>
+                <div className="auth-app-token-actions">
+                  <button
+                    className="btn-ghost auth-token-btn"
+                    onClick={() => setStoredRevealed((v) => !v)}
+                  >
+                    {storedRevealed ? 'Hide Full' : 'Reveal Full'}
+                  </button>
+                  <button
+                    className="btn-ghost auth-token-btn"
+                    onClick={() => {
+                      void handleCopyAppToken();
+                    }}
+                    style={appTokenCopied ? { color: 'var(--green)' } : undefined}
+                    disabled={!hasSavedToken}
+                  >
+                    {appTokenCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button className="btn-ghost auth-token-btn" onClick={handleGenerateAppToken}>
+                    Generate New
+                  </button>
+                  <button
+                    className="btn-ghost auth-token-btn"
+                    onClick={handleClearAppToken}
+                    disabled={!hasSavedToken}
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
 
               <div className="auth-actions">
@@ -352,8 +537,61 @@ export function AuthSettingsSection(props: {
             <div className="auth-open-panel">
               <div className="auth-status-banner auth-status-warn">
                 <span className="auth-status-dot" />
-                <span>No authentication — API endpoints are publicly accessible</span>
+                <span>
+                  {localEndpoint
+                    ? 'Auth disabled (development mode)'
+                    : 'Auth disabled on this server'}
+                </span>
               </div>
+
+              <div className="auth-open-summary-card">
+                <div className="auth-open-row">
+                  <span className="auth-open-label">Server Mode</span>
+                  <span className="badge tone-warn auth-open-pill">{openServerModeLabel}</span>
+                </div>
+                <div className="auth-open-row">
+                  <span className="auth-open-label">App Token</span>
+                  <code className={`auth-open-pill auth-open-token ${appTokenToneClass}`}>
+                    {storedRevealed ? (hasSavedToken ? appToken : 'not saved') : appTokenLabel}
+                  </code>
+                </div>
+              </div>
+
+              <div className="auth-app-token-actions">
+                <button
+                  className="btn-ghost auth-token-btn"
+                  onClick={() => setStoredRevealed((v) => !v)}
+                >
+                  {storedRevealed ? 'Hide Full' : 'Reveal Full'}
+                </button>
+                <button
+                  className="btn-ghost auth-token-btn"
+                  onClick={() => {
+                    void handleCopyAppToken();
+                  }}
+                  style={appTokenCopied ? { color: 'var(--green)' } : undefined}
+                  disabled={!hasSavedToken}
+                >
+                  {appTokenCopied ? 'Copied!' : 'Copy'}
+                </button>
+                <button className="btn-ghost auth-token-btn" onClick={handleGenerateAppToken}>
+                  Generate New
+                </button>
+                <button
+                  className="btn-ghost auth-token-btn"
+                  onClick={handleClearAppToken}
+                  disabled={!hasSavedToken}
+                >
+                  Clear
+                </button>
+              </div>
+
+              <div className="auth-info-hint auth-open-note">
+                {localEndpoint
+                  ? 'Recommended: keep open in local dev, and enable token auth only when validating security flow.'
+                  : 'Recommended: enable token auth before exposing this endpoint to shared or remote environments.'}
+              </div>
+
               <button className="btn-primary auth-enable-btn" onClick={openForm} disabled={loading}>
                 Enable Token Auth
               </button>
@@ -440,6 +678,17 @@ export function AuthSettingsSection(props: {
           </div>
         </div>
       )}
+
+      {showClearConfirm ? (
+        <ConfirmDialog
+          title="Clear Token"
+          message="Clear the app token from this client? You will need to re-enter it to authenticate."
+          variant="danger"
+          confirmLabel="Clear Token"
+          onConfirm={doClearAppToken}
+          onCancel={() => setShowClearConfirm(false)}
+        />
+      ) : null}
     </div>
   );
 }

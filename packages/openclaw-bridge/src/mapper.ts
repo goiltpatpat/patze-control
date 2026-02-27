@@ -122,14 +122,51 @@ function collectDiskStats(): {
   }
 }
 
+interface CpuTick {
+  idle: number;
+  total: number;
+}
+
+let prevCpuTicks: CpuTick[] | null = null;
+
+function sampleCpuTicks(): CpuTick[] {
+  return os.cpus().map((core) => {
+    const t = core.times;
+    const total = t.user + t.nice + t.sys + t.irq + t.idle;
+    return { idle: t.idle, total };
+  });
+}
+
+function measureCpuPct(): number {
+  const current = sampleCpuTicks();
+  if (!prevCpuTicks || prevCpuTicks.length !== current.length) {
+    prevCpuTicks = current;
+    return 0;
+  }
+
+  let totalDelta = 0;
+  let idleDelta = 0;
+  for (let i = 0; i < current.length; i++) {
+    const td = current[i]!.total - prevCpuTicks[i]!.total;
+    const id = current[i]!.idle - prevCpuTicks[i]!.idle;
+    if (td > 0) {
+      totalDelta += td;
+      idleDelta += id;
+    }
+  }
+
+  prevCpuTicks = current;
+
+  if (totalDelta === 0) return 0;
+  return Math.max(0, Math.min(100, ((totalDelta - idleDelta) / totalDelta) * 100));
+}
+
 export function toMachineHeartbeatEvent(machineId: MachineId): TelemetryEnvelope {
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
   const usedMem = Math.max(0, totalMem - freeMem);
   const memoryPct = totalMem > 0 ? (usedMem / totalMem) * 100 : 0;
-  const coreCount = os.cpus().length;
-  const loadOneMinute = os.loadavg()[0] ?? 0;
-  const cpuPct = coreCount > 0 ? Math.max(0, Math.min(100, (loadOneMinute / coreCount) * 100)) : 0;
+  const cpuPct = measureCpuPct();
   const disk = collectDiskStats();
 
   return {
@@ -145,6 +182,7 @@ export function toMachineHeartbeatEvent(machineId: MachineId): TelemetryEnvelope
       resource: {
         cpuPct,
         memoryBytes: usedMem,
+        memoryTotalBytes: totalMem,
         memoryPct,
         ...(disk ?? {}),
       },

@@ -1,5 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { IconFolder, IconFile, IconDownload, IconEdit, IconTrash } from '../../components/Icons';
+import {
+  IconFolder,
+  IconFile,
+  IconDownload,
+  IconClipboard,
+  IconEdit,
+  IconTrash,
+} from '../../components/Icons';
 import type { RemoteEntry, SortDir, SortKey } from './types';
 
 export interface FileGridProps {
@@ -7,6 +14,8 @@ export interface FileGridProps {
   readonly loading: boolean;
   readonly onNavigate: (name: string) => void;
   readonly onDownload: (entry: RemoteEntry) => void;
+  readonly onDownloadFolder: (entry: RemoteEntry) => void;
+  readonly onCopyContent: (entry: RemoteEntry) => void;
   readonly onRename: (entry: RemoteEntry) => void;
   readonly onDelete: (entry: RemoteEntry) => void;
   readonly onContextMenu: (entry: RemoteEntry, x: number, y: number) => void;
@@ -29,7 +38,17 @@ function formatDate(ms: number): string {
 }
 
 export function FileGrid(props: FileGridProps): JSX.Element {
-  const { entries, loading, onNavigate, onDownload, onRename, onDelete, onContextMenu } = props;
+  const {
+    entries,
+    loading,
+    onNavigate,
+    onDownload,
+    onDownloadFolder,
+    onCopyContent,
+    onRename,
+    onDelete,
+    onContextMenu,
+  } = props;
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [contextEntry, setContextEntry] = useState<RemoteEntry | null>(null);
@@ -151,6 +170,18 @@ export function FileGrid(props: FileGridProps): JSX.Element {
               <span className="fm-grid-col fm-col-date">{formatDate(entry.mtime)}</span>
               <span className="fm-grid-col fm-col-perm">{entry.permissions}</span>
               <span className="fm-grid-col fm-col-actions">
+                {entry.type === 'directory' && (
+                  <button
+                    className="fm-action-btn"
+                    title="Download folder (.zip)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDownloadFolder(entry);
+                    }}
+                  >
+                    <IconDownload />
+                  </button>
+                )}
                 {entry.type === 'file' && (
                   <button
                     className="fm-action-btn"
@@ -161,6 +192,18 @@ export function FileGrid(props: FileGridProps): JSX.Element {
                     }}
                   >
                     <IconDownload />
+                  </button>
+                )}
+                {entry.type === 'file' && (
+                  <button
+                    className="fm-action-btn"
+                    title="Copy content"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCopyContent(entry);
+                    }}
+                  >
+                    <IconClipboard />
                   </button>
                 )}
                 <button
@@ -196,6 +239,17 @@ export function FileGrid(props: FileGridProps): JSX.Element {
             className="fm-context-menu"
             style={{ left: contextPos.x, top: contextPos.y }}
           >
+            {contextEntry.type === 'directory' && (
+              <button
+                className="fm-context-item"
+                onClick={() => {
+                  onDownloadFolder(contextEntry);
+                  closeContext();
+                }}
+              >
+                <IconDownload /> Download Folder (.zip)
+              </button>
+            )}
             {contextEntry.type === 'file' && (
               <button
                 className="fm-context-item"
@@ -205,6 +259,17 @@ export function FileGrid(props: FileGridProps): JSX.Element {
                 }}
               >
                 <IconDownload /> Download
+              </button>
+            )}
+            {contextEntry.type === 'file' && (
+              <button
+                className="fm-context-item"
+                onClick={() => {
+                  onCopyContent(contextEntry);
+                  closeContext();
+                }}
+              >
+                <IconClipboard /> Copy Content
               </button>
             )}
             <button
