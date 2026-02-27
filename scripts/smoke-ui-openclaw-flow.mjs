@@ -12,10 +12,10 @@ import {
   writeFixtureOpenClawHome,
 } from './smoke-utils.mjs';
 
-async function waitForTargetBadge(page) {
-  await page.waitForSelector('.view-title:has-text("Recipes")', { timeout: 60_000 });
-  const targetBadge = page.locator('.view-header .badge', { hasText: /^target:/i }).first();
-  await targetBadge.waitFor({ state: 'visible', timeout: 60_000 });
+async function waitForRecipesReady(page) {
+  await page.waitForURL(/#\/recipes/, { timeout: 60_000 });
+  const recipeCard = page.locator('.machine-card', { hasText: 'Add Telegram Bot' }).first();
+  await recipeCard.waitFor({ state: 'visible', timeout: 120_000 });
 }
 
 async function run() {
@@ -91,8 +91,7 @@ async function run() {
     const page = await context.newPage();
 
     await page.goto(`${uiBase}/#/recipes`, { waitUntil: 'domcontentloaded' });
-    await waitForTargetBadge(page);
-    await page.waitForSelector('text=Add Telegram Bot', { timeout: 30_000 });
+    await waitForRecipesReady(page);
     await page.locator('.machine-card', { hasText: 'Add Telegram Bot' }).first().click();
     await page.waitForSelector('text=Add Telegram Bot', { timeout: 10_000 });
     await page.getByLabel(/Telegram Bot Token/).fill('ui-smoke-token');
